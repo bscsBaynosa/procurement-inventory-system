@@ -3,180 +3,108 @@
 namespace App\Services;
 
 use App\Database\Connection;
-use JsonException;
 use PDO;
 
 class AuthService
 {
-    private PDO $pdo;
+	private PDO $pdo;
 
-    /**
-     * Cached user details after a successful authentication attempt.
-     *
-     * @var array<string, mixed>|null
-     */
-    private ?array $authenticatedUser = null;
+	public function __construct(?PDO $pdo = null)
+	{
+		$this->pdo = $pdo ?? Connection::resolve();
+	}
 
-    public function __construct(?PDO $pdo = null)
-    {
-        $this->pdo = $pdo ?? Connection::resolve();
-    }
+	/**
+	 * Attempt to authenticate a user and start a session.
+	 */
+	public function attempt(string $username, string $password, string $role, string $ip = '', string $userAgent = ''): bool
+	{
+		$stmt = $this->pdo->prepare('SELECT user_id, username, password_hash, role, branch_id, is_active FROM users WHERE username = :u LIMIT 1');
+		$stmt->execute(['u' => $username]);
+		$user = $stmt->fetch();
 
-    /**
-     * Attempt to authenticate a user by username and password.
-     * The password column is expected to contain a password_hash() value.
-     */
-    public function authenticate(string $username, string $password, ?string $expectedRole = null, array $context = []): bool
-    {
-        $this->authenticatedUser = null;
+		if (!$user || !$user['is_active']) {
+			return false;
+		}
 
-        $stmt = $this->pdo->prepare(
-            'SELECT user_id, username, password_hash, role, is_active, branch_id FROM users WHERE username = :username LIMIT 1'
-        );
-        $stmt->execute(['username' => $username]);
+		// Role check (allow admin to pass for any role selection)
+		if ($user['role'] !== $role && $user['role'] !== 'admin') {
+			return false;
+		}
 
-        $user = $stmt->fetch();
+		if (!password_verify($password, (string)$user['password_hash'])) {
+			$this->incrementFailedAttempts((int)$user['user_id']);
+			return false;
+		}
 
-        if (!$user || !password_verify($password, (string)$user['password_hash'])) {
-            return false;
-        }
+		// Successful login: reset failed attempts, set last login, record activity
+		$this->pdo->prepare('UPDATE users SET failed_login_attempts = 0, last_login_at = NOW(), last_login_ip = :ip WHERE user_id = :id')
+			->execute(['ip' => $ip ?: null, 'id' => $user['user_id']]);
 
-        if (!(bool)$user['is_active']) {
-            return false;
-        }
+		$this->recordAuthActivity((int)$user['user_id'], 'login', $ip, $userAgent);
 
-        if ($expectedRole !== null && $user['role'] !== $expectedRole) {
-            return false;
-        }
+		if (session_status() !== PHP_SESSION_ACTIVE) {
+			@session_start();
+		}
+		$_SESSION['user_id'] = (int)$user['user_id'];
+		$_SESSION['username'] = (string)$user['username'];
+		$_SESSION['role'] = (string)$user['role'];
+		$_SESSION['branch_id'] = $user['branch_id'] !== null ? (int)$user['branch_id'] : null;
 
-        $this->authenticatedUser = $user;
+		return true;
+	}
 
-        $ipAddress = $context['ip_address'] ?? ($context['REMOTE_ADDR'] ?? null);
-        $userAgent = $context['user_agent'] ?? ($context['HTTP_USER_AGENT'] ?? null);
+	public function logout(): void
+	{
+		if (session_status() !== PHP_SESSION_ACTIVE) {
+			@session_start();
+		}
+		$userId = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : null;
+		$ip = $_SERVER['REMOTE_ADDR'] ?? '';
+		$ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
+		if ($userId) {
+			$this->recordAuthActivity($userId, 'logout', $ip, $ua);
+		}
+		$_SESSION = [];
+		if (ini_get('session.use_cookies')) {
+			$params = session_get_cookie_params();
+			setcookie(session_name(), '', time() - 42000, $params['path'], $params['domain'], $params['secure'] ?? false, $params['httponly'] ?? true);
+		}
+		@session_destroy();
+	}
 
-        $this->recordLogin((int)$user['user_id'], $ipAddress, $userAgent);
+	public function isAuthenticated(): bool
+	{
+		if (session_status() !== PHP_SESSION_ACTIVE) {
+			@session_start();
+		}
+		return !empty($_SESSION['user_id']);
+	}
 
-        return true;
-    }
+	public function user(): ?array
+	{
+		if (!$this->isAuthenticated()) {
+			return null;
+		}
+		return [
+			'user_id' => (int)$_SESSION['user_id'],
+			'username' => (string)$_SESSION['username'],
+			'role' => (string)$_SESSION['role'],
+			'branch_id' => $_SESSION['branch_id'] !== null ? (int)$_SESSION['branch_id'] : null,
+		];
+	}
 
-    /**
-     * Return the user details from the most recent successful authentication.
-     *
-     * @return array<string, mixed>|null
-     */
-    public function getAuthenticatedUser(): ?array
-    {
-        return $this->authenticatedUser;
-    }
+	private function recordAuthActivity(int $userId, string $action, string $ip, string $ua): void
+	{
+		$stmt = $this->pdo->prepare('INSERT INTO auth_activity (user_id, action, ip_address, user_agent) VALUES (:u, :a, :ip, :ua)');
+		$stmt->execute(['u' => $userId, 'a' => $action, 'ip' => $ip ?: null, 'ua' => $ua ?: null]);
+	}
 
-    public function getUserRole(string $username): ?string
-    {
-        $stmt = $this->pdo->prepare('SELECT role FROM users WHERE username = :username LIMIT 1');
-        $stmt->execute(['username' => $username]);
-        $row = $stmt->fetch();
-
-        return $row['role'] ?? null;
-    }
-
-    public function findUserById(int $userId): ?array
-    {
-        $stmt = $this->pdo->prepare(
-            'SELECT user_id, username, full_name, email, role, branch_id, is_active FROM users WHERE user_id = :user_id LIMIT 1'
-        );
-        $stmt->execute(['user_id' => $userId]);
-
-        $row = $stmt->fetch();
-
-        return $row ?: null;
-    }
-
-    public function createUser(array $payload, int $performedBy): array
-    {
-        $hash = password_hash($payload['password'], PASSWORD_DEFAULT);
-
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO users (username, password_hash, full_name, email, role, branch_id, is_active, created_by, updated_by) VALUES (:username, :password_hash, :full_name, :email, :role, :branch_id, :is_active, :created_by, :updated_by) RETURNING user_id, username, role'
-        );
-
-        $stmt->execute([
-            'username' => $payload['username'],
-            'password_hash' => $hash,
-            'full_name' => $payload['full_name'],
-            'email' => $payload['email'] ?? null,
-            'role' => $payload['role'],
-            'branch_id' => $payload['branch_id'] ?? null,
-            'is_active' => $payload['is_active'] ?? true,
-            'created_by' => $performedBy,
-            'updated_by' => $performedBy,
-        ]);
-
-        $user = $stmt->fetch();
-
-        $this->recordAudit('users', (int)$user['user_id'], 'create', $performedBy, [
-            'username' => $user['username'],
-            'role' => $user['role'],
-        ]);
-
-        return $user;
-    }
-
-    public function recordLogout(int $userId, ?string $ipAddress = null, ?string $userAgent = null): void
-    {
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO auth_activity (user_id, action, ip_address, user_agent) VALUES (:user_id, :action, :ip_address, :user_agent)'
-        );
-
-        $stmt->execute([
-            'user_id' => $userId,
-            'action' => 'logout',
-            'ip_address' => $ipAddress,
-            'user_agent' => $userAgent,
-        ]);
-    }
-
-    private function recordLogin(int $userId, ?string $ipAddress, ?string $userAgent): void
-    {
-        $this->pdo->prepare('UPDATE users SET last_login_at = NOW(), last_login_ip = :ip_address WHERE user_id = :user_id')
-            ->execute([
-                'ip_address' => $ipAddress,
-                'user_id' => $userId,
-            ]);
-
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO auth_activity (user_id, action, ip_address, user_agent) VALUES (:user_id, :action, :ip_address, :user_agent)'
-        );
-
-        $stmt->execute([
-            'user_id' => $userId,
-            'action' => 'login',
-            'ip_address' => $ipAddress,
-            'user_agent' => $userAgent,
-        ]);
-    }
-
-    private function recordAudit(string $tableName, int $recordId, string $action, int $performedBy, array $payload = []): void
-    {
-        $jsonPayload = null;
-        if (!empty($payload)) {
-            try {
-                $jsonPayload = json_encode($payload, JSON_THROW_ON_ERROR);
-            } catch (JsonException $exception) {
-                $jsonPayload = json_encode([
-                    'serialization_error' => $exception->getMessage(),
-                ]);
-            }
-        }
-
-        $stmt = $this->pdo->prepare(
-            'INSERT INTO audit_logs (table_name, record_id, action, payload, performed_by) VALUES (:table_name, :record_id, :action, :payload, :performed_by)'
-        );
-
-        $stmt->execute([
-            'table_name' => $tableName,
-            'record_id' => $recordId,
-            'action' => $action,
-            'payload' => $jsonPayload,
-            'performed_by' => $performedBy,
-        ]);
-    }
+	private function incrementFailedAttempts(int $userId): void
+	{
+		$this->pdo->prepare('UPDATE users SET failed_login_attempts = failed_login_attempts + 1 WHERE user_id = :id')
+			->execute(['id' => $userId]);
+	}
 }
+
+

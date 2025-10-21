@@ -1,26 +1,4 @@
 <?php
-
-namespace App\Middleware;
-
-use App\Models\User;
-use App\Services\AuthService;
-
-class AuthMiddleware
-{
-    protected $authService;
-
-    public function __construct(AuthService $authService)
-    {
-        $this->authService = $authService;
-    }
-
-    public function handle($request, $next)
-    {
-        if (!$this->authService->isAuthenticated()) {
-            header('Location: /login.php');
-            exit();
-        }
-
-        return $next($request);
-    }
-}
+// Legacy placeholder to avoid PSR-4 autoload conflicts.
+// Use App\Middleware\AuthMiddleware in src/Middleware/AuthMiddleware.php.
+return;

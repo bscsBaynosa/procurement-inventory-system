@@ -1,46 +1,40 @@
 <?php
-
+// Legacy placeholder to avoid PSR-4 autoload conflicts.
+// Use App\Services\PDFService in src/Services/PDFService.php.
 namespace App\Services;
 
-use TCPDF;
+use Mpdf\Mpdf;
 
 class PDFService
 {
-    public function generatePurchaseRequestPDF($requestData)
-    {
-        $pdf = new TCPDF();
-        $pdf->AddPage();
+	public function generatePurchaseRequestPDF(array $requestData): void
+	{
+		$mpdf = new Mpdf();
+		$html = '<h1 style="text-align:center">Purchase Request</h1>';
+		$html .= '<table width="100%" border="1" cellspacing="0" cellpadding="6">';
+		foreach ($requestData as $key => $value) {
+			$k = htmlspecialchars((string)$key);
+			$v = htmlspecialchars((string)$value);
+			$html .= "<tr><td><strong>{$k}</strong></td><td>{$v}</td></tr>";
+		}
+		$html .= '</table>';
+		$mpdf->WriteHTML($html);
+		$mpdf->Output('purchase_request.pdf', 'D');
+	}
 
-        // Set title
-        $pdf->SetFont('helvetica', 'B', 16);
-        $pdf->Cell(0, 10, 'Purchase Request', 0, 1, 'C');
-
-        // Add request details
-        $pdf->SetFont('helvetica', '', 12);
-        foreach ($requestData as $key => $value) {
-            $pdf->Cell(0, 10, ucfirst($key) . ': ' . $value, 0, 1);
-        }
-
-        // Output PDF
-        $pdf->Output('purchase_request.pdf', 'D');
-    }
-
-    public function generateInventoryReportPDF($inventoryData)
-    {
-        $pdf = new TCPDF();
-        $pdf->AddPage();
-
-        // Set title
-        $pdf->SetFont('helvetica', 'B', 16);
-        $pdf->Cell(0, 10, 'Inventory Report', 0, 1, 'C');
-
-        // Add inventory details
-        $pdf->SetFont('helvetica', '', 12);
-        foreach ($inventoryData as $item) {
-            $pdf->Cell(0, 10, 'Item: ' . $item['name'] . ' - Status: ' . $item['status'], 0, 1);
-        }
-
-        // Output PDF
-        $pdf->Output('inventory_report.pdf', 'D');
-    }
+	public function generateInventoryReportPDF(array $inventoryData): void
+	{
+		$mpdf = new Mpdf();
+		$rows = '';
+		foreach ($inventoryData as $item) {
+			$name = htmlspecialchars((string)($item['name'] ?? ''));
+			$status = htmlspecialchars((string)($item['status'] ?? ''));
+			$rows .= "<tr><td>{$name}</td><td>{$status}</td></tr>";
+		}
+		$html = '<h1 style="text-align:center">Inventory Report</h1>' .
+			'<table width="100%" border="1" cellspacing="0" cellpadding="6">' .
+			'<thead><tr><th>Item</th><th>Status</th></tr></thead><tbody>' . $rows . '</tbody></table>';
+		$mpdf->WriteHTML($html);
+		$mpdf->Output('inventory_report.pdf', 'D');
+	}
 }
