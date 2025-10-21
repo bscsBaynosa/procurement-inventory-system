@@ -15,6 +15,7 @@ require_once __DIR__ . '/../src/config/database.php';
 use App\Controllers\AuthController;
 use App\Controllers\CustodianController;
 use App\Controllers\ProcurementController;
+use App\Setup\Installer;
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
 	session_start();
@@ -59,6 +60,29 @@ if ($method === 'GET' && $path === '/dashboard') {
 		exit;
 	}
 	header('Location: /login');
+	exit;
+}
+
+// One-time setup route (guarded). Enable by setting SETUP_TOKEN env var.
+if ($method === 'GET' && $path === '/setup') {
+	$token = $_GET['token'] ?? '';
+	$expected = getenv('SETUP_TOKEN') ?: '';
+	if ($expected === '' || !hash_equals($expected, (string)$token)) {
+		http_response_code(403);
+		echo 'Forbidden';
+		exit;
+	}
+
+	try {
+		$installer = new Installer();
+		$logLines = $installer->run();
+		header('Content-Type: text/plain');
+		echo implode("\n", $logLines);
+	} catch (Throwable $e) {
+		http_response_code(500);
+		header('Content-Type: text/plain');
+		echo 'Setup error: ' . $e->getMessage();
+	}
 	exit;
 }
 
