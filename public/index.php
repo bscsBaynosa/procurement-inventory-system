@@ -1,16 +1,68 @@
 <?php
-require_once '../src/config/database.php';
-require_once '../src/routes/web.php';
+// Front controller & tiny router for the app
 
-// Start the session
-session_start();
+declare(strict_types=1);
 
-// Initialize the application
-$app = new App();
+// Composer autoload
+$autoload = __DIR__ . '/../vendor/autoload.php';
+if (file_exists($autoload)) {
+	require_once $autoload;
+}
 
-// Load the routes
-$app->loadRoutes();
+// Ensure DB connection is bootstrapped (returns a PDO instance)
+require_once __DIR__ . '/../src/config/database.php';
 
-// Handle the request
-$app->run();
+use App\Controllers\AuthController;
+use App\Controllers\CustodianController;
+use App\Controllers\ProcurementController;
+
+if (session_status() !== PHP_SESSION_ACTIVE) {
+	session_start();
+}
+
+$method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+$path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+
+// Normalize trailing slashes (except root)
+if ($path !== '/' && substr($path, -1) === '/') {
+	$path = rtrim($path, '/');
+}
+
+$auth = new AuthController();
+$custodian = new CustodianController();
+$manager = new ProcurementController();
+
+// Routes
+if ($method === 'GET' && ($path === '/' || $path === '/login')) {
+	$auth->showLoginForm();
+	exit;
+}
+
+if ($method === 'POST' && $path === '/auth/login') {
+	$auth->login();
+	exit;
+}
+
+if ($method === 'GET' && $path === '/logout') {
+	$auth->logout();
+	exit;
+}
+
+if ($method === 'GET' && $path === '/dashboard') {
+	$role = $_SESSION['role'] ?? null;
+	if ($role === 'custodian') {
+		$custodian->dashboard();
+		exit;
+	}
+	if ($role === 'procurement_manager') {
+		$manager->index();
+		exit;
+	}
+	header('Location: /login');
+	exit;
+}
+
+// Fallback 404
+http_response_code(404);
+echo '404 Not Found';
 ?>
