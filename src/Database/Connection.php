@@ -24,13 +24,20 @@ class Connection
 
         $config = self::parseConfigFromEnvironment();
 
-        $dsn = sprintf(
-            'pgsql:host=%s;port=%s;dbname=%s;sslmode=%s',
-            $config['host'],
-            $config['port'],
-            $config['database'],
-            $config['sslmode']
-        );
+        // Build a robust DSN that accepts selected parameters only.
+        $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s', $config['host'], $config['port'], $config['database']);
+
+        // Sanitize sslmode: default to 'require' on Heroku when unspecified.
+        $sslmode = $config['sslmode'] ?? 'require';
+        if (!is_string($sslmode) || strpos($sslmode, '=') !== false) {
+            $sslmode = 'require';
+        }
+        $dsn .= ';sslmode=' . $sslmode;
+
+        // Allow safe optional parameters from DATABASE_URL query string.
+        if (!empty($config['connect_timeout']) && ctype_digit((string)$config['connect_timeout'])) {
+            $dsn .= ';connect_timeout=' . (string)$config['connect_timeout'];
+        }
 
         try {
             self::$pdo = new PDO(
@@ -122,6 +129,8 @@ class Connection
             'username' => $parts['user'] ?? '',
             'password' => $parts['pass'] ?? '',
             'sslmode' => $query['sslmode'] ?? getenv('PGSSLMODE') ?? 'require',
+            // capture known optional parameters if present
+            'connect_timeout' => $query['connect_timeout'] ?? null,
         ];
     }
 }
