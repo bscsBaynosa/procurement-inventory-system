@@ -27,9 +27,10 @@ class Connection
         // Build a robust DSN that accepts selected parameters only.
         $dsn = sprintf('pgsql:host=%s;port=%s;dbname=%s', $config['host'], $config['port'], $config['database']);
 
-        // Sanitize sslmode: default to 'require' on Heroku when unspecified.
-        $sslmode = $config['sslmode'] ?? 'require';
-        if (!is_string($sslmode) || strpos($sslmode, '=') !== false) {
+        // Only allow valid sslmode values. If invalid/malformed, force 'require'.
+        $allowedSslmodes = ['disable', 'allow', 'prefer', 'require', 'verify-ca', 'verify-full'];
+        $sslmode = isset($config['sslmode']) && is_string($config['sslmode']) ? strtolower(trim($config['sslmode'], " \"'")) : null;
+        if (!in_array($sslmode, $allowedSslmodes, true)) {
             $sslmode = 'require';
         }
         $dsn .= ';sslmode=' . $sslmode;
@@ -95,7 +96,7 @@ class Connection
         $database = getenv('PGDATABASE') ?: getenv('DB_DATABASE') ?: 'postgres';
         $username = getenv('PGUSER') ?: getenv('DB_USERNAME') ?: 'postgres';
         $password = getenv('PGPASSWORD') ?: getenv('DB_PASSWORD') ?: '';
-        $sslmode = getenv('PGSSLMODE') ?: getenv('DB_SSLMODE') ?: 'prefer';
+        $sslmode = getenv('PGSSLMODE') ?: getenv('DB_SSLMODE') ?: null;
 
         return [
             'host' => $host,
@@ -122,15 +123,25 @@ class Connection
             parse_str($parts['query'], $query);
         }
 
-        return [
+        $config = [
             'host' => $parts['host'],
             'port' => (string)($parts['port'] ?? '5432'),
             'database' => ltrim($parts['path'], '/'),
             'username' => $parts['user'] ?? '',
             'password' => $parts['pass'] ?? '',
-            'sslmode' => $query['sslmode'] ?? getenv('PGSSLMODE') ?? 'require',
-            // capture known optional parameters if present
-            'connect_timeout' => $query['connect_timeout'] ?? null,
         ];
+
+        // Extract sslmode if present; do not let unrelated params bleed into its value
+        if (isset($query['sslmode']) && is_string($query['sslmode'])) {
+            $config['sslmode'] = $query['sslmode'];
+        } else {
+            // On Heroku, default to require when DATABASE_URL is used
+            $config['sslmode'] = 'require';
+        }
+
+        // capture known optional parameters if present
+        $config['connect_timeout'] = $query['connect_timeout'] ?? null;
+
+        return $config;
     }
 }
