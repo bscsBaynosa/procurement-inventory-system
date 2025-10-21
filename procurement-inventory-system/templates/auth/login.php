@@ -9,6 +9,9 @@
 <body>
     <div class="container">
         <h1>Login</h1>
+        <?php if (!empty($error)): ?>
+            <div class="error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
+        <?php endif; ?>
         <form action="/auth/login" method="POST">
             <div class="form-group">
                 <label for="username">Username</label>

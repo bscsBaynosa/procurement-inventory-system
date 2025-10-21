@@ -1,13 +1,28 @@
 <?php
-$host = 'localhost';
-$db = 'procurement_inventory';
-$user = 'root';
-$pass = '';
 
-try {
-    $pdo = new PDO("mysql:host=$host;dbname=$db", $user, $pass);
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-} catch (PDOException $e) {
-    echo 'Connection failed: ' . $e->getMessage();
+/**
+ * Bootstrap the shared PDO instance for legacy scripts that include this file directly.
+ *
+ * When using Composer's autoloader, prefer calling Connection::resolve() instead of relying
+ * on the global $pdo variable.
+ *
+ * @var PDO $pdo
+ */
+
+$connectionClass = 'App\\Database\\Connection';
+
+if (!class_exists($connectionClass)) {
+    $autoLoader = dirname(__DIR__, 2) . DIRECTORY_SEPARATOR . 'vendor' . DIRECTORY_SEPARATOR . 'autoload.php';
+    if (file_exists($autoLoader)) {
+        require_once $autoLoader;
+    }
 }
-?>
+
+if (!class_exists($connectionClass)) {
+    throw new \RuntimeException('Autoloader failed to load App\\Database\\Connection.');
+}
+
+/** @var PDO $pdo */
+$pdo = $connectionClass::resolve();
+
+return $pdo;

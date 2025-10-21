@@ -1,12 +1,3 @@
-<?php
-session_start();
-require_once '../../src/controllers/ProcurementController.php';
-
-$procurementController = new ProcurementController();
-$requests = $procurementController->getAllPurchaseRequests();
-
-?>
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -41,19 +32,23 @@ $requests = $procurementController->getAllPurchaseRequests();
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($requests as $request): ?>
+                        <?php if (!empty($requests)): ?>
+                            <?php foreach ($requests as $request): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars($request['request_id'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars($request['branch_name'] ?? 'N/A', ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars($request['item_name'] ?? 'N/A', ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars($request['status'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td>
+                                        <a href="/manager/requests/<?= htmlspecialchars($request['request_id'], ENT_QUOTES, 'UTF-8') ?>">View</a>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
                             <tr>
-                                <td><?php echo htmlspecialchars($request['id']); ?></td>
-                                <td><?php echo htmlspecialchars($request['branch']); ?></td>
-                                <td><?php echo htmlspecialchars($request['item']); ?></td>
-                                <td><?php echo htmlspecialchars($request['status']); ?></td>
-                                <td>
-                                    <a href="/public/requests/show.php?id=<?php echo $request['id']; ?>">View</a>
-                                    <a href="/public/requests/edit.php?id=<?php echo $request['id']; ?>">Edit</a>
-                                    <a href="/public/requests/followup.php?id=<?php echo $request['id']; ?>">Follow Up</a>
-                                </td>
+                                <td colspan="5">No purchase requests found.</td>
                             </tr>
-                        <?php endforeach; ?>
+                        <?php endif; ?>
                     </tbody>
                 </table>
             </section>

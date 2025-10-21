@@ -24,13 +24,28 @@ The Procurement and Inventory System is designed to streamline the management of
    ```
    composer install
    ```
-4. Configure your environment variables by copying the `.env.example` file to `.env` and updating the necessary settings.
+4. Copy `.env.example` to `.env` and configure the database credentials. When deploying to Heroku, the `DATABASE_URL` variable is populated automatically.
+
+5. Apply the PostgreSQL schema:
+   ```
+   psql "$DATABASE_URL" -f database/schema.sql
+   ```
+   The script provisions:
+   - audited entities (`inventory_items`, `purchase_requests`, `users`)
+   - custom user IDs that follow the `YYYYNNNN` pattern (e.g. `20250001`)
+   - login and change history tables for traceability
 
 ## Usage
 - Access the application via the `public/index.php` file.
-- Choose to log in as either a Custodian or Procurement Manager.
+- Log in with a provisioned account (`users` table). Passwords are stored with `password_hash()` and must be created through the `AuthService` (or any provisioning script that uses the same hashing function).
 - Custodians can manage inventory and send purchase requests.
-- Procurement Managers can review and manage purchase requests from custodians.
+- Procurement Managers can review and manage purchase requests from custodians, including full status history.
+
+## Database Notes
+- The connection layer automatically parses the Heroku `DATABASE_URL` and enforces SSL by default.
+- Every business table captures `created_at / created_by` and `updated_at / updated_by`. Changes are mirrored into `audit_logs` for accountability.
+- User logins and logouts are recorded in `auth_activity`, along with IP address and user agent.
+- Inventory movements are tracked through `inventory_movements` whenever quantities change.
 
 ## Directory Structure
 - `public/`: Contains the entry point and frontend assets.

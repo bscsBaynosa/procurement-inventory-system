@@ -21,26 +21,49 @@ class AuthController
 
     public function login()
     {
-        $username = $_POST['username'] ?? '';
-        $password = $_POST['password'] ?? '';
+        $username = trim($_POST['username'] ?? '');
+        $password = (string)($_POST['password'] ?? '');
+        $requestedRole = $_POST['role'] ?? null;
 
-        if ($this->authService->authenticate($username, $password)) {
-            // Set user session and redirect based on role
-            session_start();
-            $_SESSION['user'] = $username;
-            $_SESSION['role'] = $this->authService->getUserRole($username);
+        $context = [
+            'ip_address' => $_SERVER['REMOTE_ADDR'] ?? null,
+            'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? null,
+        ];
+
+    if ($this->authService->authenticate($username, $password, $requestedRole, $context)) {
+            $user = $this->authService->getAuthenticatedUser();
+
+            if (session_status() !== PHP_SESSION_ACTIVE) {
+                session_start();
+            }
+
+            $_SESSION['user_id'] = $user['user_id'];
+            $_SESSION['user'] = $user['username'];
+            $_SESSION['role'] = $user['role'];
+            $_SESSION['branch_id'] = $user['branch_id'] ?? null;
+
             header('Location: /dashboard');
             exit;
-        } else {
-            // Handle login failure
-            $error = 'Invalid credentials';
-            require_once '../templates/auth/login.php';
         }
+
+        $error = 'Invalid credentials';
+        require_once '../templates/auth/login.php';
     }
 
     public function logout()
     {
-        session_start();
+        if (session_status() !== PHP_SESSION_ACTIVE) {
+            session_start();
+        }
+
+        $userId = $_SESSION['user_id'] ?? null;
+        $ip = $_SERVER['REMOTE_ADDR'] ?? null;
+        $agent = $_SERVER['HTTP_USER_AGENT'] ?? null;
+
+        if ($userId !== null) {
+            $this->authService->recordLogout((int)$userId, $ip, $agent);
+        }
+
         session_destroy();
         header('Location: /login');
         exit;
