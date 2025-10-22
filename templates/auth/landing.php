@@ -1,3 +1,20 @@
+<?php
+    // Favicon: use repo root logo.png when available, else fall back to public
+    $root = realpath(__DIR__ . '/../../');
+    $publicDir = $root . DIRECTORY_SEPARATOR . 'public';
+    $iconCandidates = [
+        $root . DIRECTORY_SEPARATOR . 'logo.png',
+        $publicDir . DIRECTORY_SEPARATOR . 'logo.png',
+        $publicDir . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'logo.png',
+    ];
+    $faviconHref = null;
+    foreach ($iconCandidates as $cand) {
+        if (is_file($cand)) {
+            $data = @file_get_contents($cand);
+            if ($data !== false) { $faviconHref = 'data:image/png;base64,' . base64_encode($data); break; }
+        }
+    }
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,6 +25,10 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/main.css" />
+    <?php if (!empty($faviconHref)): ?>
+        <link rel="icon" type="image/png" href="<?= htmlspecialchars($faviconHref, ENT_QUOTES) ?>">
+        <link rel="apple-touch-icon" href="<?= htmlspecialchars($faviconHref, ENT_QUOTES) ?>">
+    <?php endif; ?>
     <style>
         /* Theme variables */
         :root {
@@ -31,9 +52,10 @@
         .nav-links a { color:#e5e7eb; text-decoration:none; margin-left:20px; font-weight:600; opacity:.9; transition:opacity .2s ease; }
         .nav-links a:hover { opacity:1; }
 
-    .hero { padding: 36px 22px; }
-    .hero-inner { max-width: 1200px; margin: 0 auto; background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03)); border:1px solid rgba(255,255,255,.08); border-radius:16px; padding: 28px; display:grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items:stretch; box-shadow: 0 30px 80px rgba(0,0,0,.35); }
+    .hero { padding: 36px 22px; display:flex; align-items:center; justify-content:center; min-height: calc(100vh - 80px); }
+    .hero-inner { max-width: 1100px; width: 100%; margin: 0 auto; background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03)); border:1px solid rgba(255,255,255,.08); border-radius:16px; padding: 28px; display:grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items:stretch; box-shadow: 0 30px 80px rgba(0,0,0,.35); }
     @media (max-width: 900px) { 
+        .hero { display:block; min-height:auto; padding: 22px 16px; }
         .hero-inner { grid-template-columns: 1fr; }
         .right-col { order: -1; } /* show sign-in first on phones */
         .left-col { padding:16px; }
