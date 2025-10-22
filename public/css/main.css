@@ -92,3 +92,10 @@ h1 {
     bottom: 0;
     width: 100%;
 }
+
+/* --- Landing page enhancements (kept here so other pages remain unaffected) --- */
+.navbar { font-family: 'Poppins', Arial, sans-serif; }
+.btn { transition: all .15s ease; }
+.btn:active { transform: translateY(1px); }
+.modal-backdrop { animation: fadeIn .15s ease; }
+@keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
