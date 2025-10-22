@@ -24,6 +24,9 @@ if (!class_exists(\App\Controllers\CustodianController::class) && file_exists(__
 if (!class_exists(\App\Controllers\ProcurementController::class) && file_exists(__DIR__ . '/../src/Controllers/ProcurementController.php')) {
 	require_once __DIR__ . '/../src/Controllers/ProcurementController.php';
 }
+if (!class_exists(\App\Controllers\AdminController::class) && file_exists(__DIR__ . '/../src/Controllers/AdminController.php')) {
+	require_once __DIR__ . '/../src/Controllers/AdminController.php';
+}
 
 // Lazy-load DB connections in services; don't force-connect on every request
 // to allow the landing page to render even if the DB is momentarily unavailable.
@@ -31,6 +34,7 @@ if (!class_exists(\App\Controllers\ProcurementController::class) && file_exists(
 use App\Controllers\AuthController;
 use App\Controllers\CustodianController;
 use App\Controllers\ProcurementController;
+use App\Controllers\AdminController;
 use App\Setup\Installer;
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -48,6 +52,7 @@ if ($path !== '/' && substr($path, -1) === '/') {
 $auth = new AuthController();
 $custodian = new CustodianController();
 $manager = new ProcurementController();
+$admin = new AdminController();
 
 // Routes
 // Landing page first (role selection)
@@ -80,6 +85,10 @@ if ($method === 'GET' && $path === '/dashboard') {
 	}
 	if ($role === 'procurement_manager') {
 		$manager->index();
+		exit;
+	}
+	if ($role === 'admin') {
+		$admin->dashboard();
 		exit;
 	}
 	header('Location: /login');
