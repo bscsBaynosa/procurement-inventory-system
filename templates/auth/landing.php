@@ -30,19 +30,13 @@
         .nav-links a { color:#e5e7eb; text-decoration:none; margin-left:20px; font-weight:600; opacity:.9; transition:opacity .2s ease; }
         .nav-links a:hover { opacity:1; }
 
-        .hero { padding: 36px 22px; }
-        .hero-inner { max-width: 1100px; margin: 0 auto; background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03)); border:1px solid rgba(255,255,255,.08); border-radius:16px; padding: 26px; display:grid; grid-template-columns: 1.05fr .95fr; gap: 18px; align-items:center; box-shadow: 0 30px 80px rgba(0,0,0,.35); }
-        @media (max-width: 900px) { .hero-inner { grid-template-columns: 1fr; } }
+    .hero { padding: 36px 22px; }
+    .hero-inner { max-width: 1200px; margin: 0 auto; background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03)); border:1px solid rgba(255,255,255,.08); border-radius:16px; padding: 28px; display:grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items:stretch; box-shadow: 0 30px 80px rgba(0,0,0,.35); }
+    @media (max-width: 900px) { .hero-inner { grid-template-columns: 1fr; } }
 
-        .hero-graphic { display:grid; grid-template-rows: 1fr auto; gap: 20px; }
-        .bars { display:flex; align-items:flex-end; gap: 18px; height: 280px; }
-        .bar { width: 96px; background: linear-gradient(180deg, rgba(16,185,129,.9), rgba(6,78,59,.95)); border-radius:14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); transform-origin: bottom; animation: grow 1.2s ease var(--d,0s) both; }
-        .bar:nth-child(1) { height: 88%; --d:.1s }
-        .bar:nth-child(2) { height: 52%; --d:.2s }
-        .bar:nth-child(3) { height: 76%; --d:.3s }
-        @keyframes grow { from { transform: scaleY(.2); opacity:.4 } to { transform: scaleY(1); opacity:1 } }
+    .left-col { display:flex; flex-direction:column; justify-content:center; gap: 14px; }
 
-        .cta { display:flex; gap:10px; }
+    .cta { display:flex; gap:10px; }
         .btn { display:inline-flex; align-items:center; justify-content:center; padding:12px 18px; border-radius:10px; text-decoration:none; font-weight:700; border:0; cursor:pointer; transition: transform .12s ease, filter .2s ease, box-shadow .2s ease; }
         .btn:active { transform: translateY(1px); }
         .btn-primary { background: var(--accent); color:#fff; box-shadow: 0 10px 30px color-mix(in oklab, var(--accent) 50%, #000 50%); }
@@ -50,15 +44,15 @@
         .btn-outline { background: transparent; color: #e5e7eb; border:2px solid rgba(255,255,255,.7); }
         .btn-outline:hover { background: rgba(255,255,255,.08); }
 
-        .headline { color:#f1f5f9; font-size: clamp(28px, 4vw, 48px); line-height:1.05; margin: 0 0 8px 0; font-weight:800; text-shadow: 0 10px 30px rgba(0,0,0,.35); }
-        .subhead { color: #cbd5e1; font-size: 15px; max-width: 600px; }
+    .headline { color:#f1f5f9; font-size: clamp(28px, 4vw, 52px); line-height:1.05; margin: 0 0 10px 0; font-weight:800; text-shadow: 0 10px 30px rgba(0,0,0,.35); }
+    .subhead { color: #cbd5e1; font-size: 15px; max-width: 640px; }
 
         /* Inline sign-in glass card */
-        .signin-card { background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 14px; padding: 16px 16px 14px; color:#0f172a; }
+    .signin-card { background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 14px; padding: 18px; color:#0f172a; height:100%; display:flex; flex-direction:column; }
         .signin-header { display:flex; align-items:center; justify-content:space-between; margin-bottom: 8px; }
         .signin-title { color:#f8fafc; font-weight:800; font-size: 18px; }
         .signin-sub { color:#cbd5e1; font-size: 13px; }
-        .signin { background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.75)); border:1px solid rgba(15,23,42,.06); border-radius: 12px; padding: 14px; }
+    .signin { background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.75)); border:1px solid rgba(15,23,42,.06); border-radius: 12px; padding: 14px; flex:1; display:flex; flex-direction:column; }
         .form-row { display:flex; gap:12px; }
         .form-group { margin-bottom: 10px; display:block; }
         .form-group label { display:block; font-weight:600; margin-bottom:6px; color:#111827; }
@@ -67,8 +61,7 @@
         .chip { padding:10px 12px; border-radius:10px; border:1.5px solid #e5e7eb; background:#fff; cursor:pointer; transition: all .15s ease; color:#111; min-width: 150px; display:inline-flex; justify-content:center; align-items:center; font-weight:600; }
         .chip input { display:none; }
         .chip.active { border-color: var(--accent); color: var(--accent); box-shadow: 0 6px 14px color-mix(in oklab, var(--accent) 35%, #000 65%); }
-        .signin-actions { display:flex; gap:10px; justify-content:space-between; align-items:center; margin-top: 6px; }
-        .signin-actions .hint { color:#64748b; font-size:12px; }
+    .signin-actions { display:flex; gap:10px; justify-content:flex-end; align-items:center; margin-top: 6px; }
     </style>
     </head>
 <body>
@@ -87,25 +80,17 @@
 
     <section class="hero">
         <div class="hero-inner">
-            <div class="hero-graphic">
-                <div class="bars">
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                    <div class="bar"></div>
-                </div>
-                <div class="cta">
-                    <a class="btn btn-primary" href="#signin">Get Started</a>
-                    <a class="btn btn-outline" href="#about">Learn more</a>
-                </div>
-            </div>
-            <div>
-                <h1 class="headline">Procurement and Inventory System</h1>
+            <div class="hero-inner">
+                <div class="left-col">
                 <p class="subhead">
                     Simplify your workflow with an all‑in‑one system that automates purchase requests,
                     tracks inventory in real time, and reduces manual errors. Faster approvals and
                     organized records make managing supplies accurate and hassle‑free.
                 </p>
                 
+                    <div class="cta">
+                        <a class="btn btn-outline" href="#about">Learn more</a>
+                    </div>
                 <!-- Inline glass sign-in -->
                 <div class="signin-card" id="signin">
                     <div class="signin-header">
@@ -144,7 +129,6 @@
                                 <!-- dynamic description goes here -->
                             </div>
                             <div class="signin-actions">
-                                <span class="hint">Need more options? <a href="/login">Full login page</a></span>
                                 <button type="submit" class="btn btn-primary" style="min-width:120px;">Sign in</button>
                             </div>
                         </form>
