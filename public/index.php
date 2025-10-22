@@ -34,7 +34,14 @@ $custodian = new CustodianController();
 $manager = new ProcurementController();
 
 // Routes
-if ($method === 'GET' && ($path === '/' || $path === '/login')) {
+// Landing page first (role selection)
+if ($method === 'GET' && $path === '/') {
+	$auth->showLanding();
+	exit;
+}
+
+// Login page
+if ($method === 'GET' && $path === '/login') {
 	$auth->showLoginForm();
 	exit;
 }

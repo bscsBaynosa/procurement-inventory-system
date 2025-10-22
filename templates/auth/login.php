@@ -24,8 +24,10 @@
             <div class="form-group">
                 <label for="role">Login as:</label>
                 <select id="role" name="role" required>
-                    <option value="custodian">Custodian</option>
-                    <option value="procurement_manager">Procurement Manager</option>
+                    <?php $selectedRole = $selectedRole ?? null; ?>
+                    <option value="custodian" <?= ($selectedRole === 'custodian') ? 'selected' : '' ?>>Custodian</option>
+                    <option value="procurement_manager" <?= ($selectedRole === 'procurement_manager') ? 'selected' : '' ?>>Procurement Manager</option>
+                    <option value="admin" <?= ($selectedRole === 'admin') ? 'selected' : '' ?>>Administrator</option>
                 </select>
             </div>
             <button type="submit">Login</button>
