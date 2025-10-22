@@ -80,6 +80,8 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE INDEX IF NOT EXISTS idx_users_branch_id ON users(branch_id);
 CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
+-- Enforce unique email (case-insensitive) when provided
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique ON users ((lower(email))) WHERE email IS NOT NULL;
 
 -- ----- Inventory -----------------------------------------------------------------
 

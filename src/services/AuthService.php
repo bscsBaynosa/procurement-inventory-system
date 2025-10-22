@@ -27,8 +27,8 @@ class AuthService
 			return false;
 		}
 
-		// Role check (allow admin to pass for any role selection)
-		if ($user['role'] !== $role && $user['role'] !== 'admin') {
+		// Strict role check: selected role must match the user's actual role
+		if ($user['role'] !== $role) {
 			return false;
 		}
 
