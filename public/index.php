@@ -72,6 +72,12 @@ if ($method === 'POST' && $path === '/auth/login') {
 	exit;
 }
 
+// Gracefully handle accidental GET to /auth/login by redirecting to /login
+if ($method === 'GET' && $path === '/auth/login') {
+	header('Location: /login');
+	exit;
+}
+
 if ($method === 'GET' && $path === '/logout') {
 	$auth->logout();
 	exit;

@@ -8,6 +8,22 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/main.css">
+    <?php
+        // Consistent favicon across pages: prefer repo root logo.png, fallback to public paths
+        $root = realpath(__DIR__ . '/../../');
+        $candidates = [
+            $root . DIRECTORY_SEPARATOR . 'logo.png',
+            $root . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'logo.png',
+            $root . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'logo.png',
+        ];
+        foreach ($candidates as $cand) {
+            if (is_file($cand)) { $data = @file_get_contents($cand); if ($data!==false){
+                echo '<link rel="icon" type="image/png" href="data:image/png;base64,' . base64_encode($data) . '">';
+                echo '<link rel="apple-touch-icon" href="data:image/png;base64,' . base64_encode($data) . '">';
+                break;
+            }}
+        }
+    ?>
     <style>
         :root{
             --green: #22c55e; --green-700:#15803d; --green-900:#14532d;
