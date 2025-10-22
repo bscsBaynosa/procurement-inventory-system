@@ -6,14 +6,23 @@ use App\Services\AuthService;
 
 class AuthController extends BaseController
 {
-    private AuthService $auth;
+    private ?AuthService $auth = null;
 
     public function __construct(?AuthService $auth = null)
     {
-        $this->auth = $auth ?? new AuthService();
+        // Lazily create AuthService only when needed to avoid DB connect on landing.
+        $this->auth = $auth; // may be null
         if (session_status() !== PHP_SESSION_ACTIVE) {
             @session_start();
         }
+    }
+
+    private function auth(): AuthService
+    {
+        if (!$this->auth) {
+            $this->auth = new AuthService();
+        }
+        return $this->auth;
     }
 
     public function showLanding(): void
@@ -44,7 +53,7 @@ class AuthController extends BaseController
             return;
         }
 
-        if ($this->auth->attempt($username, $password, $role, $ip, $ua)) {
+        if ($this->auth()->attempt($username, $password, $role, $ip, $ua)) {
             header('Location: /dashboard');
             return;
         }
@@ -54,10 +63,9 @@ class AuthController extends BaseController
 
     public function logout(): void
     {
-        $this->auth->logout();
+    $this->auth()->logout();
         header('Location: /login');
     }
 }
-return;
 ?>
 
