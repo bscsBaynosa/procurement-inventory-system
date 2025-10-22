@@ -1,3 +1,34 @@
+<?php
+    // Resolve POCC logo: prefer repo-root logo.png; fall back to public/img/* or public/*
+    $root = realpath(__DIR__ . '/../../'); // project root
+    $publicDir = $root . DIRECTORY_SEPARATOR . 'public';
+    $logoSrc = null; // can be /path or data URI
+
+    // 1) Repo root: logo.png (not web-accessible) -> embed as data URI
+    $rootLogo = $root . DIRECTORY_SEPARATOR . 'logo.png';
+    if (file_exists($rootLogo)) {
+        $data = @file_get_contents($rootLogo);
+        if ($data !== false) {
+            $logoSrc = 'data:image/png;base64,' . base64_encode($data);
+        }
+    }
+
+    // 2) Public candidates if no root logo or failed to read
+    if (!$logoSrc) {
+        $logoCandidates = [
+            'img' . DIRECTORY_SEPARATOR . 'logo.png',
+            'img' . DIRECTORY_SEPARATOR . 'logo.svg',
+            'img' . DIRECTORY_SEPARATOR . 'pocc-logo.png',
+            'img' . DIRECTORY_SEPARATOR . 'pocc-logo.svg',
+            'logo.png', // directly under public
+            'logo.svg',
+        ];
+        foreach ($logoCandidates as $rel) {
+            $abs = $publicDir . DIRECTORY_SEPARATOR . $rel;
+            if (file_exists($abs)) { $logoSrc = '/' . str_replace('\\', '/', $rel); break; }
+        }
+    }
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -9,70 +40,92 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/main.css" />
     <style>
+        /* Theme variables */
         :root {
-            --bg: #f3f4f6;
+            --bg-gradient: radial-gradient(1000px 600px at 15% 10%, #1b6b39 0%, #0d4f2a 35%, #062e19 60%, #0b0b0b 100%);
             --surface: #ffffff;
             --text: #0f172a;
-            --muted: #475569;
-            --brand: #2D6CDF;
-            --brand-600: #2559b6;
-            --accent: #f59e0b;
+            --muted: #94a3b8;
+            --accent: #2563eb;   /* default accent (blue for procurement manager) */
+            --accent-600: #1e4bb5;
         }
-        body { font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg); color: var(--text); }
-        .navbar { display:flex; align-items:center; justify-content:space-between; padding: 16px 28px; background:#e5e7eb; position:sticky; top:0; z-index:10; }
-        .brand { display:flex; align-items:center; gap:12px; font-weight:800; }
-        .brand .logo { width:36px; height:36px; border-radius:8px; background:#4b5563; display:grid; place-items:center; color:#fff; font-weight:800; }
-        .brand small { display:block; font-weight:600; color:#374151; }
-        .nav-links a { color:#111827; text-decoration:none; margin-left:20px; font-weight:600; }
-        .nav-links a:hover { color: var(--brand); }
+        /* Role themes change only the accent; background remains green/black gradient */
+        body[data-role="procurement_manager"] { --accent:#2563eb; --accent-600:#1e4bb5; }
+        body[data-role="custodian"] { --accent:#ea7a17; --accent-600:#c86613; }
+        body[data-role="admin"] { --accent:#dc2626; --accent-600:#b91c1c; }
+
+        body { font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg-gradient); color: var(--text); min-height:100vh; }
+        .navbar { display:flex; align-items:center; justify-content:space-between; padding: 16px 28px; background: rgba(15, 23, 42, .15); backdrop-filter: blur(6px); position:sticky; top:0; z-index:10; border-bottom: 1px solid rgba(255,255,255,.06); }
+    .brand { display:flex; align-items:center; gap:12px; font-weight:800; color:#e2e8f0; }
+    .brand .logo { width:36px; height:36px; border-radius:8px; background:#065f46; display:grid; place-items:center; color:#fff; font-weight:800; box-shadow: inset 0 0 0 2px rgba(255,255,255,.15); overflow:hidden; }
+    .brand .logo img { width:100%; height:100%; object-fit:cover; display:block; }
+        .brand small { display:block; font-weight:600; color:#a7f3d0; }
+        .nav-links a { color:#e5e7eb; text-decoration:none; margin-left:20px; font-weight:600; opacity:.9; transition:opacity .2s ease; }
+        .nav-links a:hover { opacity:1; }
 
         .hero { padding: 56px 28px; }
-        .hero-inner { max-width: 1200px; margin: 0 auto; background:#e5e7eb; border-radius:16px; padding: 40px; display:grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items:center; }
+        .hero-inner { max-width: 1200px; margin: 0 auto; background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03)); border:1px solid rgba(255,255,255,.08); border-radius:16px; padding: 40px; display:grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items:center; box-shadow: 0 30px 80px rgba(0,0,0,.35); }
         @media (max-width: 900px) { .hero-inner { grid-template-columns: 1fr; } }
 
         .hero-graphic { display:grid; grid-template-rows: 1fr auto; gap: 20px; }
         .bars { display:flex; align-items:flex-end; gap: 24px; height: 320px; }
-        .bar { width: 96px; background:#6b7280; border-radius:10px; opacity:.9; }
-        .bar:nth-child(1) { height: 88%; }
-        .bar:nth-child(2) { height: 52%; }
-        .bar:nth-child(3) { height: 76%; }
-        .cta { display:flex; gap:12px; }
-        .btn { display:inline-flex; align-items:center; justify-content:center; padding:12px 18px; border-radius:10px; text-decoration:none; font-weight:700; border:0; cursor:pointer; }
-        .btn-primary { background: var(--accent); color:#111; }
-        .btn-primary:hover { filter: brightness(0.95); }
-        .btn-outline { background: transparent; color: var(--brand); border:2px solid var(--brand); }
-        .btn-outline:hover { background: var(--brand); color:#fff; }
+        .bar { width: 96px; background: linear-gradient(180deg, rgba(16,185,129,.9), rgba(6,78,59,.95)); border-radius:14px; box-shadow: 0 10px 30px rgba(0,0,0,.35); transform-origin: bottom; animation: grow 1.2s ease var(--d,0s) both; }
+        .bar:nth-child(1) { height: 88%; --d:.1s }
+        .bar:nth-child(2) { height: 52%; --d:.2s }
+        .bar:nth-child(3) { height: 76%; --d:.3s }
+        @keyframes grow { from { transform: scaleY(.2); opacity:.4 } to { transform: scaleY(1); opacity:1 } }
 
-        .headline { font-size: clamp(28px, 4vw, 56px); line-height:1.05; margin: 0 0 12px 0; font-weight:800; }
-        .subhead { color: var(--muted); font-size: 16px; max-width: 620px; }
+        .cta { display:flex; gap:12px; }
+        .btn { display:inline-flex; align-items:center; justify-content:center; padding:12px 18px; border-radius:10px; text-decoration:none; font-weight:700; border:0; cursor:pointer; transition: transform .12s ease, filter .2s ease, box-shadow .2s ease; }
+        .btn:active { transform: translateY(1px); }
+        .btn-primary { background: var(--accent); color:#fff; box-shadow: 0 10px 30px color-mix(in oklab, var(--accent) 50%, #000 50%); }
+        .btn-primary:hover { filter: brightness(1.05); box-shadow: 0 14px 36px color-mix(in oklab, var(--accent) 60%, #000 40%); }
+        .btn-outline { background: transparent; color: #e5e7eb; border:2px solid rgba(255,255,255,.7); }
+        .btn-outline:hover { background: rgba(255,255,255,.08); }
+
+        .headline { color:#f1f5f9; font-size: clamp(28px, 4vw, 56px); line-height:1.05; margin: 0 0 12px 0; font-weight:800; text-shadow: 0 10px 30px rgba(0,0,0,.35); }
+        .subhead { color: #cbd5e1; font-size: 16px; max-width: 620px; }
 
         /* Modal */
-        .modal-backdrop { position:fixed; inset:0; background: rgba(0,0,0,.5); display:none; align-items:center; justify-content:center; padding: 20px; z-index: 20; }
-        .modal { width: 100%; max-width: 980px; background: var(--surface); border-radius: 14px; overflow:hidden; box-shadow: 0 20px 80px rgba(0,0,0,.25); }
-        .modal header { background: #f3f4f6; color: #111827; padding:16px 20px; text-align:left; }
-        .modal .content { display:grid; grid-template-columns: 1.2fr .9fr; gap: 24px; padding: 22px; }
+        .modal-backdrop { position:fixed; inset:0; background: rgba(0,0,0,.55); display:none; align-items:center; justify-content:center; padding: 20px; z-index: 20; }
+        .modal { width: 100%; max-width: 980px; background: var(--surface); border-radius: 16px; overflow:hidden; box-shadow: 0 30px 90px rgba(0,0,0,.5); transform: translateY(10px) scale(.98); opacity:0; transition: transform .18s ease, opacity .18s ease; }
+        .modal.show { transform: translateY(0) scale(1); opacity:1; }
+        .modal header { background: linear-gradient(90deg, var(--accent-600), var(--accent)); color: #fff; padding:16px 20px; text-align:left; }
+        .modal .content { display:grid; grid-template-columns: 1.2fr .9fr; gap: 0; }
         @media (max-width: 900px) { .modal .content { grid-template-columns: 1fr; } }
-        .how { padding-right: 10px; }
-        .how h3 { margin-top:0; font-weight:800; }
-        .how ul { margin: 12px 0 0 18px; color: var(--muted); }
-        .signin { background:#f9fafb; padding: 16px; border-radius: 12px; }
+        .brand-panel { position:relative; padding: 28px; background: linear-gradient(160deg, rgba(37,99,235,0.08), rgba(6,95,70,0.06)); border-right: 1px solid #eef2ff; }
+        .brand-panel .panel-inner { background: linear-gradient(180deg, rgba(255,255,255,.7), rgba(255,255,255,.45)); border: 1px solid rgba(15,23,42,.08); border-radius: 14px; padding: 20px; height: 100%; display:flex; flex-direction:column; justify-content:center; }
+        .brand-panel .logo-wrap { display:flex; align-items:center; gap:12px; margin-bottom: 10px; }
+        .brand-panel .logo-badge { width:48px; height:48px; border-radius:10px; background: #065f46; display:grid; place-items:center; font-weight:800; color:#fff; overflow:hidden; box-shadow: inset 0 0 0 2px rgba(255,255,255,.25); }
+        .brand-panel .logo-badge img { width:100%; height:100%; object-fit:cover; display:block; }
+        .brand-panel h3 { margin: 0 0 6px 0; color:#0f172a; font-weight:800; }
+        .brand-panel p { margin: 0 0 8px 0; color:#334155; }
+        .brand-panel ul { margin: 10px 0 0 18px; color:#475569; }
+        .signin { background:#ffffff; padding: 22px; border-radius: 0 16px 16px 0; border-left: 1px solid #eef2ff; }
+        @media (max-width: 900px) { .signin { border-radius: 0 0 16px 16px; border-left:0; border-top:1px solid #eef2ff; } .brand-panel { border-right:0; } }
         .signin h4 { margin: 0 0 10px 0; }
         .form-row { display:flex; gap:12px; }
         .form-group { margin-bottom: 10px; display:block; }
-        .form-group label { display:block; font-weight:600; margin-bottom:6px; }
-        .form-group input, .form-group select { width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; font: inherit; }
+        .form-group label { display:block; font-weight:600; margin-bottom:6px; color:#111827; }
+        .form-group input, .form-group select { width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; font: inherit; background:#fff; color:#111; }
         .roles { display:flex; gap:10px; margin: 8px 0 12px 0; }
-        .chip { padding:8px 10px; border-radius:999px; border:1px solid #e5e7eb; background:#fff; cursor:pointer; }
+        .chip { padding:8px 10px; border-radius:999px; border:1px solid #e5e7eb; background:#fff; cursor:pointer; transition: all .15s ease; color:#111; }
         .chip input { display:none; }
-        .chip.active, .chip:hover { border-color: var(--brand); color: var(--brand); }
+        .chip.active { border-color: var(--accent); color: var(--accent); box-shadow: 0 6px 14px color-mix(in oklab, var(--accent) 35%, #000 65%); }
         .modal-actions { display:flex; gap:10px; justify-content:flex-end; margin-top: 6px; }
-        .close-x { background:transparent; border:0; font-size:18px; cursor:pointer; }
+        .close-x { background:transparent; border:0; font-size:18px; cursor:pointer; color:#fff; }
     </style>
     </head>
 <body>
     <nav class="navbar">
         <div class="brand">
-            <div class="logo">POCC</div>
+            <div class="logo">
+                <?php if ($logoSrc): ?>
+                    <img src="<?= htmlspecialchars($logoSrc, ENT_QUOTES) ?>" alt="POCC logo" />
+                <?php else: ?>
+                    POCC
+                <?php endif; ?>
+            </div>
             <div>
                 Philippine Oncology Center Corporation<br>
                 <small>Procurement & Inventory System</small>
@@ -111,7 +164,7 @@
 
     <!-- Get Started / Sign in Modal -->
     <div class="modal-backdrop" id="modal">
-        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="modal" id="modalCard" role="dialog" aria-modal="true" aria-labelledby="modal-title">
             <header>
                 <div style="display:flex; align-items:center; justify-content:space-between;">
                     <strong id="modal-title">Welcome to POCC Procurement & Inventory</strong>
@@ -119,14 +172,27 @@
                 </div>
             </header>
             <div class="content">
-                <div class="how">
-                    <h3>How it works</h3>
-                    <ul>
-                        <li>Custodians manage inventory and submit purchase requests.</li>
-                        <li>Procurement managers review, approve, and track requests.</li>
-                        <li>Admins configure branches, users, and audit records.</li>
-                        <li>Automated logs and PDF exports keep records clean and shareable.</li>
-                    </ul>
+                <div class="brand-panel">
+                    <div class="panel-inner">
+                        <div class="logo-wrap">
+                            <div class="logo-badge">
+                                <?php if ($logoSrc): ?>
+                                    <img src="<?= htmlspecialchars($logoSrc, ENT_QUOTES) ?>" alt="POCC logo"/>
+                                <?php else: ?>
+                                    POCC
+                                <?php endif; ?>
+                            </div>
+                            <div style="font-weight:800; color:#0f172a;">Philippine Oncology Center Corporation</div>
+                        </div>
+                        <h3>Streamlined purchasing. Clear inventory.</h3>
+                        <p>Approve requests faster, keep stock levels accurate, and export clean PDF records—
+                           all in one secure system.</p>
+                        <ul>
+                            <li>Custodians: track and request supplies</li>
+                            <li>Managers: review, approve, and monitor</li>
+                            <li>Admins: configure branches and users</li>
+                        </ul>
+                    </div>
                 </div>
                 <div class="signin">
                     <h4>Sign in</h4>
@@ -165,8 +231,9 @@
 
     <script>
         const modal = document.getElementById('modal');
-        function openModal(){ modal.style.display = 'flex'; }
-        function closeModal(){ modal.style.display = 'none'; }
+        const modalCard = document.getElementById('modalCard');
+        function openModal(){ modal.style.display = 'flex'; requestAnimationFrame(()=> modalCard.classList.add('show')); }
+        function closeModal(){ modalCard.classList.remove('show'); setTimeout(()=> modal.style.display = 'none', 150); }
 
         const chips = document.getElementById('roleChips');
         chips.addEventListener('click', (e) => {
@@ -177,6 +244,8 @@
             const value = label.querySelector('input').value;
             const select = document.getElementById('roleSelect');
             select.value = value;
+            // Update page accent theme based on role
+            document.body.setAttribute('data-role', value);
         });
 
         function syncRoleToSelect(){
@@ -184,6 +253,8 @@
             const active = document.querySelector('#roleChips .chip.active input');
             if (active) document.getElementById('roleSelect').value = active.value;
         }
+        // Initialize default role theme
+        document.body.setAttribute('data-role', 'procurement_manager');
     </script>
 </body>
 </html>

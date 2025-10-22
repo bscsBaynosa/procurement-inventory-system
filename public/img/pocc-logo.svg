@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 60" role="img" aria-label="POCC logo">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#16a34a"/>
+      <stop offset="100%" stop-color="#0b0b0b"/>
+    </linearGradient>
+  </defs>
+  <rect width="240" height="60" rx="12" fill="url(#g)"/>
+  <g fill="#fff" font-family="Poppins, Arial, sans-serif" font-weight="800" font-size="36">
+    <text x="20" y="42">POCC</text>
+  </g>
+</svg>
