@@ -30,8 +30,16 @@
         .navbar { display:flex; align-items:center; justify-content:space-between; padding: 12px 22px; background: rgba(15, 23, 42, .15); backdrop-filter: blur(6px); position:sticky; top:0; z-index:10; border-bottom: 1px solid rgba(255,255,255,.06); }
         .brand { display:flex; align-items:center; gap:10px; font-weight:800; color:#e2e8f0; }
         .brand small { display:block; font-weight:600; color:#a7f3d0; }
-        .nav-links a { color:#e5e7eb; text-decoration:none; margin-left:20px; font-weight:600; opacity:.9; transition:opacity .2s ease; }
-        .nav-links a:hover { opacity:1; }
+        .nav-links { display:flex; align-items:center; gap: 12px; }
+        .nav-links a { color:#e5e7eb; text-decoration:none; margin-left:0; padding:8px 12px; font-weight:600; opacity:.9; transition:opacity .2s ease; border-radius:10px; }
+        .nav-links a:hover { opacity:1; background: rgba(255,255,255,.06); }
+        .menu-toggle { display:none; background:transparent; color:#e5e7eb; border:1px solid rgba(255,255,255,.25); padding:8px 10px; border-radius:10px; font-weight:700; }
+        @media (max-width: 760px){
+            .menu-toggle { display:inline-flex; }
+            .nav-links { position: absolute; top:56px; right:12px; left:12px; flex-direction:column; background: rgba(2,6,23,.85); border:1px solid rgba(255,255,255,.08); padding:12px; border-radius:12px; display:none; }
+            .nav-links.open { display:flex; }
+            .nav-links a { width:100%; }
+        }
 
     .hero { padding: 36px 22px; display:flex; align-items:center; justify-content:center; min-height: calc(100vh - 80px); }
     .hero-inner { max-width: 1100px; width: 100%; margin: 0 auto; background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03)); border:1px solid rgba(255,255,255,.08); border-radius:16px; padding: 28px; display:grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items:stretch; box-shadow: 0 30px 80px rgba(0,0,0,.35); }
@@ -73,6 +81,23 @@
 
     /* Responsive: stack username/password vertically on narrow screens to avoid overflow */
     @media (max-width: 700px) { .form-row { flex-direction: column; } }
+    /* Sections */
+    .section { padding: 30px 22px; }
+    .section-inner { max-width: 1100px; margin: 0 auto; }
+    .glass { background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03)); border:1px solid rgba(255,255,255,.08); border-radius:16px; box-shadow: 0 30px 80px rgba(0,0,0,.25); }
+    .about-grid { display:grid; grid-template-columns: 1.2fr 1fr; gap: 22px; padding: 22px; }
+    .about-grid h2 { color:#e2e8f0; margin:10px 0; font-size: clamp(22px, 3vw, 32px); }
+    .about-grid p { color:#cbd5e1; }
+    @media (max-width: 900px){ .about-grid { grid-template-columns: 1fr; } }
+    .cards { display:grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 22px; }
+    .card { background: rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:16px; color:#e5e7eb; }
+    .card h3 { margin:8px 0; font-size:18px; }
+    .card p { color:#cbd5e1; font-size:14px; }
+    @media (max-width: 1100px){ .cards { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 600px){ .cards { grid-template-columns: 1fr; } }
+    .muted { color:#a7f3d0; font-weight:700; font-size:12px; letter-spacing:.08em; text-transform:uppercase; }
+    .contact { display:grid; grid-template-columns: 1fr 1fr; gap:16px; padding:22px; }
+    @media (max-width: 800px){ .contact { grid-template-columns: 1fr; } }
     </style>
     </head>
 <body>
@@ -83,9 +108,13 @@
                 <small>Procurement & Inventory System</small>
             </div>
         </div>
-        <div class="nav-links">
-            <a href="#about">About us</a>
-            <a href="#contact">Contact Us</a>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <button class="menu-toggle" type="button" onclick="toggleMenu()">Menu</button>
+            <div class="nav-links" id="navLinks">
+                <a href="#about" onclick="closeMenu()">About</a>
+                <a href="#learn" onclick="closeMenu()">Learn More</a>
+                <a href="#contact" onclick="closeMenu()">Contact</a>
+            </div>
         </div>
     </nav>
 
@@ -157,7 +186,79 @@
         </div>
     </section>
 
+    <!-- About Section -->
+    <section id="about" class="section">
+        <div class="section-inner glass about-grid">
+            <div>
+                <div class="muted">About Us</div>
+                <h2>Built for hospital procurement and stock stewardship</h2>
+                <p>
+                    This lightweight system helps the Philippine Oncology Center Corporation streamline purchasing,
+                    track stock accurately across branches, and reduce delays due to manual hand‑offs. It centralizes
+                    requests, approvals, and inventory updates so teams can focus on patient care.
+                </p>
+                <p>
+                    Admins manage users and branches, managers review and approve purchase requests, and custodians
+                    keep inventory counts up to date—all in one place.
+                </p>
+                <div class="cta" style="margin-top:10px;">
+                    <a class="btn btn-outline" href="#learn">Learn more</a>
+                </div>
+            </div>
+            <div class="card" style="background: rgba(4,120,87,.18); border-color: rgba(16,185,129,.35);">
+                <h3 style="margin-top:0;">At a glance</h3>
+                <ul style="margin:8px 0 0 18px; color:#e2e8f0;">
+                    <li>Role‑based access: Admin, Manager, Custodian</li>
+                    <li>Branch‑aware tracking and reporting</li>
+                    <li>Fast approvals and audit‑ready records</li>
+                    <li>Dark mode and mobile‑friendly UI</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+
+    <!-- Learn More Section -->
+    <section id="learn" class="section">
+        <div class="section-inner glass">
+            <div class="cards">
+                <div class="card">
+                    <h3>Streamlined Approvals</h3>
+                    <p>Requests move from submission to approval with clear statuses and fewer bottlenecks.</p>
+                </div>
+                <div class="card">
+                    <h3>Real‑time Inventory</h3>
+                    <p>Custodians log stock movements so managers always see accurate counts per branch.</p>
+                </div>
+                <div class="card">
+                    <h3>Branch Management</h3>
+                    <p>Manage POCC branches centrally and assign custodians to the right locations.</p>
+                </div>
+                <div class="card">
+                    <h3>Audit‑ready PDFs</h3>
+                    <p>Generate consistent, printable reports and requests for compliance and archiving.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Contact Section -->
+    <section id="contact" class="section" style="padding-bottom:60px;">
+        <div class="section-inner glass contact">
+            <div>
+                <div class="muted">Contact</div>
+                <h2 style="color:#e2e8f0; margin:8px 0 10px 0;">Get in touch</h2>
+                <p style="color:#cbd5e1;">For access requests or technical support, please contact the system administrator.</p>
+            </div>
+            <div class="card" style="background: rgba(255,255,255,.06);">
+                <p style="margin:6px 0; color:#cbd5e1;">Email: admin@pocc.local</p>
+                <p style="margin:6px 0; color:#cbd5e1;">Hours: Mon–Fri, 9:00 AM – 5:00 PM</p>
+            </div>
+        </div>
+    </section>
+
     <script>
+        function toggleMenu(){ document.getElementById('navLinks').classList.toggle('open'); }
+        function closeMenu(){ document.getElementById('navLinks').classList.remove('open'); }
         const chips = document.getElementById('roleChips');
         chips.addEventListener('click', (e) => {
             const label = e.target.closest('label.chip');

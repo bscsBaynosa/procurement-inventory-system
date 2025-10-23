@@ -86,7 +86,7 @@ class AuthController extends BaseController
     public function logout(): void
     {
     $this->auth()->logout();
-        header('Location: /login');
+        header('Location: /');
     }
 }
 ?>

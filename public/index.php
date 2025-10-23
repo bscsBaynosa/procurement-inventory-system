@@ -77,9 +77,9 @@ if ($method === 'GET' && $path === '/') {
 	exit;
 }
 
-// Login page
+// Login page (deprecated) → always use landing
 if ($method === 'GET' && $path === '/login') {
-	$auth->showLoginForm();
+	header('Location: /');
 	exit;
 }
 
@@ -88,9 +88,9 @@ if ($method === 'POST' && $path === '/auth/login') {
 	exit;
 }
 
-// Gracefully handle accidental GET to /auth/login by redirecting to /login
+// Gracefully handle accidental GET to /auth/login by redirecting to landing
 if ($method === 'GET' && $path === '/auth/login') {
-	header('Location: /login');
+	header('Location: /');
 	exit;
 }
 

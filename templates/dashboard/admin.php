@@ -18,10 +18,10 @@
         html[data-theme="dark"] .sidebar{ background:#0f172a; }
         .brand{ display:flex; align-items:center; gap:10px; font-weight:800; padding:6px 10px; }
         .nav{ margin-top:14px; display:flex; flex-direction:column; gap:6px; }
-        .nav a{ display:flex; align-items:center; gap:10px; padding:10px 12px; color:var(--text); text-decoration:none; border-radius:10px; }
+    .nav a{ display:flex; align-items:center; gap:10px; padding:10px 12px; color:var(--text); text-decoration:none; border-radius:10px; }
         .nav a:hover{ background:var(--bg); }
         .nav a.active{ background: color-mix(in oklab, var(--accent) 10%, transparent); color: var(--text); border:1px solid color-mix(in oklab, var(--accent) 35%, var(--border)); }
-        .icon{ width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; }
+    .icon{ width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; }
         .content{ padding:18px 20px; }
         .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
         .search{ flex:1; max-width:520px; }
@@ -31,8 +31,12 @@
         .h1{ font-weight:800; font-size:22px; margin: 6px 0 12px; }
         .cards{ display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; }
         @media (max-width: 1100px){ .cards{ grid-template-columns: repeat(2, 1fr);} }
-        .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; }
+    .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; transform:scale(.98); animation: pop .6s cubic-bezier(.22,.61,.36,1) both; }
         .card .btn{ margin-top:8px; background:var(--accent); color:#fff; border:0; padding:10px 12px; border-radius:10px; font-weight:700; text-decoration:none; display:inline-block; }
+    @keyframes pop{ from{ opacity:0; transform: translateY(8px) scale(.98);} to{ opacity:1; transform: translateY(0) scale(1);} }
+    .nav svg{ width:18px; height:18px; fill: var(--accent); }
+    .grid-3{ display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; }
+    @media (max-width: 900px){ .layout{ grid-template-columns: 1fr; } .sidebar{ position:relative; height:auto;} .cards{ grid-template-columns: repeat(2,1fr);} .grid-3{ grid-template-columns: 1fr; } }
         .tabs{ display:flex; gap:10px; margin:16px 0 8px; border-bottom:1px solid var(--border); }
         .tab{ padding:10px 12px; border-bottom:2px solid transparent; color:var(--muted); font-weight:700; text-decoration:none; }
         .tab.active{ color:var(--text); border-bottom-color:var(--accent); }
@@ -54,12 +58,12 @@
     <aside class="sidebar">
         <div class="brand">🟢 POCC</div>
         <nav class="nav">
-            <a href="/dashboard" class="active">� Dashboard</a>
-            <a href="/admin/users">🟢 Users</a>
-            <a href="/admin/branches">� Branches</a>
-            <a href="/admin/messages">� Messages</a>
-            <a href="/settings">� Settings</a>
-            <a href="/logout">🟢 Logout</a>
+            <a href="/dashboard" class="active"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-5v-6H11v6H6v-9H3z"/></svg> Dashboard</a>
+            <a href="/admin/users"><svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zM8 11c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.67 0-8 1.34-8 4v2h10v-2c0-2.66-5.33-4-8-4zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.96 1.97 3.45v2h6v-2c0-2.66-5.33-4-8-4z"/></svg> Users</a>
+            <a href="/admin/branches"><svg viewBox="0 0 24 24"><path d="M12 2l7 6v12H5V8l7-6zm0 2.2L7 8v10h10V8l-5-3.8z"/></svg> Branches</a>
+            <a href="/admin/messages"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
+            <a href="/settings"><svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58a.5.5 0 00.12-.64l-1.92-3.32a.5.5 0 00-.6-.22l-2.39.96a7.03 7.03 0 00-1.63-.94l-.36-2.54A.5.5 0 0013 1h-4a.5.5 0 00-.5.42l-.36 2.54c-.57.22-1.11.52-1.63.94l-2.39-.96a.5.5 0 00-.6.22L1.6 7.02a.5.5 0 00.12.64l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94L1.72 13.7a.5.5 0 00-.12.64l1.92 3.32c.14.24.44.34.7.22l2.39-.96c.52.42 1.06.76 1.63.98l.36 2.52c.04.25.25.44.5.44h4c.25 0 .46-.19.5-.44l.36-2.52c.57-.22 1.11-.56 1.63-.98l2.39.96c.26.12.56.02.7-.22l1.92-3.32a.5.5 0 00-.12-.64l-2.03-1.58zM11 9a3 3 0 110 6 3 3 0 010-6z"/></svg> Settings</a>
+            <a href="/logout"><svg viewBox="0 0 24 24"><path d="M10 17l1.41-1.41L8.83 13H20v-2H8.83l2.58-2.59L10 7l-5 5 5 5zM4 19h6v2H4a2 2 0 01-2-2V5a2 2 0 012-2h6v2H4v14z"/></svg> Logout</a>
         </nav>
     </aside>
     <main class="content">
@@ -79,7 +83,7 @@
             <div class="card"><div style="font-size:12px;color:var(--muted)">Custodians</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['custodians'] ?? 0) ?></div></div>
         </div>
 
-        <div class="cards" style="margin-top:12px; grid-template-columns: repeat(3, 1fr);">
+        <div class="cards grid-3" style="margin-top:12px;">
             <div class="card"><div style="font-size:12px;color:var(--muted)">Branches</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['branches'] ?? 0) ?></div></div>
             <div class="card"><div style="font-size:12px;color:var(--muted)">Pending Requests</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['requests']['pending'] ?? 0) ?></div></div>
             <div class="card"><div style="font-size:12px;color:var(--muted)">Inventory Items</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['inventory']['total'] ?? 0) ?></div></div>
