@@ -107,6 +107,12 @@
                 </form>
                 <?php else: ?>
                 <h3 style="margin-top:0">Add Branch</h3>
+                <?php if (!empty($_GET['seeded'])): ?>
+                    <div class="ok">POCC branches seeded/updated.</div>
+                <?php endif; ?>
+                <form method="POST" action="/admin/branches/seed" style="margin-bottom:12px">
+                    <button class="btn" type="submit">Seed POCC Branches</button>
+                </form>
                 <form method="POST" action="/admin/branches">
                     <div class="row">
                         <div>
