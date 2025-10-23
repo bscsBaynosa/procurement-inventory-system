@@ -103,8 +103,12 @@ if ($method === 'GET' && $path === '/dashboard') {
 
 // One-time setup route (guarded). Enable by setting SETUP_TOKEN env var.
 if ($method === 'GET' && $path === '/setup') {
-	$token = $_GET['token'] ?? '';
-	$expected = getenv('SETUP_TOKEN') ?: '';
+	$token = isset($_GET['token']) ? trim((string)$_GET['token']) : '';
+	// Read SETUP_TOKEN robustly from multiple sources to avoid env propagation quirks
+	$expected = getenv('SETUP_TOKEN');
+	if (!is_string($expected) || $expected === '') {
+		$expected = $_ENV['SETUP_TOKEN'] ?? ($_SERVER['SETUP_TOKEN'] ?? '');
+	}
 	if ($expected === '' || !hash_equals($expected, (string)$token)) {
 		http_response_code(403);
 		$reason = $expected === '' ? 'missing' : 'mismatch';
