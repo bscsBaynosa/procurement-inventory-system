@@ -53,17 +53,29 @@ class AuthController extends BaseController
             return;
         }
 
-        if ($this->auth()->attempt($username, $password, $role, $ip, $ua)) {
-            header('Location: /dashboard');
-            return;
+        try {
+            if ($this->auth()->attempt($username, $password, $role, $ip, $ua)) {
+                header('Location: /dashboard');
+                return;
+            }
+            $from = (string)($_POST['from'] ?? '');
+            $errorMsg = 'Invalid credentials or role.';
+            if ($from === 'landing') {
+                $this->showLanding($errorMsg);
+                return;
+            }
+            $this->showLoginForm($errorMsg);
+        } catch (\Throwable $e) {
+            // Most common cause: database not initialized or not reachable
+            error_log('[AuthController@login] ' . $e->getMessage());
+            $hint = 'Sign-in is temporarily unavailable. Please run setup to initialize the database: '/**/ . '/setup?token=YOUR_TOKEN';
+            $from = (string)($_POST['from'] ?? '');
+            if ($from === 'landing') {
+                $this->showLanding($hint);
+                return;
+            }
+            $this->showLoginForm($hint);
         }
-        $from = (string)($_POST['from'] ?? '');
-        $errorMsg = 'Invalid credentials or role.';
-        if ($from === 'landing') {
-            $this->showLanding($errorMsg);
-            return;
-        }
-        $this->showLoginForm($errorMsg);
     }
 
     public function logout(): void
