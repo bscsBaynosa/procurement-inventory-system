@@ -257,3 +257,16 @@ DO $$ BEGIN
 END $$;
 
 COMMIT;
+
+-- Messaging (ensure table exists in base schema)
+BEGIN;
+CREATE TABLE IF NOT EXISTS messages (
+    id BIGSERIAL PRIMARY KEY,
+    sender_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+    recipient_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+    subject VARCHAR(255) NOT NULL,
+    body TEXT NOT NULL,
+    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+COMMIT;

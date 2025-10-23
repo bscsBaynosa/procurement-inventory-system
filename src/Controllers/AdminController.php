@@ -87,10 +87,74 @@ class AdminController extends BaseController
                  LIMIT 6'
             )->fetchAll();
 
+            // Build simple 6-month trend series using generate_series for three metrics
+            $seriesIncoming = $this->pdo->query("
+                WITH months AS (
+                    SELECT generate_series(date_trunc('month', CURRENT_DATE) - INTERVAL '5 months',
+                                           date_trunc('month', CURRENT_DATE),
+                                           interval '1 month') AS m
+                )
+                SELECT to_char(m, 'YYYY-MM') AS ym,
+                       COALESCE(cnt, 0) AS v
+                FROM months
+                LEFT JOIN (
+                    SELECT date_trunc('month', created_at) AS mth, COUNT(*) AS cnt
+                    FROM purchase_requests
+                    GROUP BY 1
+                ) pr ON pr.mth = months.m
+                ORDER BY m
+            ")->fetchAll();
+
+            $seriesPO = $this->pdo->query("
+                WITH months AS (
+                    SELECT generate_series(date_trunc('month', CURRENT_DATE) - INTERVAL '5 months',
+                                           date_trunc('month', CURRENT_DATE),
+                                           interval '1 month') AS m
+                )
+                SELECT to_char(m, 'YYYY-MM') AS ym,
+                       COALESCE(cnt, 0) AS v
+                FROM months
+                LEFT JOIN (
+                    SELECT date_trunc('month', created_at) AS mth, COUNT(*) AS cnt
+                    FROM purchase_requests
+                    WHERE request_type = 'purchase_order'
+                      AND status IN ('approved','in_progress','completed')
+                    GROUP BY 1
+                ) po ON po.mth = months.m
+                ORDER BY m
+            ")->fetchAll();
+
+            $seriesInventory = $this->pdo->query("
+                WITH months AS (
+                    SELECT generate_series(date_trunc('month', CURRENT_DATE) - INTERVAL '5 months',
+                                           date_trunc('month', CURRENT_DATE),
+                                           interval '1 month') AS m
+                )
+                SELECT to_char(m, 'YYYY-MM') AS ym,
+                       COALESCE(SUM(abs(quantity_delta))::INT, 0) AS v
+                FROM months
+                LEFT JOIN inventory_movements im ON date_trunc('month', im.performed_at) = months.m
+                GROUP BY m
+                ORDER BY m
+            ")->fetchAll();
+
+            // Current user for greeting
+            $meId = (int)($_SESSION['user_id'] ?? 0);
+            $meName = null;
+            if ($meId > 0) {
+                $st = $this->pdo->prepare('SELECT full_name FROM users WHERE user_id = :id');
+                $st->execute(['id' => $meId]);
+                $meName = $st->fetchColumn() ?: null;
+            }
+
             $this->render('dashboard/admin.php', [
                 'counts' => $counts,
                 'recent' => $recent,
                 'items' => [],
+                'series_incoming' => array_map(fn($r) => (int)$r['v'], $seriesIncoming ?: []),
+                'series_po' => array_map(fn($r) => (int)$r['v'], $seriesPO ?: []),
+                'series_inventory' => array_map(fn($r) => (int)$r['v'], $seriesInventory ?: []),
+                'me_name' => $meName,
             ]);
         } catch (\Throwable $e) {
             // Friendly guidance if DB not initialized or migrations not run
@@ -217,7 +281,27 @@ class AdminController extends BaseController
             $inbox = $stmt->fetchAll();
             $users = $this->pdo->query("SELECT user_id, full_name, role FROM users WHERE is_active = TRUE ORDER BY role, full_name")->fetchAll();
             $this->render('dashboard/messages.php', ['inbox' => $inbox, 'users' => $users]);
-        } catch (\Throwable $e) {
+        } catch (\PDOException $e) {
+            // If messages table doesn't exist yet, create it and retry once
+            if ($e->getCode() === '42P01') {
+                $this->pdo->exec('CREATE TABLE IF NOT EXISTS messages (
+                    id BIGSERIAL PRIMARY KEY,
+                    sender_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+                    recipient_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+                    subject VARCHAR(255) NOT NULL,
+                    body TEXT NOT NULL,
+                    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )');
+                // retry once
+                $stmt = $this->pdo->prepare('SELECT m.id, m.subject, m.body, m.is_read, m.created_at, u.full_name AS from_name
+                    FROM messages m JOIN users u ON u.user_id = m.sender_id WHERE m.recipient_id = :me ORDER BY m.created_at DESC LIMIT 50');
+                $stmt->execute(['me' => $me]);
+                $inbox = $stmt->fetchAll();
+                $users = $this->pdo->query("SELECT user_id, full_name, role FROM users WHERE is_active = TRUE ORDER BY role, full_name")->fetchAll();
+                $this->render('dashboard/messages.php', ['inbox' => $inbox, 'users' => $users]);
+                return;
+            }
             http_response_code(500);
             header('Content-Type: text/plain');
             echo 'Error loading messages: ' . $e->getMessage();

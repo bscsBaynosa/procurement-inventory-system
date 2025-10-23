@@ -9,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/main.css">
     <?php require __DIR__ . '/../layouts/_favicon.php'; ?>
+    <?php require __DIR__ . '/../layouts/_theme.php'; ?>
     <style>
         :root{ --bg:#f8fafc; --card:#ffffff; --text:#0f172a; --muted:#64748b; --border:#e2e8f0; --accent:#22c55e; }
         html[data-theme="dark"]{ --bg:#0b0b0b; --card:#0f172a; --text:#e2e8f0; --muted:#94a3b8; --border:#1f2937; --accent:#22c55e; }
@@ -23,11 +24,9 @@
         .nav a.active{ background: color-mix(in oklab, var(--accent) 10%, transparent); color: var(--text); border:1px solid color-mix(in oklab, var(--accent) 35%, var(--border)); }
     .icon{ width:18px; height:18px; display:inline-flex; align-items:center; justify-content:center; }
         .content{ padding:18px 20px; }
-        .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
-        .search{ flex:1; max-width:520px; }
-        .search input{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:#fff; color:#111; font:inherit; }
-        html[data-theme="dark"] .search input{ background:#0b0b0b; color:#e5e7eb; }
-        .profile{ display:flex; align-items:center; gap:10px; }
+    .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:14px; }
+    .greet{ font-size:16px; font-weight:700; }
+    .profile{ display:flex; align-items:center; gap:10px; text-decoration:none; }
         .h1{ font-weight:800; font-size:22px; margin: 6px 0 12px; }
         .cards{ display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; }
         @media (max-width: 1100px){ .cards{ grid-template-columns: repeat(2, 1fr);} }
@@ -51,12 +50,15 @@
         .muted{ color:var(--muted); }
         .righttools{ display:flex; align-items:center; gap:12px; }
         .toggle{ display:inline-flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); }
+            .spark{ width:100%; height:80px; }
+            .spark path{ stroke: var(--accent); fill: none; stroke-width: 2; }
+            .spark .bg{ stroke: color-mix(in oklab, var(--accent) 18%, var(--border)); opacity:.5; }
     </style>
 </head>
 <body>
 <div class="layout">
     <aside class="sidebar">
-        <div class="brand">🟢 POCC</div>
+    <div class="brand">Admin Control</div>
         <nav class="nav">
             <a href="/dashboard" class="active"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-5v-6H11v6H6v-9H3z"/></svg> Dashboard</a>
             <a href="/admin/users"><svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zM8 11c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.67 0-8 1.34-8 4v2h10v-2c0-2.66-5.33-4-8-4zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.96 1.97 3.45v2h6v-2c0-2.66-5.33-4-8-4z"/></svg> Users</a>
@@ -68,10 +70,9 @@
     </aside>
     <main class="content">
         <div class="topbar">
-            <div class="search"><input placeholder="Search" /></div>
+            <div class="greet">Hello, <?= htmlspecialchars((string)($me_name ?? 'Admin'), ENT_QUOTES, 'UTF-8') ?>.</div>
             <div class="righttools">
-                <label class="toggle"><input type="checkbox" id="modeToggle"> Night</label>
-                <div class="profile"><span class="muted">Admin</span> <span>🧑‍💻</span></div>
+                <a href="/settings" class="profile" title="Account settings"><span class="muted">Settings</span> <span>🧑‍💻</span></a>
             </div>
         </div>
 
@@ -89,13 +90,54 @@
             <div class="card"><div style="font-size:12px;color:var(--muted)">Inventory Items</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['inventory']['total'] ?? 0) ?></div></div>
         </div>
 
+            <div class="h1" style="margin-top:16px;">Trends</div>
+            <div class="cards grid-3">
+                <div class="card">
+                    <div style="font-size:12px;color:var(--muted)">Inventory Activity</div>
+                    <?php $d = $series_inventory ?? []; $max = max(1, max($d ?: [0])); $n = max(1, count($d)); $w = 220; $h = 60; $step = ($n>1? $w/($n-1):$w); $pts=[]; for($i=0;$i<$n;$i++){ $x=$i*$step; $y=$h - (($d[$i]??0)/$max*$h); $pts[] = [$x,$y]; } function pathSmooth($pts){ if(count($pts)<2) return ''; $d='M'.$pts[0][0].','.$pts[0][1]; for($i=1;$i<count($pts);$i++){ $x=$pts[$i][0]; $y=$pts[$i][1]; $px=$pts[$i-1][0]; $py=$pts[$i-1][1]; $cx1=$px+($x-$px)/3; $cy1=$py; $cx2=$px+2*($x-$px)/3; $cy2=$y; $d.=' C'.$cx1.','.$cy1.' '.$cx2.','.$cy2.' '.$x.','.$y; } return $d; } $dPath = pathSmooth($pts); ?>
+                    <svg class="spark" viewBox="0 0 220 60" preserveAspectRatio="none">
+                        <path class="bg" d="M0,59 L220,59" />
+                        <path d="<?= htmlspecialchars($dPath, ENT_QUOTES, 'UTF-8') ?>" />
+                    </svg>
+                </div>
+                <div class="card">
+                    <div style="font-size:12px;color:var(--muted)">Incoming Requests</div>
+                    <?php $d = $series_incoming ?? []; $max = max(1, max($d ?: [0])); $n = max(1, count($d)); $w = 220; $h = 60; $step = ($n>1? $w/($n-1):$w); $pts=[]; for($i=0;$i<$n;$i++){ $x=$i*$step; $y=$h - (($d[$i]??0)/$max*$h); $pts[] = [$x,$y]; } $dPath = pathSmooth($pts); ?>
+                    <svg class="spark" viewBox="0 0 220 60" preserveAspectRatio="none">
+                        <path class="bg" d="M0,59 L220,59" />
+                        <path d="<?= htmlspecialchars($dPath, ENT_QUOTES, 'UTF-8') ?>" />
+                    </svg>
+                </div>
+                <div class="card">
+                    <div style="font-size:12px;color:var(--muted)">Outgoing Purchase Orders</div>
+                    <?php $d = $series_po ?? []; $max = max(1, max($d ?: [0])); $n = max(1, count($d)); $w = 220; $h = 60; $step = ($n>1? $w/($n-1):$w); $pts=[]; for($i=0;$i<$n;$i++){ $x=$i*$step; $y=$h - (($d[$i]??0)/$max*$h); $pts[] = [$x,$y]; } $dPath = pathSmooth($pts); ?>
+                    <svg class="spark" viewBox="0 0 220 60" preserveAspectRatio="none">
+                        <path class="bg" d="M0,59 L220,59" />
+                        <path d="<?= htmlspecialchars($dPath, ENT_QUOTES, 'UTF-8') ?>" />
+                    </svg>
+                </div>
+            </div>
+
         <div class="card" style="margin-top:12px;">
-            <div style="font-weight:700;margin-bottom:6px">Recent requests</div>
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+                <div style="font-weight:700;">Recent requests</div>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <input id="rqSearch" placeholder="Search" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;"/>
+                    <select id="rqFilter" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
+                        <option value="">All</option>
+                        <option>pending</option>
+                        <option>approved</option>
+                        <option>rejected</option>
+                        <option>in_progress</option>
+                        <option>completed</option>
+                    </select>
+                </div>
+            </div>
             <table>
                 <thead><tr><th>ID</th><th>Item</th><th>Branch</th><th>Status</th><th>Created</th></tr></thead>
-                <tbody>
+                <tbody id="rqBody">
                 <?php if (!empty($recent)): foreach ($recent as $r): ?>
-                    <tr>
+                    <tr data-status="<?= htmlspecialchars((string)($r['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                         <td><?= (int)$r['request_id'] ?></td>
                         <td><?= htmlspecialchars((string)($r['item_name'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
                         <td><?= htmlspecialchars((string)($r['branch_name'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
@@ -112,16 +154,24 @@
 </div>
 
 <script>
-    // Night mode toggle with localStorage
-    const root = document.documentElement;
-    const toggle = document.getElementById('modeToggle');
-    const saved = localStorage.getItem('pocc_admin_theme');
-    if (saved === 'dark') { root.setAttribute('data-theme','dark'); toggle.checked = true; }
-    toggle?.addEventListener('change', () => {
-        const mode = toggle.checked ? 'dark' : 'light';
-        root.setAttribute('data-theme', mode);
-        localStorage.setItem('pocc_admin_theme', mode);
-    });
+        // Client-side filter for recent requests
+        (function(){
+            var s = document.getElementById('rqSearch');
+            var f = document.getElementById('rqFilter');
+            var body = document.getElementById('rqBody');
+            function apply(){
+                var q = (s?.value || '').toLowerCase();
+                var st = f?.value || '';
+                Array.from(body.querySelectorAll('tr')).forEach(function(tr){
+                    var text = tr.textContent.toLowerCase();
+                    var okQ = !q || text.indexOf(q) !== -1;
+                    var okS = !st || (tr.getAttribute('data-status') === st);
+                    tr.style.display = (okQ && okS) ? '' : 'none';
+                });
+            }
+            s?.addEventListener('input', apply);
+            f?.addEventListener('change', apply);
+        })();
 </script>
 </body>
 </html>
