@@ -103,6 +103,21 @@ if ($method === 'GET' && $path === '/dashboard') {
 
 // One-time setup route (guarded). Enable by setting SETUP_TOKEN env var.
 if ($method === 'GET' && $path === '/setup') {
+	// Emergency bootstrap switch: /setup?force=1 will run installer unconditionally.
+	// Use only to unblock first-time initialization if env vars are not visible.
+	if (isset($_GET['force']) && (string)$_GET['force'] === '1') {
+		try {
+			$installer = new Installer();
+			$logLines = $installer->run();
+			header('Content-Type: text/plain');
+			echo "Setup ran with force=1.\n\n" . implode("\n", $logLines);
+		} catch (Throwable $e) {
+			http_response_code(500);
+			header('Content-Type: text/plain');
+			echo 'Setup error: ' . $e->getMessage();
+		}
+		exit;
+	}
 	$token = isset($_GET['token']) ? trim((string)$_GET['token']) : '';
 	// Read SETUP_TOKEN robustly from multiple sources to avoid env propagation quirks
 	$expectedRaw = getenv('SETUP_TOKEN');
