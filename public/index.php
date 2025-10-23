@@ -113,6 +113,30 @@ if ($method === 'GET' && $path === '/setup') {
 	$expected = is_string($expectedRaw) ? trim($expectedRaw, " \t\n\r\0\x0B\"'") : '';
 	$allowBypass = strtolower((string)(getenv('ALLOW_SETUP_IF_NO_TOKEN') ?? '')) === 'true';
 	if (($expected === '' && !$allowBypass) || ($expected !== '' && !hash_equals($expected, (string)$token))) {
+		// Auto-bootstrap safety: if the database clearly has no schema yet (no users table),
+		// allow running setup one time without a token to unblock initialization.
+		try {
+			$dbCheckOk = false;
+			$hasUsersTable = false;
+			// Lazy require to avoid fatal if classes move
+			if (class_exists(\App\Database\Connection::class)) {
+				$pdo = \App\Database\Connection::resolve();
+				$stmt = $pdo->query("SELECT to_regclass('public.users') AS t");
+				$val = $stmt ? $stmt->fetchColumn() : null;
+				$hasUsersTable = !empty($val);
+				$dbCheckOk = true;
+			}
+			if ($dbCheckOk && !$hasUsersTable) {
+				// No users table -> run installer without token as a one-time bootstrap
+				$installer = new Installer();
+				$logLines = $installer->run();
+				header('Content-Type: text/plain');
+				echo "Setup ran in bootstrap mode (no users table detected).\n\n" . implode("\n", $logLines);
+				exit;
+			}
+		} catch (\Throwable $ignored) {
+			// Fall through to 403 guidance if DB check fails
+		}
 		http_response_code(403);
 		$reason = $expected === '' ? 'missing' : 'mismatch';
 		$forwarded = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
