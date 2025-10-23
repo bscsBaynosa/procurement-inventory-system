@@ -110,4 +110,70 @@ class AdminController extends BaseController
             echo '</div></body></html>';
         }
     }
+
+    /**
+     * Simple Users page for admins: list users and provide a quick create form.
+     */
+    public function users(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+
+        try {
+            $list = $this->pdo->query('SELECT user_id, username, full_name, email, role, is_active, branch_id, created_at FROM users ORDER BY created_at DESC LIMIT 100')->fetchAll();
+            $branches = $this->pdo->query('SELECT branch_id, name FROM branches WHERE is_active = TRUE ORDER BY name ASC')->fetchAll();
+            $created = isset($_GET['created']) ? true : false;
+            $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
+            $this->render('dashboard/users.php', [ 'users' => $list, 'branches' => $branches, 'created' => $created, 'error' => $error ]);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            header('Content-Type: text/plain');
+            echo 'Error loading users: ' . $e->getMessage();
+        }
+    }
+
+    /**
+     * Handle admin user creation POST.
+     */
+    public function createUser(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+
+        $username = trim((string)($_POST['username'] ?? ''));
+        $fullName = trim((string)($_POST['full_name'] ?? ''));
+        $email = trim((string)($_POST['email'] ?? ''));
+        $role = (string)($_POST['role'] ?? '');
+        $branchId = isset($_POST['branch_id']) && $_POST['branch_id'] !== '' ? (int)$_POST['branch_id'] : null;
+        $password = (string)($_POST['password'] ?? '');
+
+        if ($username === '' || $fullName === '' || $role === '' || $password === '') {
+            header('Location: /admin/users?error=Missing+required+fields');
+            return;
+        }
+
+        if (!in_array($role, ['custodian','procurement_manager','admin'], true)) {
+            header('Location: /admin/users?error=Invalid+role');
+            return;
+        }
+
+        try {
+            $hash = password_hash($password, PASSWORD_BCRYPT);
+            $stmt = $this->pdo->prepare('INSERT INTO users (username, password_hash, full_name, email, role, branch_id, is_active, created_by, updated_by) VALUES (:u, :p, :n, :e, :r, :b, TRUE, :by, :by)');
+            $by = $_SESSION['user_id'] ?? null;
+            $stmt->execute([
+                'u' => $username,
+                'p' => $hash,
+                'n' => $fullName,
+                'e' => $email !== '' ? $email : null,
+                'r' => $role,
+                'b' => $branchId,
+                'by' => $by,
+            ]);
+            header('Location: /admin/users?created=1');
+        } catch (\Throwable $e) {
+            $msg = rawurlencode($e->getMessage());
+            header('Location: /admin/users?error=' . $msg);
+        }
+    }
 }

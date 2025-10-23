@@ -117,6 +117,18 @@ if ($method === 'GET' && $path === '/dashboard') {
 	exit;
 }
 
+// Admin: Users management (simple list + create)
+if ($method === 'GET' && $path === '/admin/users') {
+	if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); exit; }
+	$admin->users();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/users') {
+	if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); exit; }
+	$admin->createUser();
+	exit;
+}
+
 // One-time setup route (guarded). Enable by setting SETUP_TOKEN env var.
 if ($method === 'GET' && $path === '/setup') {
 	// Emergency bootstrap switch: /setup?force=1 will run installer unconditionally.
