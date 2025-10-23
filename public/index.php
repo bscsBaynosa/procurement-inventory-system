@@ -111,7 +111,8 @@ if ($method === 'GET' && $path === '/setup') {
 	}
 	// Normalize by trimming whitespace and quotes users might accidentally include
 	$expected = is_string($expectedRaw) ? trim($expectedRaw, " \t\n\r\0\x0B\"'") : '';
-	if ($expected === '' || !hash_equals($expected, (string)$token)) {
+	$allowBypass = strtolower((string)(getenv('ALLOW_SETUP_IF_NO_TOKEN') ?? '')) === 'true';
+	if (($expected === '' && !$allowBypass) || ($expected !== '' && !hash_equals($expected, (string)$token))) {
 		http_response_code(403);
 		$reason = $expected === '' ? 'missing' : 'mismatch';
 		$forwarded = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
@@ -130,6 +131,9 @@ if ($method === 'GET' && $path === '/setup') {
 		echo '</ol>';
 	$len = strlen((string)$expected);
 	echo '<p><small class="dim">Diagnostics: SETUP_TOKEN length detected by app: <strong>' . (int)$len . '</strong>. If this shows 0 after you set it, try restarting dynos in Heroku (More → Restart all dynos).</small></p>';
+		if ($expected === '' && !$allowBypass) {
+			echo '<p class="dim">If you cannot get the token to appear, you can temporarily bypass the token check by setting <code>ALLOW_SETUP_IF_NO_TOKEN=true</code> in Heroku Config Vars, running setup once, then removing it.</p>';
+		}
 		echo '<p>Tips:</p><ul>';
 		echo '<li>Paste the token without quotes and without spaces.</li>';
 		echo '<li>Use simple letters/numbers (e.g., 32 hex chars) to avoid URL-encoding issues.</li>';
