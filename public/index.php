@@ -9,6 +9,22 @@ if (file_exists($autoload)) {
 	require_once $autoload;
 }
 
+// Ultra-safe fallback autoloader for App\* in case Composer is running in
+// classmap-authoritative mode and new PSR-4 files weren't picked up yet.
+// This maps namespaces like App\Services\AuthService to src/Services/AuthService.php
+// and keeps the app online while we redeploy.
+spl_autoload_register(static function (string $class): void {
+	if (strpos($class, 'App\\') !== 0) {
+		return;
+	}
+	$relative = str_replace('App\\', '', $class);
+	$relative = str_replace('\\', '/', $relative);
+	$candidate = __DIR__ . '/../src/' . $relative . '.php';
+	if (is_file($candidate)) {
+		require_once $candidate;
+	}
+});
+
 // Fallback: if Composer autoload didn't register our controllers for any reason
 // (e.g., case sensitivity issues during deploy), explicitly require them.
 // This keeps the app online while we investigate autoload on the next deploy.
