@@ -8,12 +8,41 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ----- Domain & Enum Definitions -------------------------------------------------
 
-CREATE TYPE user_role AS ENUM ('custodian', 'procurement_manager', 'admin');
-CREATE TYPE inventory_status AS ENUM ('good', 'for_repair', 'for_replacement', 'retired');
-CREATE TYPE request_status AS ENUM ('draft', 'pending', 'approved', 'rejected', 'in_progress', 'completed', 'cancelled');
-CREATE TYPE request_type AS ENUM ('job_order', 'purchase_order', 'equipment_request');
-CREATE TYPE movement_reason AS ENUM ('stock_in', 'stock_out', 'adjustment', 'transfer', 'repair', 'return');
-CREATE TYPE audit_action AS ENUM ('create', 'update', 'delete', 'login', 'logout', 'status_change');
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
+        CREATE TYPE user_role AS ENUM ('custodian', 'procurement_manager', 'admin');
+    END IF;
+END $$;
+
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'inventory_status') THEN
+        CREATE TYPE inventory_status AS ENUM ('good', 'for_repair', 'for_replacement', 'retired');
+    END IF;
+END $$;
+
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'request_status') THEN
+        CREATE TYPE request_status AS ENUM ('draft', 'pending', 'approved', 'rejected', 'in_progress', 'completed', 'cancelled');
+    END IF;
+END $$;
+
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'request_type') THEN
+        CREATE TYPE request_type AS ENUM ('job_order', 'purchase_order', 'equipment_request');
+    END IF;
+END $$;
+
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'movement_reason') THEN
+        CREATE TYPE movement_reason AS ENUM ('stock_in', 'stock_out', 'adjustment', 'transfer', 'repair', 'return');
+    END IF;
+END $$;
+
+DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'audit_action') THEN
+        CREATE TYPE audit_action AS ENUM ('create', 'update', 'delete', 'login', 'logout', 'status_change');
+    END IF;
+END $$;
 
 -- ----- User ID generation ---------------------------------------------------------
 
@@ -197,16 +226,34 @@ BEGIN
 END;
 $$;
 
-CREATE TRIGGER trg_users_touch
-BEFORE INSERT OR UPDATE ON users
-FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'trg_users_touch'
+    ) THEN
+        CREATE TRIGGER trg_users_touch
+        BEFORE INSERT OR UPDATE ON users
+        FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+    END IF;
+END $$;
 
-CREATE TRIGGER trg_inventory_touch
-BEFORE INSERT OR UPDATE ON inventory_items
-FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'trg_inventory_touch'
+    ) THEN
+        CREATE TRIGGER trg_inventory_touch
+        BEFORE INSERT OR UPDATE ON inventory_items
+        FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+    END IF;
+END $$;
 
-CREATE TRIGGER trg_requests_touch
-BEFORE INSERT OR UPDATE ON purchase_requests
-FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+DO $$ BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'trg_requests_touch'
+    ) THEN
+        CREATE TRIGGER trg_requests_touch
+        BEFORE INSERT OR UPDATE ON purchase_requests
+        FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+    END IF;
+END $$;
 
 COMMIT;
