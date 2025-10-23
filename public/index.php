@@ -117,6 +117,40 @@ if ($method === 'GET' && $path === '/dashboard') {
 	exit;
 }
 
+// Custodian: Inventory
+if ($method === 'GET' && $path === '/custodian/inventory') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin'], true)) { header('Location: /login'); exit; }
+	$custodian->inventoryPage();
+	exit;
+}
+if ($method === 'POST' && $path === '/custodian/inventory') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin'], true)) { header('Location: /login'); exit; }
+	$custodian->inventoryCreate();
+	exit;
+}
+if ($method === 'POST' && $path === '/custodian/inventory/update') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin'], true)) { header('Location: /login'); exit; }
+	$custodian->inventoryUpdate();
+	exit;
+}
+if ($method === 'POST' && $path === '/custodian/inventory/delete') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin'], true)) { header('Location: /login'); exit; }
+	$custodian->inventoryDelete();
+	exit;
+}
+
+// Custodian: Purchase Request
+if ($method === 'GET' && $path === '/custodian/requests/new') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin'], true)) { header('Location: /login'); exit; }
+	$custodian->newRequest();
+	exit;
+}
+if ($method === 'POST' && $path === '/custodian/requests') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin'], true)) { header('Location: /login'); exit; }
+	$custodian->createRequest();
+	exit;
+}
+
 // Admin: Users management (simple list + create)
 if ($method === 'GET' && $path === '/admin/users') {
 	if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); exit; }

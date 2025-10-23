@@ -26,7 +26,8 @@ function nav_active($href, $path) {
             <a href="/admin/branches" class="<?= nav_active('/admin/branches', $path) ?>"><svg viewBox="0 0 24 24"><path d="M12 2l7 6v12H5V8l7-6zm0 2.2L7 8v10h10V8l-5-3.8z"/></svg> Branches</a>
             <a href="/admin/messages" class="<?= nav_active('/admin/messages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
         <?php elseif ($role === 'custodian'): ?>
-            <!-- Custodian has dashboard plus messages for now -->
+            <a href="/custodian/inventory" class="<?= nav_active('/custodian/inventory', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm4 0h14v-2H7v2zM3 17h2v-2H3v2zm4 0h14v-2H7v2zM3 9h2V7H3v2zm4 0h14V7H7v2z"/></svg> Inventory</a>
+            <a href="/custodian/requests/new" class="<?= nav_active('/custodian/requests', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 3h18v14H6l-3 3V3z"/></svg> Purchase Request</a>
             <a href="/admin/messages" class="<?= nav_active('/admin/messages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
         <?php elseif ($role === 'procurement_manager'): ?>
             <!-- Manager uses /dashboard for requests listing in current router -->
