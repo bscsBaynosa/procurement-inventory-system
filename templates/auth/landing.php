@@ -92,7 +92,7 @@
     <section class="hero">
         <div class="hero-inner">
             <div class="left-col">
-                <h1 class="headline">Procurement and Inventory Management System</h1>
+                <h1 class="headline">Procurement & Inventory Management System</h1>
                 <p class="subhead">
                     Simplify your workflow with an all‑in‑one system that automates purchase requests,
                     tracks inventory in real time, and reduces manual errors. Faster approvals and
