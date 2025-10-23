@@ -133,15 +133,15 @@
                             <div class="form-group">
                                 <label>Sign in as</label>
                                 <div class="roles" id="roleChips">
-                                    <label class="chip active"><input type="radio" name="role_chip" value="procurement_manager" checked> Manager</label>
+                                    <label class="chip"><input type="radio" name="role_chip" value="procurement_manager"> Manager</label>
                                     <label class="chip"><input type="radio" name="role_chip" value="custodian"> Custodian</label>
-                                    <label class="chip"><input type="radio" name="role_chip" value="admin"> Admin</label>
+                                    <label class="chip active"><input type="radio" name="role_chip" value="admin" checked> Admin</label>
                                 </div>
                                 <!-- real field submitted -->
                                 <select id="roleSelect" name="role" style="display:none">
-                                    <option value="procurement_manager" selected>Procurement Manager</option>
+                                    <option value="procurement_manager">Procurement Manager</option>
                                     <option value="custodian">Custodian</option>
-                                    <option value="admin">Administrator</option>
+                                    <option value="admin" selected>Administrator</option>
                                 </select>
                             </div>
                             <div class="form-group" id="roleInfo" aria-live="polite" style="margin-top:6px;">
@@ -210,8 +210,8 @@
             el.innerHTML = roleDescriptions[role] || '';
         }
         // Initialize default
-        document.body.setAttribute('data-role', 'procurement_manager');
-        updateRoleInfo('procurement_manager');
+    document.body.setAttribute('data-role', 'admin');
+    updateRoleInfo('admin');
     </script>
 </body>
 </html>

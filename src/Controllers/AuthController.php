@@ -59,7 +59,7 @@ class AuthController extends BaseController
                 return;
             }
             $from = (string)($_POST['from'] ?? '');
-            $errorMsg = 'Invalid credentials or role.';
+            $errorMsg = $this->auth()->lastError() ?: 'Invalid credentials or role.';
             if ($from === 'landing') {
                 $this->showLanding($errorMsg);
                 return;

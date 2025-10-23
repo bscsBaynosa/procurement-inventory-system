@@ -8,6 +8,7 @@ use PDO;
 class AuthService
 {
 	private PDO $pdo;
+	private ?string $lastError = null;
 
 	public function __construct(?PDO $pdo = null)
 	{
@@ -23,17 +24,25 @@ class AuthService
 		$stmt->execute(['u' => $username]);
 		$user = $stmt->fetch();
 
-		if (!$user || !$user['is_active']) {
+		if (!$user) {
+			$this->lastError = 'User not found.';
+			return false;
+		}
+		if (!$user['is_active']) {
+			$this->lastError = 'Account is disabled.';
 			return false;
 		}
 
 		// Strict role check: selected role must match the user's actual role
 		if ($user['role'] !== $role) {
+			// Give a friendly hint to switch roles.
+			$this->lastError = 'Selected role does not match this user. Try signing in as ' . (string)$user['role'] . '.';
 			return false;
 		}
 
 		if (!password_verify($password, (string)$user['password_hash'])) {
 			$this->incrementFailedAttempts((int)$user['user_id']);
+			$this->lastError = 'Incorrect password.';
 			return false;
 		}
 
@@ -52,6 +61,12 @@ class AuthService
 		$_SESSION['branch_id'] = $user['branch_id'] !== null ? (int)$user['branch_id'] : null;
 
 		return true;
+	}
+
+	/** Provide a friendly failure reason from the last attempt(), if any. */
+	public function lastError(): ?string
+	{
+		return $this->lastError;
 	}
 
 	public function logout(): void

@@ -25,7 +25,7 @@
             <div class="form-group">
                 <label for="role">Login as:</label>
                 <select id="role" name="role" required>
-                    <?php $selectedRole = $selectedRole ?? null; ?>
+                    <?php $selectedRole = $selectedRole ?? 'admin'; ?>
                     <option value="custodian" <?= ($selectedRole === 'custodian') ? 'selected' : '' ?>>Custodian</option>
                     <option value="procurement_manager" <?= ($selectedRole === 'procurement_manager') ? 'selected' : '' ?>>Procurement Manager</option>
                     <option value="admin" <?= ($selectedRole === 'admin') ? 'selected' : '' ?>>Administrator</option>
