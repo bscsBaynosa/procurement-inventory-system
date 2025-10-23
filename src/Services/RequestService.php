@@ -59,8 +59,8 @@ class RequestService
 	public function getAllRequests(array $filters = []): array
 	{
 		$sql = 'SELECT pr.request_id, pr.item_id, pr.branch_id, pr.request_type, pr.quantity, pr.unit, pr.status, pr.priority, pr.needed_by, pr.created_at, pr.updated_at,
-				   i.name AS item_name, b.name AS branch_name,
-				   ru.full_name AS requested_by_name, au.full_name AS assigned_to_name
+			   i.name AS item_name, b.name AS branch_name,
+			   ru.full_name AS requested_by_name, au.full_name AS assigned_to_name
 			FROM purchase_requests pr
 			LEFT JOIN inventory_items i ON i.item_id = pr.item_id
 			LEFT JOIN branches b ON b.branch_id = pr.branch_id
@@ -233,5 +233,4 @@ class RequestService
 		]);
 	}
 }
-
 
