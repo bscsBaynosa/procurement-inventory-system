@@ -21,7 +21,7 @@
         .nav a.active{ background: color-mix(in oklab, var(--accent) 10%, transparent); border:1px solid color-mix(in oklab, var(--accent) 35%, var(--border)); }
         .nav svg{ width:18px; height:18px; fill: var(--accent); }
         .content{ padding:18px 20px; }
-        .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; max-width:840px; }
+    .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; max-width:920px; }
         label{ display:block; font-weight:600; margin-bottom:6px; }
         input{ width:100%; padding:12px 12px; border:1px solid var(--border); border-radius:10px; background:#fff; color:#111; font:inherit; }
         .btn{ background:var(--accent); color:#fff; border:0; padding:10px 12px; border-radius:10px; font-weight:700; text-decoration:none; display:inline-block; }

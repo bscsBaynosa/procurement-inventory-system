@@ -32,6 +32,7 @@
     .nav a.active{ background: color-mix(in oklab, var(--accent) 10%, transparent); border:1px solid color-mix(in oklab, var(--accent) 35%, var(--border)); }
     .nav svg{ width:18px; height:18px; fill: var(--accent); }
     @media (max-width: 900px){ .layout{ grid-template-columns: 1fr; } .grid{ grid-template-columns: 1fr; } }
+    @media (max-width: 1100px){ .grid{ grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>

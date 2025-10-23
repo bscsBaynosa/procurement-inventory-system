@@ -11,7 +11,7 @@
         :root{ --bg:#f8fafc; --card:#ffffff; --text:#0f172a; --muted:#64748b; --border:#e2e8f0; --accent:#22c55e; }
         html[data-theme="dark"]{ --bg:#0b0b0b; --card:#0f172a; --text:#e2e8f0; --muted:#94a3b8; --border:#1f2937; --accent:#22c55e; }
         body{ margin:0; background:var(--bg); color:var(--text); font-family:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; }
-        .layout{ display:grid; grid-template-columns: 240px 1fr; min-height:100vh; }
+    .layout{ display:grid; grid-template-columns: 240px 1fr; min-height:100vh; }
         .sidebar{ background:#fff; border-right:1px solid var(--border); padding:18px 12px; position:sticky; top:0; height:100vh; }
         html[data-theme="dark"] .sidebar{ background:#0f172a; }
         .brand{ font-weight:800; padding:6px 10px; }
@@ -27,8 +27,10 @@
         th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
         input{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:#fff; color:#111; font:inherit; }
         .btn{ background:var(--accent); color:#fff; border:0; padding:10px 12px; border-radius:10px; font-weight:700; text-decoration:none; display:inline-block; }
-        .grid{ display:grid; grid-template-columns: 1fr 360px; gap:12px; }
+    .grid{ display:grid; grid-template-columns: 1fr minmax(340px, 420px); gap:12px; }
         .row{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
+    @media (max-width: 1100px){ .grid{ grid-template-columns: 1fr; } .row{ grid-template-columns: 1fr; } }
+    @media (max-width: 900px){ .layout{ grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
