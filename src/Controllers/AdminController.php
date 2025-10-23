@@ -200,7 +200,38 @@ class AdminController extends BaseController
                 }
             }
             $this->render('dashboard/users.php', [ 'users' => $list, 'branches' => $branches, 'created' => $created, 'error' => $error, 'editUser' => $editUser ]);
-        } catch (\Throwable $e) {
+        } catch (\PDOException $e) {
+            if ($e->getCode() === '42703') { // undefined_column first_name/last_name on legacy DB
+                try {
+                    $this->pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(120) NOT NULL DEFAULT ''");
+                    $this->pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(120) NOT NULL DEFAULT ''");
+                    // Backfill from full_name where needed
+                    $this->pdo->exec(<<<SQL
+                        UPDATE users SET
+                            first_name = CASE WHEN first_name = '' THEN COALESCE(split_part(full_name, ' ', 1), full_name) ELSE first_name END,
+                            last_name = CASE WHEN last_name = '' THEN COALESCE(nullif(split_part(full_name, ' ', array_length(regexp_split_to_array(full_name, '\\s+'), 1)), ''), full_name) ELSE last_name END
+                        WHERE first_name = '' OR last_name = '';
+                    SQL);
+                    // Retry load
+                    $list = $this->pdo->query('SELECT user_id, username, first_name, last_name, full_name, email, role, is_active, branch_id, created_at FROM users ORDER BY created_at DESC LIMIT 100')->fetchAll();
+                    $branches = $this->pdo->query('SELECT branch_id, name FROM branches WHERE is_active = TRUE ORDER BY name ASC')->fetchAll();
+                    $created = isset($_GET['created']) ? true : false;
+                    $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
+                    $editUser = null;
+                    if (isset($_GET['edit'])) {
+                        $id = (int)$_GET['edit'];
+                        if ($id > 0) {
+                            $st = $this->pdo->prepare('SELECT user_id, username, first_name, last_name, email, role, is_active, branch_id FROM users WHERE user_id = :id');
+                            $st->execute(['id' => $id]);
+                            $editUser = $st->fetch();
+                        }
+                    }
+                    $this->render('dashboard/users.php', [ 'users' => $list, 'branches' => $branches, 'created' => $created, 'error' => $error, 'editUser' => $editUser ]);
+                    return;
+                } catch (\Throwable $mig) {
+                    // Fall back to minimal list using full_name only
+                }
+            }
             http_response_code(500);
             header('Content-Type: text/plain');
             echo 'Error loading users: ' . $e->getMessage();

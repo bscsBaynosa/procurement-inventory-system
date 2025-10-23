@@ -97,7 +97,20 @@ h1 {
 
 /* --- Landing page enhancements (kept here so other pages remain unaffected) --- */
 .navbar { font-family: 'Poppins', Arial, sans-serif; }
-.btn { transition: all .15s ease; }
+.btn { 
+    font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    line-height: 1;
+    height: 40px;
+    padding: 0 14px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .15s ease;
+}
 .btn:active { transform: translateY(1px); }
+.btn.full { width: 100%; }
 .modal-backdrop { animation: fadeIn .15s ease; }
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
