@@ -249,7 +249,35 @@ class AdminController extends BaseController
                 'by' => $by,
             ]);
             header('Location: /admin/users?created=1');
-        } catch (\Throwable $e) {
+        } catch (\PDOException $e) {
+            // If columns don't exist yet (older DB), add them on the fly then retry once
+            if ($e->getCode() === '42703') { // undefined_column
+                try {
+                    $this->pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name VARCHAR(120) NOT NULL DEFAULT ''");
+                    $this->pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_name VARCHAR(120) NOT NULL DEFAULT ''");
+                    // Retry insert
+                    $hash = password_hash($password, PASSWORD_BCRYPT);
+                    $stmt = $this->pdo->prepare('INSERT INTO users (username, password_hash, first_name, last_name, full_name, email, role, branch_id, is_active, created_by, updated_by) VALUES (:u, :p, :fn, :ln, :n, :e, :r, :b, TRUE, :by, :by)');
+                    $by = $_SESSION['user_id'] ?? null;
+                    $stmt->execute([
+                        'u' => $username,
+                        'p' => $hash,
+                        'fn' => $firstName,
+                        'ln' => $lastName,
+                        'n' => trim($firstName . ' ' . $lastName),
+                        'e' => $email !== '' ? $email : null,
+                        'r' => $role,
+                        'b' => $branchId,
+                        'by' => $by,
+                    ]);
+                    header('Location: /admin/users?created=1');
+                    return;
+                } catch (\Throwable $ee) {
+                    $msg = rawurlencode($ee->getMessage());
+                    header('Location: /admin/users?error=' . $msg);
+                    return;
+                }
+            }
             $msg = rawurlencode($e->getMessage());
             header('Location: /admin/users?error=' . $msg);
         }
