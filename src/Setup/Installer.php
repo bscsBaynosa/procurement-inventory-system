@@ -38,6 +38,43 @@ class Installer
         $this->pdo->exec($sql);
         $logs[] = 'Schema applied successfully';
 
+        // Ensure users table has first_name/last_name columns; migrate legacy full_name data
+        try {
+            $colCheck = $this->pdo->query("SELECT column_name FROM information_schema.columns WHERE table_name='users'")
+                ->fetchAll(PDO::FETCH_COLUMN);
+            $hasFirst = in_array('first_name', $colCheck, true);
+            $hasLast = in_array('last_name', $colCheck, true);
+            if (!$hasFirst) {
+                $this->pdo->exec("ALTER TABLE users ADD COLUMN first_name VARCHAR(120) NOT NULL DEFAULT ''");
+                $logs[] = 'Added users.first_name column';
+            }
+            if (!$hasLast) {
+                $this->pdo->exec("ALTER TABLE users ADD COLUMN last_name VARCHAR(120) NOT NULL DEFAULT ''");
+                $logs[] = 'Added users.last_name column';
+            }
+            // Backfill first_name/last_name from full_name when empty
+            $this->pdo->exec(<<<SQL
+                UPDATE users SET
+                    first_name = CASE
+                        WHEN first_name IS NULL OR first_name = '' THEN COALESCE(split_part(full_name, ' ', 1), full_name)
+                        ELSE first_name
+                    END,
+                    last_name = CASE
+                        WHEN last_name IS NULL OR last_name = '' THEN
+                            CASE
+                                WHEN strpos(full_name, ' ') > 0 THEN split_part(full_name, ' ', array_length(regexp_split_to_array(full_name, '\\s+'), 1))
+                                ELSE full_name
+                            END
+                        ELSE last_name
+                    END
+                WHERE (first_name IS NULL OR first_name = '') OR (last_name IS NULL OR last_name = '');
+            SQL);
+            // Ensure full_name stays consistent where possible
+            $this->pdo->exec("UPDATE users SET full_name = TRIM(CONCAT_WS(' ', first_name, last_name)) WHERE TRIM(full_name) = '' OR full_name IS NULL");
+        } catch (\Throwable $ignored) {
+            // Non-fatal during setup; columns may already exist in some environments
+        }
+
         // Seed POCC branches if missing
         $branches = [
             ['code' => 'QC',   'name' => 'QUEZON CITY'],
@@ -78,10 +115,12 @@ class Installer
 
         if ($stmt->fetchColumn() === false) {
             $hash = password_hash($password, PASSWORD_DEFAULT);
-            $ins = $this->pdo->prepare('INSERT INTO users (username, password_hash, full_name, email, role, branch_id, is_active) VALUES (:u, :p, :n, :e, :r, :b, TRUE)');
+            $ins = $this->pdo->prepare('INSERT INTO users (username, password_hash, first_name, last_name, full_name, email, role, branch_id, is_active) VALUES (:u, :p, :fn, :ln, :n, :e, :r, :b, TRUE)');
             $ins->execute([
                 'u' => $username,
                 'p' => $hash,
+                'fn' => 'System',
+                'ln' => 'Administrator',
                 'n' => 'System Administrator',
                 'e' => null,
                 'r' => 'admin',

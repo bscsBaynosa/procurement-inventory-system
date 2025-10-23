@@ -50,7 +50,7 @@
         <div class="grid">
             <div class="card">
                 <table>
-                    <thead><tr><th>Code</th><th>Name</th><th>Address</th><th>Status</th></tr></thead>
+                    <thead><tr><th>Code</th><th>Name</th><th>Address</th><th>Status</th><th>Actions</th></tr></thead>
                     <tbody>
                     <?php if (!empty($branches)): foreach ($branches as $b): ?>
                         <tr>
@@ -58,6 +58,15 @@
                             <td><?= htmlspecialchars((string)$b['name'], ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)($b['address'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= !empty($b['is_active']) ? 'Active' : 'Disabled' ?></td>
+                            <td>
+                                <div style="display:flex; gap:6px; flex-wrap:wrap">
+                                    <a class="btn" href="/admin/branches?edit=<?= (int)$b['branch_id'] ?>" style="background:#10b981">Edit</a>
+                                    <form method="POST" action="/admin/branches/delete" onsubmit="return confirm('Delete this branch?');">
+                                        <input type="hidden" name="branch_id" value="<?= (int)$b['branch_id'] ?>">
+                                        <button class="btn" type="submit" style="background:#ef4444">Delete</button>
+                                    </form>
+                                </div>
+                            </td>
                         </tr>
                     <?php endforeach; else: ?>
                         <tr><td colspan="4" style="color:#64748b">No branches found.</td></tr>
@@ -66,6 +75,37 @@
                 </table>
             </div>
             <div class="card">
+                <?php if (!empty($editBranch)): ?>
+                <h3 style="margin-top:0">Edit Branch</h3>
+                <form method="POST" action="/admin/branches/update">
+                    <input type="hidden" name="branch_id" value="<?= (int)$editBranch['branch_id'] ?>">
+                    <div class="row">
+                        <div>
+                            <label>Code</label>
+                            <input name="code" value="<?= htmlspecialchars((string)$editBranch['code'], ENT_QUOTES, 'UTF-8') ?>" required>
+                        </div>
+                        <div>
+                            <label>Name</label>
+                            <input name="name" value="<?= htmlspecialchars((string)$editBranch['name'], ENT_QUOTES, 'UTF-8') ?>" required>
+                        </div>
+                    </div>
+                    <div style="margin-top:10px">
+                        <label>Address</label>
+                        <input name="address" value="<?= htmlspecialchars((string)($editBranch['address'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                    </div>
+                    <div style="margin-top:10px">
+                        <label>Status</label>
+                        <select name="is_active">
+                            <option value="1" <?= !empty($editBranch['is_active'])?'selected':'' ?>>Active</option>
+                            <option value="0" <?= empty($editBranch['is_active'])?'selected':'' ?>>Disabled</option>
+                        </select>
+                    </div>
+                    <div style="margin-top:10px; display:flex; gap:8px">
+                        <button class="btn" type="submit">Save changes</button>
+                        <a class="btn" href="/admin/branches" style="background:#6b7280">Cancel</a>
+                    </div>
+                </form>
+                <?php else: ?>
                 <h3 style="margin-top:0">Add Branch</h3>
                 <form method="POST" action="/admin/branches">
                     <div class="row">
@@ -86,6 +126,7 @@
                         <button class="btn" type="submit">Create</button>
                     </div>
                 </form>
+                <?php endif; ?>
             </div>
         </div>
     </main>

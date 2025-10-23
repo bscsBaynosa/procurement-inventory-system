@@ -186,11 +186,20 @@ class AdminController extends BaseController
         if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
 
         try {
-            $list = $this->pdo->query('SELECT user_id, username, full_name, email, role, is_active, branch_id, created_at FROM users ORDER BY created_at DESC LIMIT 100')->fetchAll();
+            $list = $this->pdo->query('SELECT user_id, username, first_name, last_name, full_name, email, role, is_active, branch_id, created_at FROM users ORDER BY created_at DESC LIMIT 100')->fetchAll();
             $branches = $this->pdo->query('SELECT branch_id, name FROM branches WHERE is_active = TRUE ORDER BY name ASC')->fetchAll();
             $created = isset($_GET['created']) ? true : false;
             $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
-            $this->render('dashboard/users.php', [ 'users' => $list, 'branches' => $branches, 'created' => $created, 'error' => $error ]);
+            $editUser = null;
+            if (isset($_GET['edit'])) {
+                $id = (int)$_GET['edit'];
+                if ($id > 0) {
+                    $st = $this->pdo->prepare('SELECT user_id, username, first_name, last_name, email, role, is_active, branch_id FROM users WHERE user_id = :id');
+                    $st->execute(['id' => $id]);
+                    $editUser = $st->fetch();
+                }
+            }
+            $this->render('dashboard/users.php', [ 'users' => $list, 'branches' => $branches, 'created' => $created, 'error' => $error, 'editUser' => $editUser ]);
         } catch (\Throwable $e) {
             http_response_code(500);
             header('Content-Type: text/plain');
@@ -207,13 +216,14 @@ class AdminController extends BaseController
         if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
 
         $username = trim((string)($_POST['username'] ?? ''));
-        $fullName = trim((string)($_POST['full_name'] ?? ''));
+        $firstName = trim((string)($_POST['first_name'] ?? ''));
+        $lastName = trim((string)($_POST['last_name'] ?? ''));
         $email = trim((string)($_POST['email'] ?? ''));
         $role = (string)($_POST['role'] ?? '');
         $branchId = isset($_POST['branch_id']) && $_POST['branch_id'] !== '' ? (int)$_POST['branch_id'] : null;
         $password = (string)($_POST['password'] ?? '');
 
-        if ($username === '' || $fullName === '' || $role === '' || $password === '') {
+        if ($username === '' || $firstName === '' || $lastName === '' || $role === '' || $password === '') {
             header('Location: /admin/users?error=Missing+required+fields');
             return;
         }
@@ -225,12 +235,14 @@ class AdminController extends BaseController
 
         try {
             $hash = password_hash($password, PASSWORD_BCRYPT);
-            $stmt = $this->pdo->prepare('INSERT INTO users (username, password_hash, full_name, email, role, branch_id, is_active, created_by, updated_by) VALUES (:u, :p, :n, :e, :r, :b, TRUE, :by, :by)');
+            $stmt = $this->pdo->prepare('INSERT INTO users (username, password_hash, first_name, last_name, full_name, email, role, branch_id, is_active, created_by, updated_by) VALUES (:u, :p, :fn, :ln, :n, :e, :r, :b, TRUE, :by, :by)');
             $by = $_SESSION['user_id'] ?? null;
             $stmt->execute([
                 'u' => $username,
                 'p' => $hash,
-                'n' => $fullName,
+                'fn' => $firstName,
+                'ln' => $lastName,
+                'n' => trim($firstName . ' ' . $lastName),
                 'e' => $email !== '' ? $email : null,
                 'r' => $role,
                 'b' => $branchId,
@@ -243,11 +255,93 @@ class AdminController extends BaseController
         }
     }
 
+    /** Update an existing user (admin). */
+    public function updateUser(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (( $_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+
+        $id = isset($_POST['user_id']) ? (int)$_POST['user_id'] : 0;
+        $firstName = trim((string)($_POST['first_name'] ?? ''));
+        $lastName = trim((string)($_POST['last_name'] ?? ''));
+        $email = trim((string)($_POST['email'] ?? ''));
+        $role = (string)($_POST['role'] ?? '');
+        $branchId = isset($_POST['branch_id']) && $_POST['branch_id'] !== '' ? (int)$_POST['branch_id'] : null;
+        $active = isset($_POST['is_active']) ? (bool)$_POST['is_active'] : true;
+        if ($id <= 0 || $firstName === '' || $lastName === '' || $role === '') { header('Location: /admin/users?error=Invalid+data'); return; }
+        try {
+            $stmt = $this->pdo->prepare('UPDATE users SET first_name = :fn, last_name = :ln, full_name = :n, email = :e, role = :r, branch_id = :b, is_active = :a, updated_by = :by WHERE user_id = :id');
+            $stmt->execute([
+                'fn' => $firstName,
+                'ln' => $lastName,
+                'n' => trim($firstName . ' ' . $lastName),
+                'e' => $email !== '' ? $email : null,
+                'r' => $role,
+                'b' => $branchId,
+                'a' => $active ? 1 : 0,
+                'by' => $_SESSION['user_id'] ?? null,
+                'id' => $id,
+            ]);
+            header('Location: /admin/users');
+        } catch (\Throwable $e) {
+            $msg = rawurlencode($e->getMessage());
+            header('Location: /admin/users?error=' . $msg);
+        }
+    }
+
+    /** Delete a user (hard delete). */
+    public function deleteUser(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (( $_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+        $id = isset($_POST['user_id']) ? (int)$_POST['user_id'] : 0;
+        if ($id <= 0) { header('Location: /admin/users?error=Invalid+user'); return; }
+        try {
+            $stmt = $this->pdo->prepare('DELETE FROM users WHERE user_id = :id');
+            $stmt->execute(['id' => $id]);
+            header('Location: /admin/users');
+        } catch (\Throwable $e) {
+            $msg = rawurlencode($e->getMessage());
+            header('Location: /admin/users?error=' . $msg);
+        }
+    }
+
+    /** Reset a user's password to their last name (surname). */
+    public function resetUserPassword(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (( $_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+        $id = isset($_POST['user_id']) ? (int)$_POST['user_id'] : 0;
+        if ($id <= 0) { header('Location: /admin/users?error=Invalid+user'); return; }
+        try {
+            $st = $this->pdo->prepare('SELECT last_name FROM users WHERE user_id = :id');
+            $st->execute(['id' => $id]);
+            $surname = trim((string)$st->fetchColumn());
+            if ($surname === '') { header('Location: /admin/users?error=No+surname+on+record'); return; }
+            $hash = password_hash($surname, PASSWORD_BCRYPT);
+            $up = $this->pdo->prepare('UPDATE users SET password_hash = :p, password_changed_at = NOW() WHERE user_id = :id');
+            $up->execute(['p' => $hash, 'id' => $id]);
+            header('Location: /admin/users?created=1');
+        } catch (\Throwable $e) {
+            $msg = rawurlencode($e->getMessage());
+            header('Location: /admin/users?error=' . $msg);
+        }
+    }
+
     public function branches(): void
     {
         try {
             $list = $this->pdo->query('SELECT branch_id, code, name, address, is_active, created_at FROM branches ORDER BY name ASC')->fetchAll();
-            $this->render('dashboard/branches.php', ['branches' => $list]);
+            $editBranch = null;
+            if (isset($_GET['edit'])) {
+                $id = (int)$_GET['edit'];
+                if ($id > 0) {
+                    $st = $this->pdo->prepare('SELECT branch_id, code, name, address, is_active FROM branches WHERE branch_id = :id');
+                    $st->execute(['id' => $id]);
+                    $editBranch = $st->fetch();
+                }
+            }
+            $this->render('dashboard/branches.php', ['branches' => $list, 'editBranch' => $editBranch]);
         } catch (\Throwable $e) {
             http_response_code(500);
             header('Content-Type: text/plain');
@@ -264,6 +358,38 @@ class AdminController extends BaseController
         try {
             $stmt = $this->pdo->prepare('INSERT INTO branches (code, name, address, is_active) VALUES (:c,:n,:a, TRUE)');
             $stmt->execute(['c' => $code, 'n' => $name, 'a' => $address !== '' ? $address : null]);
+            header('Location: /admin/branches');
+        } catch (\Throwable $e) {
+            $msg = rawurlencode($e->getMessage());
+            header('Location: /admin/branches?error=' . $msg);
+        }
+    }
+
+    public function updateBranch(): void
+    {
+        $id = isset($_POST['branch_id']) ? (int)$_POST['branch_id'] : 0;
+        $code = trim((string)($_POST['code'] ?? ''));
+        $name = trim((string)($_POST['name'] ?? ''));
+        $address = trim((string)($_POST['address'] ?? ''));
+        $active = isset($_POST['is_active']) ? (bool)$_POST['is_active'] : true;
+        if ($id <= 0 || $code === '' || $name === '') { header('Location: /admin/branches?error=Invalid+data'); return; }
+        try {
+            $stmt = $this->pdo->prepare('UPDATE branches SET code=:c, name=:n, address=:a, is_active=:s WHERE branch_id=:id');
+            $stmt->execute(['c' => $code, 'n' => $name, 'a' => $address !== '' ? $address : null, 's' => $active ? 1 : 0, 'id' => $id]);
+            header('Location: /admin/branches');
+        } catch (\Throwable $e) {
+            $msg = rawurlencode($e->getMessage());
+            header('Location: /admin/branches?error=' . $msg);
+        }
+    }
+
+    public function deleteBranch(): void
+    {
+        $id = isset($_POST['branch_id']) ? (int)$_POST['branch_id'] : 0;
+        if ($id <= 0) { header('Location: /admin/branches?error=Invalid+branch'); return; }
+        try {
+            $stmt = $this->pdo->prepare('DELETE FROM branches WHERE branch_id = :id');
+            $stmt->execute(['id' => $id]);
             header('Location: /admin/branches');
         } catch (\Throwable $e) {
             $msg = rawurlencode($e->getMessage());
@@ -348,13 +474,19 @@ class AdminController extends BaseController
         $pwd = (string)($_POST['password'] ?? '');
         if ($name === '') { header('Location: /settings'); return; }
         try {
+            // Split full_name into first/last for consistency
+            $parts = preg_split('/\s+/', $name);
+            $first = $parts ? (string)array_shift($parts) : '';
+            $last = $parts ? (string)array_pop($parts) : '';
+            if ($first === '' && $name !== '') { $first = $name; }
+            if ($last === '' && $first !== '' && $name !== $first) { $last = trim(str_replace($first, '', $name)); }
             if ($pwd !== '') {
                 $hash = password_hash($pwd, PASSWORD_BCRYPT);
-                $stmt = $this->pdo->prepare('UPDATE users SET full_name = :n, email = :e, password_hash = :p WHERE user_id = :id');
-                $stmt->execute(['n' => $name, 'e' => $email !== '' ? $email : null, 'p' => $hash, 'id' => $me]);
+                $stmt = $this->pdo->prepare('UPDATE users SET first_name = :fn, last_name = :ln, full_name = :n, email = :e, password_hash = :p WHERE user_id = :id');
+                $stmt->execute(['fn' => $first, 'ln' => $last, 'n' => $name, 'e' => $email !== '' ? $email : null, 'p' => $hash, 'id' => $me]);
             } else {
-                $stmt = $this->pdo->prepare('UPDATE users SET full_name = :n, email = :e WHERE user_id = :id');
-                $stmt->execute(['n' => $name, 'e' => $email !== '' ? $email : null, 'id' => $me]);
+                $stmt = $this->pdo->prepare('UPDATE users SET first_name = :fn, last_name = :ln, full_name = :n, email = :e WHERE user_id = :id');
+                $stmt->execute(['fn' => $first, 'ln' => $last, 'n' => $name, 'e' => $email !== '' ? $email : null, 'id' => $me]);
             }
             header('Location: /settings?saved=1');
         } catch (\Throwable $e) {

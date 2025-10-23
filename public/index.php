@@ -128,6 +128,21 @@ if ($method === 'POST' && $path === '/admin/users') {
 	$admin->createUser();
 	exit;
 }
+if ($method === 'POST' && $path === '/admin/users/update') {
+	if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); exit; }
+	$admin->updateUser();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/users/delete') {
+	if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); exit; }
+	$admin->deleteUser();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/users/reset-password') {
+	if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); exit; }
+	$admin->resetUserPassword();
+	exit;
+}
 
 // Admin: Branches management
 if ($method === 'GET' && $path === '/admin/branches') {
@@ -138,6 +153,16 @@ if ($method === 'GET' && $path === '/admin/branches') {
 if ($method === 'POST' && $path === '/admin/branches') {
 	if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); exit; }
 	$admin->createBranch();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/branches/update') {
+	if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); exit; }
+	$admin->updateBranch();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/branches/delete') {
+	if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); exit; }
+	$admin->deleteBranch();
 	exit;
 }
 

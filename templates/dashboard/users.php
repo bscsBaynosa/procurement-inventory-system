@@ -74,6 +74,7 @@
                             <th>Email</th>
                             <th>Branch</th>
                             <th>Status</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -86,6 +87,19 @@
                             <td><?= htmlspecialchars((string)($u['email'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)($u['branch_id'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= !empty($u['is_active']) ? 'Active' : 'Disabled' ?></td>
+                            <td>
+                                <div style="display:flex; gap:6px; flex-wrap:wrap">
+                                    <a class="btn" href="/admin/users?edit=<?= (int)$u['user_id'] ?>" style="background:#10b981">Edit</a>
+                                    <form method="POST" action="/admin/users/reset-password" onsubmit="return confirm('Reset password to surname for this user?');">
+                                        <input type="hidden" name="user_id" value="<?= (int)$u['user_id'] ?>">
+                                        <button class="btn" type="submit" style="background:#3b82f6">Reset</button>
+                                    </form>
+                                    <form method="POST" action="/admin/users/delete" onsubmit="return confirm('Delete this user? This cannot be undone.');">
+                                        <input type="hidden" name="user_id" value="<?= (int)$u['user_id'] ?>">
+                                        <button class="btn" type="submit" style="background:#ef4444">Delete</button>
+                                    </form>
+                                </div>
+                            </td>
                         </tr>
                     <?php endforeach; else: ?>
                         <tr><td colspan="7" class="muted">No users yet.</td></tr>
@@ -94,6 +108,63 @@
                 </table>
             </div>
             <div class="card">
+                <?php if (!empty($editUser)): ?>
+                <h3 style="margin-top:0">Edit User</h3>
+                <form method="POST" action="/admin/users/update">
+                    <input type="hidden" name="user_id" value="<?= (int)$editUser['user_id'] ?>">
+                    <div class="row mb8">
+                        <div>
+                            <label>First name</label>
+                            <input name="first_name" value="<?= htmlspecialchars((string)$editUser['first_name'], ENT_QUOTES, 'UTF-8') ?>" required>
+                        </div>
+                        <div>
+                            <label>Last name</label>
+                            <input name="last_name" value="<?= htmlspecialchars((string)$editUser['last_name'], ENT_QUOTES, 'UTF-8') ?>" required>
+                        </div>
+                    </div>
+                    <div class="row mb8">
+                        <div>
+                            <label>Email</label>
+                            <input name="email" type="email" value="<?= htmlspecialchars((string)($editUser['email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
+                        </div>
+                        <div>
+                            <label>Username</label>
+                            <input value="<?= htmlspecialchars((string)$editUser['username'], ENT_QUOTES, 'UTF-8') ?>" disabled>
+                        </div>
+                    </div>
+                    <div class="row3 mb8">
+                        <div>
+                            <label>Role</label>
+                            <select name="role" required>
+                                <?php $roles=['custodian','procurement_manager','admin']; foreach ($roles as $r): ?>
+                                    <option value="<?= $r ?>" <?= ($editUser['role']===$r?'selected':'') ?>><?= ucwords(str_replace('_',' ', $r)) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Branch</label>
+                            <select name="branch_id">
+                                <option value="">— None —</option>
+                                <?php foreach ($branches as $b): ?>
+                                    <option value="<?= (int)$b['branch_id'] ?>" <?= ((int)$editUser['branch_id']===(int)$b['branch_id']?'selected':'') ?>><?= htmlspecialchars($b['name'], ENT_QUOTES, 'UTF-8') ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Status</label>
+                            <select name="is_active">
+                                <option value="1" <?= !empty($editUser['is_active'])?'selected':'' ?>>Active</option>
+                                <option value="0" <?= empty($editUser['is_active'])?'selected':'' ?>>Disabled</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <button class="btn" type="submit">Save changes</button>
+                        <a class="btn" href="/admin/users" style="background:#6b7280">Cancel</a>
+                    </div>
+                </form>
+                <p class="muted">Use the "Reset" action in the list to set the user's password to their surname.</p>
+                <?php else: ?>
                 <h3 style="margin-top:0">Create User</h3>
                 <form method="POST" action="/admin/users">
                     <div class="row mb8">
@@ -102,21 +173,25 @@
                             <input name="username" required>
                         </div>
                         <div>
-                            <label>Full name</label>
-                            <input name="full_name" required>
+                            <label>First name</label>
+                            <input name="first_name" required>
                         </div>
                     </div>
                     <div class="row mb8">
                         <div>
+                            <label>Last name</label>
+                            <input name="last_name" required>
+                        </div>
+                        <div>
                             <label>Email</label>
                             <input name="email" type="email">
                         </div>
+                    </div>
+                    <div class="row mb8">
                         <div>
                             <label>Password</label>
                             <input name="password" type="password" required>
                         </div>
-                    </div>
-                    <div class="row3 mb8">
                         <div>
                             <label>Role</label>
                             <select name="role" required>
@@ -125,6 +200,8 @@
                                 <option value="admin">Admin</option>
                             </select>
                         </div>
+                    </div>
+                    <div class="row3 mb8">
                         <div>
                             <label>Branch</label>
                             <select name="branch_id">
@@ -138,9 +215,11 @@
                             <label>&nbsp;</label>
                             <button class="btn" type="submit" style="width:100%">Create</button>
                         </div>
+                        <div></div>
                     </div>
                 </form>
-                <p class="muted">New users are created active. You can assign branches later by editing directly in the database if needed.</p>
+                <p class="muted">New users are created active. Password can be reset anytime to the user's surname from the list.</p>
+                <?php endif; ?>
             </div>
         </div>
     </main>

@@ -91,6 +91,10 @@ CREATE TABLE IF NOT EXISTS users (
     user_id BIGINT PRIMARY KEY DEFAULT generate_user_id(),
     username VARCHAR(64) NOT NULL UNIQUE,
     password_hash TEXT NOT NULL,
+    -- New normalized name fields (split from legacy full_name)
+    first_name VARCHAR(120) NOT NULL,
+    last_name VARCHAR(120) NOT NULL,
+    -- Keep full_name for compatibility with existing templates and joins
     full_name VARCHAR(255) NOT NULL,
     email VARCHAR(255),
     role user_role NOT NULL,
