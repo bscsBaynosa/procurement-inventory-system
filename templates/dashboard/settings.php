@@ -27,7 +27,7 @@
         .btn{ background:var(--accent); color:#fff; border:0; padding:10px 12px; border-radius:10px; font-weight:700; text-decoration:none; display:inline-block; }
         .row{ display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
         .toggle{ display:inline-flex; align-items:center; gap:8px; color:#64748b; }
-        @media (max-width: 800px){ .layout{ grid-template-columns:1fr; } .sidebar{ position:relative; height:auto; } .row{ grid-template-columns: 1fr; } }
+    @media (max-width: 1024px){ .layout{ grid-template-columns:1fr; } .sidebar{ position:relative; height:auto; } .row{ grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>

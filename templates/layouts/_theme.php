@@ -13,6 +13,13 @@
 /* Ensure theme variables are respected even without a toggle present */
 :root{ --bg:#f8fafc; --card:#ffffff; --text:#0f172a; --muted:#64748b; --border:#e2e8f0; --accent:#22c55e; }
 html[data-theme="dark"]{ --bg:#0b0b0b; --card:#0f172a; --text:#e2e8f0; --muted:#94a3b8; --border:#1f2937; --accent:#22c55e; }
+
+/* Global layout fixes to avoid overlapping fields */
+*, *::before, *::after { box-sizing: border-box; }
+input, select, textarea { width: 100%; max-width: 100%; min-width: 0; display: block; }
+.card form { display: grid; gap: 12px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+@media (max-width: 1100px){ .form-row { grid-template-columns: 1fr; } }
 </style>
 <script>
 // Apply saved theme on load across all modules

@@ -20,12 +20,12 @@
         .nav a:hover{ background:var(--bg); }
         .nav a.active{ background: color-mix(in oklab, var(--accent) 10%, transparent); border:1px solid color-mix(in oklab, var(--accent) 35%, var(--border)); }
         .content{ padding:18px 20px; }
-    .grid{ display:grid; grid-template-columns: 340px 1fr; gap:12px; }
+    .grid{ display:grid; grid-template-columns: 380px 1fr; gap:12px; }
         .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; }
         table{ width:100%; border-collapse: collapse; }
         th, td{ padding:10px 12px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
         th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
-        textarea, input, select{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:#fff; color:#111; font:inherit; }
+    textarea, input, select{ width:100%; max-width:100%; min-width:0; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:#fff; color:#111; font:inherit; }
     .btn{ background:var(--accent); color:#fff; border:0; padding:10px 12px; border-radius:10px; font-weight:700; text-decoration:none; display:inline-block; }
     .nav a{ display:flex; align-items:center; gap:10px; padding:10px 12px; color:var(--text); text-decoration:none; border-radius:10px; }
     .nav a:hover{ background:var(--bg); }

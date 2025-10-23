@@ -23,7 +23,7 @@
     .nav svg{ width:18px; height:18px; fill: var(--accent); }
         .content{ padding:18px 20px; }
         .h1{ font-weight:800; font-size:22px; margin: 6px 0 12px; }
-    .grid{ display:grid; grid-template-columns: 1fr minmax(340px, 420px); gap:12px; }
+    .grid{ display:grid; grid-template-columns: 1fr minmax(380px, 520px); gap:12px; }
         .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; }
         table{ width:100%; border-collapse: collapse; }
         th, td{ padding:10px 12px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
@@ -35,7 +35,8 @@
         html[data-theme="dark"] input, html[data-theme="dark"] select{ background:#0b0b0b; color:#e5e7eb; }
         .btn{ background:var(--accent); color:#fff; border:0; padding:10px 12px; border-radius:10px; font-weight:700; text-decoration:none; display:inline-block; }
     .row{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
-    .row3{ display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px; }
+    .row3{ display:grid; grid-template-columns: 1fr 1fr auto; gap:10px; align-items:end; }
+    @media (max-width: 1300px){ .row3{ grid-template-columns: 1fr 1fr; } }
     @media (max-width: 1100px){ .grid{ grid-template-columns: 1fr; } .row, .row3{ grid-template-columns: 1fr; } }
     @media (max-width: 900px){ .layout{ grid-template-columns: 1fr; } }
         .mb8{ margin-bottom:8px; }
