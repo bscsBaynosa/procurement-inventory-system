@@ -77,9 +77,18 @@ class AdminController extends BaseController
                  LIMIT 6'
             )->fetchAll();
 
+            // Top inventory items for the table (limit 10)
+            $items = $this->pdo->query(
+                'SELECT item_id, name, category, status, quantity, unit, branch_id
+                 FROM inventory_items
+                 ORDER BY name ASC
+                 LIMIT 10'
+            )->fetchAll();
+
             $this->render('dashboard/admin.php', [
                 'counts' => $counts,
                 'recent' => $recent,
+                'items' => $items,
             ]);
         } catch (\Throwable $e) {
             // Friendly guidance if DB not initialized or migrations not run
