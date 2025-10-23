@@ -8,21 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/main.css">
-    <?php
-        // Consistent favicon across pages
-        $root = realpath(__DIR__ . '/../../');
-        foreach ([
-            $root . DIRECTORY_SEPARATOR . 'logo.png',
-            $root . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'logo.png',
-            $root . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'logo.png',
-        ] as $cand) {
-            if (is_file($cand)) { $data = @file_get_contents($cand); if ($data!==false){
-                echo '<link rel="icon" type="image/png" href="data:image/png;base64,' . base64_encode($data) . '">';
-                echo '<link rel="apple-touch-icon" href="data:image/png;base64,' . base64_encode($data) . '">';
-                break;
-            }}
-        }
-    ?>
+    <?php require __DIR__ . '/../layouts/_favicon.php'; ?>
     <style>
         :root{ --bg:#f8fafc; --card:#ffffff; --text:#0f172a; --muted:#64748b; --border:#e2e8f0; --accent:#22c55e; }
         html[data-theme="dark"]{ --bg:#0b0b0b; --card:#0f172a; --text:#e2e8f0; --muted:#94a3b8; --border:#1f2937; --accent:#22c55e; }

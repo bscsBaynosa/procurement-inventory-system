@@ -1,20 +1,4 @@
-<?php
-    // Favicon: use repo root logo.png when available, else fall back to public
-    $root = realpath(__DIR__ . '/../../');
-    $publicDir = $root . DIRECTORY_SEPARATOR . 'public';
-    $iconCandidates = [
-        $root . DIRECTORY_SEPARATOR . 'logo.png',
-        $publicDir . DIRECTORY_SEPARATOR . 'logo.png',
-        $publicDir . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'logo.png',
-    ];
-    $faviconHref = null;
-    foreach ($iconCandidates as $cand) {
-        if (is_file($cand)) {
-            $data = @file_get_contents($cand);
-            if ($data !== false) { $faviconHref = 'data:image/png;base64,' . base64_encode($data); break; }
-        }
-    }
-?>
+<?php /* Favicon include centralized */ ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -25,10 +9,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/main.css" />
-    <?php if (!empty($faviconHref)): ?>
-        <link rel="icon" type="image/png" href="<?= htmlspecialchars($faviconHref, ENT_QUOTES) ?>">
-        <link rel="apple-touch-icon" href="<?= htmlspecialchars($faviconHref, ENT_QUOTES) ?>">
-    <?php endif; ?>
+    <?php require __DIR__ . '/../layouts/_favicon.php'; ?>
     <style>
         /* Theme variables */
         :root {
@@ -111,7 +92,7 @@
     <section class="hero">
         <div class="hero-inner">
             <div class="left-col">
-                <h1 class="headline">Procurement and Inventory System</h1>
+                <h1 class="headline">Procurement and Inventory Management System</h1>
                 <p class="subhead">
                     Simplify your workflow with an all‑in‑one system that automates purchase requests,
                     tracks inventory in real time, and reduces manual errors. Faster approvals and
