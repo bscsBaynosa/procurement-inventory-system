@@ -127,3 +127,28 @@ input, select, textarea, button {
     fill: var(--accent, #22c55e);
     flex: 0 0 18px;
 }
+
+/* Global sidebar + nav styling to keep modules consistent */
+.sidebar {
+    background: #ffffff;
+    border-right: 1px solid var(--border, #e2e8f0);
+    padding: 18px 12px;
+}
+html[data-theme="dark"] .sidebar { background: #0f172a; }
+.brand { display:flex; align-items:center; gap:10px; font-weight:800; padding:6px 10px; }
+.nav { margin-top: 14px; display:flex; flex-direction:column; gap:6px; }
+.nav a {
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:10px 12px;
+    color: var(--text, #0f172a);
+    text-decoration:none;
+    border-radius:10px;
+}
+.nav a:hover { background: var(--bg, #f8fafc); }
+.nav a.active {
+    background: color-mix(in oklab, var(--accent, #22c55e) 10%, transparent);
+    color: var(--text, #0f172a);
+    border: 1px solid color-mix(in oklab, var(--accent, #22c55e) 35%, var(--border, #e2e8f0));
+}
