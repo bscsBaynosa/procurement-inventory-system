@@ -52,18 +52,14 @@
 <body>
 <div class="layout">
     <aside class="sidebar">
-        <div class="brand">🏥 POCC</div>
+        <div class="brand">🟢 POCC</div>
         <nav class="nav">
-            <a href="/dashboard" class="active"><span class="icon">📦</span> Inventory</a>
-            <a href="#"><span class="icon">🏠</span> Dashboard</a>
-            <a href="#"><span class="icon">🧾</span> Listings</a>
-            <a href="#"><span class="icon">🧺</span> Orders</a>
-            <a href="#"><span class="icon">💳</span> Payments</a>
-            <a href="#"><span class="icon">🚚</span> Shipments</a>
-            <a href="#"><span class="icon">🛒</span> Sales Channels</a>
-            <a href="#"><span class="icon">📈</span> Reports</a>
-            <a href="#"><span class="icon">🔔</span> Notifications</a>
-            <a href="/logout"><span class="icon">↩️</span> Logout</a>
+            <a href="/dashboard" class="active">� Dashboard</a>
+            <a href="/admin/users">🟢 Users</a>
+            <a href="/admin/branches">� Branches</a>
+            <a href="/admin/messages">� Messages</a>
+            <a href="/settings">� Settings</a>
+            <a href="/logout">🟢 Logout</a>
         </nav>
     </aside>
     <main class="content">
@@ -75,51 +71,36 @@
             </div>
         </div>
 
-        <div class="h1">Inventory</div>
+        <div class="h1">Overview</div>
         <div class="cards">
-            <div class="card"><div>🛍️</div><div class="muted">Create a new item</div><a class="btn" href="#" onclick="alert('Coming soon');return false;">New Item</a></div>
-            <div class="card"><div>🛒🛒</div><div class="muted">Group items together</div><a class="btn" href="#" onclick="alert('Coming soon');return false;">New Item Groups</a></div>
-            <div class="card"><div>🧩</div><div class="muted">Build composite items</div><a class="btn" href="#" onclick="alert('Coming soon');return false;">New Composite Items</a></div>
-            <div class="card"><div>🔳</div><div class="muted">Generate barcodes</div><a class="btn" href="#" onclick="alert('Coming soon');return false;">Barcodes</a></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Users</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['users_total'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Active</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['users_active'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Managers</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['managers'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Custodians</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['custodians'] ?? 0) ?></div></div>
         </div>
 
-        <div class="tabs">
-            <a class="tab active" href="#">Items</a>
-            <a class="tab" href="#" onclick="alert('Coming soon');return false;">Item Groups (Variants)</a>
-            <a class="tab" href="#" onclick="alert('Coming soon');return false;">Price List</a>
+        <div class="cards" style="margin-top:12px; grid-template-columns: repeat(3, 1fr);">
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Branches</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['branches'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Pending Requests</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['requests']['pending'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Inventory Items</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['inventory']['total'] ?? 0) ?></div></div>
         </div>
 
-        <div class="table-wrap">
+        <div class="card" style="margin-top:12px;">
+            <div style="font-weight:700;margin-bottom:6px">Recent requests</div>
             <table>
-                <thead>
-                    <tr>
-                        <th style="width:90px;">ID</th>
-                        <th>Product Name</th>
-                        <th style="width:100px;">Total QTY</th>
-                        <th style="width:120px;">Buy Price</th>
-                        <th style="width:120px;">Sell Price</th>
-                        <th style="width:120px;">Location</th>
-                        <th style="width:110px;">Action</th>
-                    </tr>
-                </thead>
+                <thead><tr><th>ID</th><th>Item</th><th>Branch</th><th>Status</th><th>Created</th></tr></thead>
                 <tbody>
-                    <?php if (!empty($items)): foreach ($items as $it): ?>
-                        <tr>
-                            <td><?= htmlspecialchars(str_pad((string)$it['item_id'], 6, '0', STR_PAD_LEFT), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= htmlspecialchars($it['name'] ?? '—', ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= htmlspecialchars((string)($it['quantity'] ?? 0), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td class="muted">—</td>
-                            <td class="muted">—</td>
-                            <td><?= htmlspecialchars((string)($it['branch_id'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td class="actions">
-                                <a href="#" title="View" onclick="alert('Coming soon');return false;">👁️</a>
-                                <a href="#" title="Edit" onclick="alert('Coming soon');return false;">✏️</a>
-                                <a href="#" title="More" onclick="alert('Coming soon');return false;">⋯</a>
-                            </td>
-                        </tr>
-                    <?php endforeach; else: ?>
-                        <tr><td colspan="7" class="muted">No items yet.</td></tr>
-                    <?php endif; ?>
+                <?php if (!empty($recent)): foreach ($recent as $r): ?>
+                    <tr>
+                        <td><?= (int)$r['request_id'] ?></td>
+                        <td><?= htmlspecialchars((string)($r['item_name'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><?= htmlspecialchars((string)($r['branch_name'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><?= htmlspecialchars((string)($r['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><?= htmlspecialchars((string)($r['created_at'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                    </tr>
+                <?php endforeach; else: ?>
+                    <tr><td colspan="5" class="muted">No recent requests.</td></tr>
+                <?php endif; ?>
                 </tbody>
             </table>
         </div>

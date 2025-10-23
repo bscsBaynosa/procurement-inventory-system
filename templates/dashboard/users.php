@@ -42,11 +42,14 @@
 <body>
 <div class="layout">
     <aside class="sidebar">
-        <div class="brand">🏥 POCC</div>
+        <div class="brand">🟢 POCC</div>
         <nav class="nav">
-            <a href="/dashboard"><span>📊</span> Dashboard</a>
-            <a href="/admin/users" class="active"><span>👥</span> Users</a>
-            <a href="/logout"><span>↩️</span> Logout</a>
+            <a href="/dashboard">� Dashboard</a>
+            <a href="/admin/users" class="active">🟢 Users</a>
+            <a href="/admin/branches">� Branches</a>
+            <a href="/admin/messages">🟢 Messages</a>
+            <a href="/settings">🟢 Settings</a>
+            <a href="/logout">🟢 Logout</a>
         </nav>
     </aside>
     <main class="content">

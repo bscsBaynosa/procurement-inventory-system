@@ -129,6 +129,42 @@ if ($method === 'POST' && $path === '/admin/users') {
 	exit;
 }
 
+// Admin: Branches management
+if ($method === 'GET' && $path === '/admin/branches') {
+	if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); exit; }
+	$admin->branches();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/branches') {
+	if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); exit; }
+	$admin->createBranch();
+	exit;
+}
+
+// Admin: Messages
+if ($method === 'GET' && $path === '/admin/messages') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$admin->messages();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/messages') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$admin->sendMessage();
+	exit;
+}
+
+// Settings (profile)
+if ($method === 'GET' && $path === '/settings') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$admin->settings();
+	exit;
+}
+if ($method === 'POST' && $path === '/settings') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$admin->saveSettings();
+	exit;
+}
+
 // One-time setup route (guarded). Enable by setting SETUP_TOKEN env var.
 if ($method === 'GET' && $path === '/setup') {
 	// Emergency bootstrap switch: /setup?force=1 will run installer unconditionally.

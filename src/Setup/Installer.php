@@ -38,17 +38,36 @@ class Installer
         $this->pdo->exec($sql);
         $logs[] = 'Schema applied successfully';
 
-        // Seed branch if none
-        $hasBranch = $this->pdo->query('SELECT 1 FROM branches LIMIT 1');
-        $branchId = null;
-        if ($hasBranch === false || $hasBranch->fetchColumn() === false) {
-            $stmt = $this->pdo->prepare('INSERT INTO branches (code, name, address, is_active) VALUES (:code, :name, :address, TRUE) RETURNING branch_id');
-            $stmt->execute(['code' => 'HQ', 'name' => 'Head Office', 'address' => 'N/A']);
-            $branchId = (int)$stmt->fetchColumn();
-            $logs[] = 'Seeded default branch (HQ)';
-        } else {
-            $branchId = (int)$this->pdo->query('SELECT branch_id FROM branches ORDER BY branch_id ASC LIMIT 1')->fetchColumn();
+        // Seed POCC branches if missing
+        $branches = [
+            ['code' => 'QC',   'name' => 'QUEZON CITY'],
+            ['code' => 'MNL',  'name' => 'MANILA'],
+            ['code' => 'STB',  'name' => 'STO. TOMAS BATANGAS'],
+            ['code' => 'SFLU', 'name' => 'SAN FERNANDO CITY LA UNION'],
+            ['code' => 'DASC', 'name' => 'DASMARINAS CAVITE'],
+        ];
+        foreach ($branches as $b) {
+            $exists = $this->pdo->prepare('SELECT 1 FROM branches WHERE code = :c OR name = :n LIMIT 1');
+            $exists->execute(['c' => $b['code'], 'n' => $b['name']]);
+            if ($exists->fetchColumn() === false) {
+                $ins = $this->pdo->prepare('INSERT INTO branches (code, name, is_active) VALUES (:c,:n, TRUE)');
+                $ins->execute(['c' => $b['code'], 'n' => $b['name']]);
+                $logs[] = 'Seeded branch ' . $b['name'];
+            }
         }
+        $branchId = (int)$this->pdo->query('SELECT branch_id FROM branches ORDER BY branch_id ASC LIMIT 1')->fetchColumn();
+
+        // Create messages table (idempotent)
+        $this->pdo->exec('CREATE TABLE IF NOT EXISTS messages (
+            id BIGSERIAL PRIMARY KEY,
+            sender_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+            recipient_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+            subject VARCHAR(255) NOT NULL,
+            body TEXT NOT NULL,
+            is_read BOOLEAN NOT NULL DEFAULT FALSE,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )');
+        $logs[] = 'Messaging table ensured';
 
         // Seed admin user if missing
         $username = getenv('SEED_ADMIN_USERNAME') ?: 'admin';

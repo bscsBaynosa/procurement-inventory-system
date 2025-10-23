@@ -41,12 +41,15 @@ class AdminController extends BaseController
                 'users_total' => 0,
                 'users_active' => 0,
                 'branches' => 0,
+                'managers' => 0,
+                'custodians' => 0,
                 'requests' => [
                     'pending' => 0,
                     'approved' => 0,
                     'rejected' => 0,
                     'in_review' => 0,
                 ],
+                // Keep only overall inventory stats; no per-branch inventory table on dashboard
                 'inventory' => $this->inventory()->getStatsByBranch(null),
             ];
 
@@ -58,7 +61,14 @@ class AdminController extends BaseController
             // Branches
             $stmt = $this->pdo->query('SELECT COUNT(*) FROM branches');
             $counts['branches'] = (int)$stmt->fetchColumn();
-            // Requests by status
+            // Role counts
+            $stmt = $this->pdo->query("SELECT role, COUNT(*) AS c FROM users GROUP BY role");
+            foreach ($stmt->fetchAll() as $row) {
+                if ($row['role'] === 'procurement_manager') { $counts['managers'] = (int)$row['c']; }
+                if ($row['role'] === 'custodian') { $counts['custodians'] = (int)$row['c']; }
+            }
+
+            // Requests by status (incoming)
             $rs = $this->pdo->query('SELECT status, COUNT(*) AS c FROM purchase_requests GROUP BY status');
             foreach ($rs->fetchAll() as $row) {
                 $status = (string)$row['status'];
@@ -77,18 +87,10 @@ class AdminController extends BaseController
                  LIMIT 6'
             )->fetchAll();
 
-            // Top inventory items for the table (limit 10)
-            $items = $this->pdo->query(
-                'SELECT item_id, name, category, status, quantity, unit, branch_id
-                 FROM inventory_items
-                 ORDER BY name ASC
-                 LIMIT 10'
-            )->fetchAll();
-
             $this->render('dashboard/admin.php', [
                 'counts' => $counts,
                 'recent' => $recent,
-                'items' => $items,
+                'items' => [],
             ]);
         } catch (\Throwable $e) {
             // Friendly guidance if DB not initialized or migrations not run
@@ -174,6 +176,106 @@ class AdminController extends BaseController
         } catch (\Throwable $e) {
             $msg = rawurlencode($e->getMessage());
             header('Location: /admin/users?error=' . $msg);
+        }
+    }
+
+    public function branches(): void
+    {
+        try {
+            $list = $this->pdo->query('SELECT branch_id, code, name, address, is_active, created_at FROM branches ORDER BY name ASC')->fetchAll();
+            $this->render('dashboard/branches.php', ['branches' => $list]);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            header('Content-Type: text/plain');
+            echo 'Error loading branches: ' . $e->getMessage();
+        }
+    }
+
+    public function createBranch(): void
+    {
+        $code = trim((string)($_POST['code'] ?? ''));
+        $name = trim((string)($_POST['name'] ?? ''));
+        $address = trim((string)($_POST['address'] ?? ''));
+        if ($code === '' || $name === '') { header('Location: /admin/branches'); return; }
+        try {
+            $stmt = $this->pdo->prepare('INSERT INTO branches (code, name, address, is_active) VALUES (:c,:n,:a, TRUE)');
+            $stmt->execute(['c' => $code, 'n' => $name, 'a' => $address !== '' ? $address : null]);
+            header('Location: /admin/branches');
+        } catch (\Throwable $e) {
+            $msg = rawurlencode($e->getMessage());
+            header('Location: /admin/branches?error=' . $msg);
+        }
+    }
+
+    public function messages(): void
+    {
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        try {
+            $stmt = $this->pdo->prepare('SELECT m.id, m.subject, m.body, m.is_read, m.created_at, u.full_name AS from_name
+                FROM messages m JOIN users u ON u.user_id = m.sender_id WHERE m.recipient_id = :me ORDER BY m.created_at DESC LIMIT 50');
+            $stmt->execute(['me' => $me]);
+            $inbox = $stmt->fetchAll();
+            $users = $this->pdo->query("SELECT user_id, full_name, role FROM users WHERE is_active = TRUE ORDER BY role, full_name")->fetchAll();
+            $this->render('dashboard/messages.php', ['inbox' => $inbox, 'users' => $users]);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            header('Content-Type: text/plain');
+            echo 'Error loading messages: ' . $e->getMessage();
+        }
+    }
+
+    public function sendMessage(): void
+    {
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        $to = isset($_POST['to']) ? (int)$_POST['to'] : 0;
+        $subject = trim((string)($_POST['subject'] ?? ''));
+        $body = trim((string)($_POST['body'] ?? ''));
+        if ($to <= 0 || $subject === '' || $body === '') { header('Location: /admin/messages'); return; }
+        try {
+            $stmt = $this->pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
+            $stmt->execute(['s' => $me, 'r' => $to, 'j' => $subject, 'b' => $body]);
+            header('Location: /admin/messages');
+        } catch (\Throwable $e) {
+            $msg = rawurlencode($e->getMessage());
+            header('Location: /admin/messages?error=' . $msg);
+        }
+    }
+
+    public function settings(): void
+    {
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        try {
+            $stmt = $this->pdo->prepare('SELECT user_id, username, full_name, email FROM users WHERE user_id = :id');
+            $stmt->execute(['id' => $me]);
+            $user = $stmt->fetch();
+            $this->render('dashboard/settings.php', ['user' => $user]);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            header('Content-Type: text/plain');
+            echo 'Error loading settings: ' . $e->getMessage();
+        }
+    }
+
+    public function saveSettings(): void
+    {
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        $name = trim((string)($_POST['full_name'] ?? ''));
+        $email = trim((string)($_POST['email'] ?? ''));
+        $pwd = (string)($_POST['password'] ?? '');
+        if ($name === '') { header('Location: /settings'); return; }
+        try {
+            if ($pwd !== '') {
+                $hash = password_hash($pwd, PASSWORD_BCRYPT);
+                $stmt = $this->pdo->prepare('UPDATE users SET full_name = :n, email = :e, password_hash = :p WHERE user_id = :id');
+                $stmt->execute(['n' => $name, 'e' => $email !== '' ? $email : null, 'p' => $hash, 'id' => $me]);
+            } else {
+                $stmt = $this->pdo->prepare('UPDATE users SET full_name = :n, email = :e WHERE user_id = :id');
+                $stmt->execute(['n' => $name, 'e' => $email !== '' ? $email : null, 'id' => $me]);
+            }
+            header('Location: /settings?saved=1');
+        } catch (\Throwable $e) {
+            $msg = rawurlencode($e->getMessage());
+            header('Location: /settings?error=' . $msg);
         }
     }
 }
