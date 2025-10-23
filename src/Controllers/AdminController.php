@@ -95,7 +95,8 @@ class AdminController extends BaseController
             http_response_code(500);
             header('Content-Type: text/html; charset=utf-8');
             $msg = htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
-            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $forwarded = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
+            $scheme = $forwarded !== '' ? explode(',', $forwarded)[0] : ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http');
             $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
             $setupUrl = $scheme . '://' . $host . '/setup?token=YOUR_TOKEN';
             echo '<!doctype html><html><head><meta charset="utf-8"><title>Setup required</title>';

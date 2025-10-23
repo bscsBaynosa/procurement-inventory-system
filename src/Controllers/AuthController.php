@@ -68,7 +68,8 @@ class AuthController extends BaseController
         } catch (\Throwable $e) {
             // Most common cause: database not initialized or not reachable
             error_log('[AuthController@login] ' . $e->getMessage());
-            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $forwarded = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
+            $scheme = $forwarded !== '' ? explode(',', $forwarded)[0] : ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http');
             $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
             $setupUrl = $scheme . '://' . $host . '/setup?token=YOUR_TOKEN';
             $hint = 'Sign-in is temporarily unavailable. Please run setup to initialize the database: ' . $setupUrl;
