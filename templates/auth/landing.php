@@ -113,7 +113,13 @@
                         </div>
                     </div>
                     <div class="signin">
+                        <?php if (!empty($error)): ?>
+                            <div style="background:#fee2e2;border:1px solid #fecaca;color:#991b1b;padding:10px;border-radius:10px;margin-bottom:8px;font-weight:600;">
+                                <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?>
+                            </div>
+                        <?php endif; ?>
                         <form action="/auth/login" method="POST" onsubmit="syncRoleToSelect()">
+                            <input type="hidden" name="from" value="landing" />
                             <div class="form-row">
                                 <div class="form-group" style="flex:1;">
                                     <label for="username">Username</label>

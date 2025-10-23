@@ -25,9 +25,9 @@ class AuthController extends BaseController
         return $this->auth;
     }
 
-    public function showLanding(): void
+    public function showLanding(?string $error = null): void
     {
-        $this->render('auth/landing.php');
+        $this->render('auth/landing.php', [ 'error' => $error ]);
     }
 
     public function showLoginForm(?string $error = null): void
@@ -57,8 +57,13 @@ class AuthController extends BaseController
             header('Location: /dashboard');
             return;
         }
-
-        $this->showLoginForm('Invalid credentials or role.');
+        $from = (string)($_POST['from'] ?? '');
+        $errorMsg = 'Invalid credentials or role.';
+        if ($from === 'landing') {
+            $this->showLanding($errorMsg);
+            return;
+        }
+        $this->showLoginForm($errorMsg);
     }
 
     public function logout(): void
