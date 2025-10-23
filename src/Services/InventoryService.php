@@ -106,4 +106,26 @@ class InventoryService
 		if ($s === 'retired') { return 'retired'; }
 		return 'good';
 	}
+
+	/**
+	 * Return per-branch inventory counts broken down by status.
+	 * [ { branch_id, name, total, good, for_repair, for_replacement, retired } ]
+	 */
+	public function getStatsPerBranch(): array
+	{
+		$sql = "
+			SELECT b.branch_id, b.name,
+				COALESCE(COUNT(i.item_id),0) AS total,
+				COALESCE(SUM(CASE WHEN i.status='good' THEN 1 ELSE 0 END),0) AS good,
+				COALESCE(SUM(CASE WHEN i.status='for_repair' THEN 1 ELSE 0 END),0) AS for_repair,
+				COALESCE(SUM(CASE WHEN i.status='for_replacement' THEN 1 ELSE 0 END),0) AS for_replacement,
+				COALESCE(SUM(CASE WHEN i.status='retired' THEN 1 ELSE 0 END),0) AS retired
+			FROM branches b
+			LEFT JOIN inventory_items i ON i.branch_id = b.branch_id
+			GROUP BY b.branch_id, b.name
+			ORDER BY b.name ASC
+		";
+		$stmt = $this->pdo->query($sql);
+		return $stmt->fetchAll();
+	}
 }

@@ -64,14 +64,14 @@
                         <label>To</label>
                         <select name="to" required>
                             <option value="">— Select recipient —</option>
-                            <?php foreach ($users as $u): ?>
-                                <option value="<?= (int)$u['user_id'] ?>"><?= htmlspecialchars($u['full_name'] . ' (' . $u['role'] . ')', ENT_QUOTES, 'UTF-8') ?></option>
+                            <?php $pf = isset($prefill_to) ? (int)$prefill_to : 0; foreach ($users as $u): ?>
+                                <option value="<?= (int)$u['user_id'] ?>" <?= ($pf === (int)$u['user_id'] ? 'selected' : '') ?>><?= htmlspecialchars($u['full_name'] . ' (' . $u['role'] . ')', ENT_QUOTES, 'UTF-8') ?></option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                     <div>
                         <label>Subject</label>
-                        <input name="subject" required placeholder="Subject" />
+                        <input name="subject" required placeholder="Subject" value="<?= htmlspecialchars((string)($prefill_subject ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
                     </div>
                     <div>
                         <label>Message</label>

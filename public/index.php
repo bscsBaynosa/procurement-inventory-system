@@ -117,6 +117,25 @@ if ($method === 'GET' && $path === '/dashboard') {
 	exit;
 }
 
+// Manager: Purchase Requests actions
+if ($method === 'POST' && $path === '/manager/requests/update-status') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','admin'], true)) { header('Location: /login'); exit; }
+	$manager->updateRequestStatus();
+	exit;
+}
+if ($method === 'GET' && $path === '/manager/requests/generate-po') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','admin'], true)) { header('Location: /login'); exit; }
+	$manager->generatePO();
+	exit;
+}
+
+// Notifications (unread messages) for all roles
+if ($method === 'GET' && $path === '/notifications') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$admin->notifications();
+	exit;
+}
+
 // Custodian: Inventory
 if ($method === 'GET' && $path === '/custodian/inventory') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin'], true)) { header('Location: /login'); exit; }

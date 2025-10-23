@@ -22,17 +22,45 @@
         .nav svg{ width:18px; height:18px; fill: var(--accent); }
         .content{ padding:18px 20px; }
         .h1{ font-weight:800; font-size:22px; margin: 6px 0 12px; }
+        .grid{ display:grid; grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); gap:12px; margin-bottom:14px; }
+        .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:12px; }
+        .card h3{ margin:0 0 6px; font-size:14px; color:var(--muted); font-weight:600; }
+        .stats{ display:flex; gap:8px; flex-wrap:wrap; font-size:12px; color:var(--muted); }
+        .badge{ background:color-mix(in oklab, var(--accent) 12%, transparent); color:var(--text); border:1px solid color-mix(in oklab, var(--accent) 35%, var(--border)); padding:4px 8px; border-radius:999px; }
         table{ width:100%; border-collapse: collapse; background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
         th, td{ padding:12px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
         th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
         .muted{ color:var(--muted); }
+        .actions{ display:flex; gap:8px; align-items:center; }
+        .btn{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); text-decoration:none; font-size:12px; cursor:pointer; }
+        .btn:hover{ background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
+        .btn.primary{ border-color: color-mix(in oklab, var(--accent) 35%, var(--border)); background: color-mix(in oklab, var(--accent) 10%, transparent); }
+        select.inline{ padding:6px 8px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); }
     </style>
 </head>
 <body>
 <div class="layout">
     <?php require __DIR__ . '/../layouts/_sidebar.php'; ?>
     <main class="content">
-        <div class="h1">Purchase Requests</div>
+        <div class="h1">Manager Overview</div>
+        <?php if (!empty($branchStats)): ?>
+            <div class="grid">
+                <?php foreach ($branchStats as $b): ?>
+                    <div class="card">
+                        <h3><?= htmlspecialchars((string)($b['name'] ?? 'Branch'), ENT_QUOTES, 'UTF-8') ?></h3>
+                        <div class="stats">
+                            <span class="badge">Total: <?= (int)($b['total'] ?? 0) ?></span>
+                            <span class="badge">Good: <?= (int)($b['good'] ?? 0) ?></span>
+                            <span class="badge">For Repair: <?= (int)($b['for_repair'] ?? 0) ?></span>
+                            <span class="badge">For Replacement: <?= (int)($b['for_replacement'] ?? 0) ?></span>
+                            <span class="badge">Retired: <?= (int)($b['retired'] ?? 0) ?></span>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
+
+        <div class="h1" style="margin-top:12px;">Purchase Requests</div>
         <table>
             <thead>
                 <tr>
@@ -40,6 +68,7 @@
                     <th>Branch</th>
                     <th>Item</th>
                     <th>Status</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -50,11 +79,29 @@
                             <td><?= htmlspecialchars((string)($request['branch_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)($request['item_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)$request['status'], ENT_QUOTES, 'UTF-8') ?></td>
+                            <td>
+                                <div class="actions">
+                                    <form action="/manager/requests/update-status" method="POST" style="display:inline-flex; gap:6px; align-items:center;">
+                                        <input type="hidden" name="request_id" value="<?= htmlspecialchars((string)$request['request_id'], ENT_QUOTES, 'UTF-8') ?>" />
+                                        <select class="inline" name="status">
+                                            <?php $statuses = ['for_approval' => 'For Approval', 'waiting_for_release' => 'Waiting for Release', 'disapproved' => 'Disapproved'];
+                                            foreach ($statuses as $val => $label): ?>
+                                                <option value="<?= $val ?>" <?= ($request['status'] === $val ? 'selected' : '') ?>><?= $label ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <button class="btn primary" type="submit">Update</button>
+                                    </form>
+                                    <a class="btn" href="/manager/requests/generate-po?request_id=<?= urlencode((string)$request['request_id']) ?>">Generate PO</a>
+                                    <?php if (!empty($request['requested_by_id'])): ?>
+                                        <a class="btn" href="/admin/messages?to=<?= urlencode((string)$request['requested_by_id']) ?>&subject=<?= urlencode('Regarding Request #' . (string)$request['request_id'] . ' - ' . (string)$request['status']) ?>">Message</a>
+                                    <?php endif; ?>
+                                </div>
+                            </td>
                         </tr>
                     <?php endforeach; ?>
                 <?php else: ?>
                     <tr>
-                        <td colspan="4" class="muted">No purchase requests found.</td>
+                        <td colspan="5" class="muted">No purchase requests found.</td>
                     </tr>
                 <?php endif; ?>
             </tbody>

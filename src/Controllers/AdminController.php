@@ -467,7 +467,9 @@ class AdminController extends BaseController
             $stmt->execute(['me' => $me]);
             $inbox = $stmt->fetchAll();
             $users = $this->pdo->query("SELECT user_id, full_name, role FROM users WHERE is_active = TRUE ORDER BY role, full_name")->fetchAll();
-            $this->render('dashboard/messages.php', ['inbox' => $inbox, 'users' => $users]);
+            $prefillTo = isset($_GET['to']) ? (int)$_GET['to'] : 0;
+            $prefillSubject = isset($_GET['subject']) ? (string)$_GET['subject'] : '';
+            $this->render('dashboard/messages.php', ['inbox' => $inbox, 'users' => $users, 'prefill_to' => $prefillTo, 'prefill_subject' => $prefillSubject]);
         } catch (\PDOException $e) {
             // If messages table doesn't exist yet, create it and retry once
             if ($e->getCode() === '42P01') {
@@ -509,6 +511,24 @@ class AdminController extends BaseController
         } catch (\Throwable $e) {
             $msg = rawurlencode($e->getMessage());
             header('Location: /admin/messages?error=' . $msg);
+        }
+    }
+
+    public function notifications(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        if ($me <= 0) { header('Location: /login'); return; }
+        try {
+            $stmt = $this->pdo->prepare('SELECT m.id, m.subject, m.body, m.created_at, m.sender_id, u.full_name AS from_name
+                FROM messages m JOIN users u ON u.user_id = m.sender_id WHERE m.recipient_id = :me AND m.is_read = FALSE ORDER BY m.created_at DESC');
+            $stmt->execute(['me' => $me]);
+            $list = $stmt->fetchAll();
+            $this->render('dashboard/notifications.php', ['notifications' => $list]);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            header('Content-Type: text/plain');
+            echo 'Error loading notifications: ' . $e->getMessage();
         }
     }
 
