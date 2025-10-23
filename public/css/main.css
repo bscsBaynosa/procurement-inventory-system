@@ -119,3 +119,11 @@ input, select, textarea, button {
 .btn.full { width: 100%; }
 .modal-backdrop { animation: fadeIn .15s ease; }
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+
+/* Global nav icon sizing for consistent module icons */
+.nav svg {
+    width: 18px;
+    height: 18px;
+    fill: var(--accent, #22c55e);
+    flex: 0 0 18px;
+}
