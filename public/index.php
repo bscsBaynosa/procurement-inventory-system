@@ -105,10 +105,12 @@ if ($method === 'GET' && $path === '/dashboard') {
 if ($method === 'GET' && $path === '/setup') {
 	$token = isset($_GET['token']) ? trim((string)$_GET['token']) : '';
 	// Read SETUP_TOKEN robustly from multiple sources to avoid env propagation quirks
-	$expected = getenv('SETUP_TOKEN');
-	if (!is_string($expected) || $expected === '') {
-		$expected = $_ENV['SETUP_TOKEN'] ?? ($_SERVER['SETUP_TOKEN'] ?? '');
+	$expectedRaw = getenv('SETUP_TOKEN');
+	if (!is_string($expectedRaw) || $expectedRaw === '') {
+		$expectedRaw = $_ENV['SETUP_TOKEN'] ?? ($_SERVER['SETUP_TOKEN'] ?? '');
 	}
+	// Normalize by trimming whitespace and quotes users might accidentally include
+	$expected = is_string($expectedRaw) ? trim($expectedRaw, " \t\n\r\0\x0B\"'") : '';
 	if ($expected === '' || !hash_equals($expected, (string)$token)) {
 		http_response_code(403);
 		$reason = $expected === '' ? 'missing' : 'mismatch';
@@ -121,11 +123,13 @@ if ($method === 'GET' && $path === '/setup') {
 		echo '<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;padding:24px;background:#0b0b0b;color:#e5e7eb} .box{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:18px;max-width:860px} code{background:#0b0b0b;padding:2px 6px;border-radius:6px} a{color:#22c55e;text-decoration:none}</style>';
 		echo '</head><body><div class="box">';
 		echo '<h2>Forbidden (setup token ' . htmlspecialchars($reason, ENT_QUOTES, 'UTF-8') . ')</h2>';
-		echo '<p>The setup route is protected. To run it:</p>';
+	echo '<p>The setup route is protected. To run it:</p>';
 		echo '<ol>';
 		echo '<li>Set a config var named <code>SETUP_TOKEN</code> in Heroku for this app.</li>';
 		echo '<li>Open <code>' . htmlspecialchars($sample, ENT_QUOTES, 'UTF-8') . '</code> with your exact token value.</li>';
 		echo '</ol>';
+	$len = strlen((string)$expected);
+	echo '<p><small class="dim">Diagnostics: SETUP_TOKEN length detected by app: <strong>' . (int)$len . '</strong>. If this shows 0 after you set it, try restarting dynos in Heroku (More → Restart all dynos).</small></p>';
 		echo '<p>Tips:</p><ul>';
 		echo '<li>Paste the token without quotes and without spaces.</li>';
 		echo '<li>Use simple letters/numbers (e.g., 32 hex chars) to avoid URL-encoding issues.</li>';
