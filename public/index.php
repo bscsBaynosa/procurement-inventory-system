@@ -195,6 +195,37 @@ if ($method === 'GET' && $path === '/setup') {
 	exit;
 }
 
+// Setup status and DB health check (read-only, safe to share). Useful for debugging.
+if ($method === 'GET' && $path === '/setup/status') {
+	header('Content-Type: text/plain');
+	try {
+		$pdo = \App\Database\Connection::resolve();
+		$checks = [];
+		$tables = ['users','branches','inventory_items','purchase_requests','auth_activity'];
+		foreach ($tables as $t) {
+			$stmt = $pdo->prepare("SELECT to_regclass('public." . $t . "')");
+			$stmt->execute();
+			$exists = (bool)$stmt->fetchColumn();
+			$checks[] = sprintf("table:%s exists=%s", $t, $exists ? 'yes' : 'no');
+		}
+		// Counts (skip if table missing)
+		$counts = [];
+		foreach (['users','branches','inventory_items','purchase_requests'] as $t) {
+			$existsStmt = $pdo->prepare("SELECT to_regclass('public." . $t . "')");
+			$existsStmt->execute();
+			if ($existsStmt->fetchColumn()) {
+				$c = (int)$pdo->query("SELECT COUNT(*) FROM " . $t)->fetchColumn();
+				$counts[] = sprintf("count:%s=%d", $t, $c);
+			}
+		}
+		echo "OK\n" . implode("\n", $checks) . "\n" . implode("\n", $counts) . "\n";
+	} catch (Throwable $e) {
+		http_response_code(500);
+		echo 'ERROR ' . $e->getMessage();
+	}
+	exit;
+}
+
 // Fallback 404
 http_response_code(404);
 echo '404 Not Found';
