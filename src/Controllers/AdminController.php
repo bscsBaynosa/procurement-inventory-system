@@ -95,12 +95,15 @@ class AdminController extends BaseController
             http_response_code(500);
             header('Content-Type: text/html; charset=utf-8');
             $msg = htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
+            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            $setupUrl = $scheme . '://' . $host . '/setup?token=YOUR_TOKEN';
             echo '<!doctype html><html><head><meta charset="utf-8"><title>Setup required</title>';
             echo '<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;padding:24px;background:#0b0b0b;color:#e5e7eb} .box{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:18px;max-width:800px} a{color:#22c55e;text-decoration:none} .dim{color:#94a3b8} pre{white-space:pre-wrap;background:#0b0b0b;padding:12px;border-radius:8px;overflow:auto}</style>';
             echo '</head><body><div class="box">';
             echo '<h2>Database setup required</h2>';
             echo '<p class="dim">The database may not be initialized yet. Run the one-time setup route to apply the schema and seed the admin user.</p>';
-            echo '<ol><li>Set the <code>SETUP_TOKEN</code> config var in Heroku.</li><li>Visit <code>/setup?token=YOUR_TOKEN</code> on this app.</li></ol>';
+            echo '<ol><li>Set the <code>SETUP_TOKEN</code> config var in Heroku.</li><li>Visit <code>' . htmlspecialchars($setupUrl, ENT_QUOTES, 'UTF-8') . '</code> on this app.</li></ol>';
             echo '<p class="dim">After that, reload this page.</p>';
             echo '<details><summary>Error details</summary><pre>' . $msg . '</pre></details>';
             echo '</div></body></html>';

@@ -68,7 +68,10 @@ class AuthController extends BaseController
         } catch (\Throwable $e) {
             // Most common cause: database not initialized or not reachable
             error_log('[AuthController@login] ' . $e->getMessage());
-            $hint = 'Sign-in is temporarily unavailable. Please run setup to initialize the database: '/**/ . '/setup?token=YOUR_TOKEN';
+            $scheme = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+            $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+            $setupUrl = $scheme . '://' . $host . '/setup?token=YOUR_TOKEN';
+            $hint = 'Sign-in is temporarily unavailable. Please run setup to initialize the database: ' . $setupUrl;
             $from = (string)($_POST['from'] ?? '');
             if ($from === 'landing') {
                 $this->showLanding($hint);
