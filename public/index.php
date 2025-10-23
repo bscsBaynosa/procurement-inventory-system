@@ -107,7 +107,27 @@ if ($method === 'GET' && $path === '/setup') {
 	$expected = getenv('SETUP_TOKEN') ?: '';
 	if ($expected === '' || !hash_equals($expected, (string)$token)) {
 		http_response_code(403);
-		echo 'Forbidden';
+		$reason = $expected === '' ? 'missing' : 'mismatch';
+		$forwarded = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
+		$scheme = $forwarded !== '' ? explode(',', $forwarded)[0] : ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http');
+		$host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+		$sample = $scheme . '://' . $host . '/setup?token=YOUR_TOKEN';
+		header('Content-Type: text/html; charset=utf-8');
+		echo '<!doctype html><html><head><meta charset="utf-8"><title>Forbidden</title>';
+		echo '<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;padding:24px;background:#0b0b0b;color:#e5e7eb} .box{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:18px;max-width:860px} code{background:#0b0b0b;padding:2px 6px;border-radius:6px} a{color:#22c55e;text-decoration:none}</style>';
+		echo '</head><body><div class="box">';
+		echo '<h2>Forbidden (setup token ' . htmlspecialchars($reason, ENT_QUOTES, 'UTF-8') . ')</h2>';
+		echo '<p>The setup route is protected. To run it:</p>';
+		echo '<ol>';
+		echo '<li>Set a config var named <code>SETUP_TOKEN</code> in Heroku for this app.</li>';
+		echo '<li>Open <code>' . htmlspecialchars($sample, ENT_QUOTES, 'UTF-8') . '</code> with your exact token value.</li>';
+		echo '</ol>';
+		echo '<p>Tips:</p><ul>';
+		echo '<li>Paste the token without quotes and without spaces.</li>';
+		echo '<li>Use simple letters/numbers (e.g., 32 hex chars) to avoid URL-encoding issues.</li>';
+		echo '<li>Make sure you are visiting the correct app domain shown above.</li>';
+		echo '</ul>';
+		echo '</div></body></html>';
 		exit;
 	}
 
