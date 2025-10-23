@@ -165,11 +165,7 @@ if ($method === 'POST' && $path === '/admin/branches/delete') {
 	$admin->deleteBranch();
 	exit;
 }
-if ($method === 'POST' && $path === '/admin/branches/seed') {
-	if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); exit; }
-	$admin->seedBranches();
-	exit;
-}
+// Removed UI for seeding branches; seeding handled by Installer only.
 
 // Admin: Messages
 if ($method === 'GET' && $path === '/admin/messages') {

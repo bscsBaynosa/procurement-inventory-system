@@ -41,6 +41,11 @@ h1 {
     background-color: #45a049;
 }
 
+/* Ensure form controls inherit Poppins for consistent UI */
+input, select, textarea, button {
+    font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
 .dashboard {
     display: flex;
     justify-content: space-between;

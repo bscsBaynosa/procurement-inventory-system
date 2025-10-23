@@ -25,7 +25,8 @@
         table{ width:100%; border-collapse: collapse; }
         th, td{ padding:10px 12px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
         th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
-        input{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:#fff; color:#111; font:inherit; }
+        input{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:#fff; color:#111; font-family:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; height:40px; line-height:40px; }
+        select{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:#fff; color:#111; font-family:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; height:40px; line-height:40px; }
         .btn{ background:var(--accent); color:#fff; border:0; padding:10px 12px; border-radius:10px; font-weight:700; text-decoration:none; display:inline-block; }
     .grid{ display:grid; grid-template-columns: 1fr minmax(380px, 520px); gap:12px; }
         .row{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
@@ -107,12 +108,6 @@
                 </form>
                 <?php else: ?>
                 <h3 style="margin-top:0">Add Branch</h3>
-                <?php if (!empty($_GET['seeded'])): ?>
-                    <div class="ok">POCC branches seeded/updated.</div>
-                <?php endif; ?>
-                <form method="POST" action="/admin/branches/seed" style="margin-bottom:12px">
-                    <button class="btn" type="submit">Seed POCC Branches</button>
-                </form>
                 <form method="POST" action="/admin/branches">
                     <div class="row">
                         <div>
