@@ -72,7 +72,8 @@ class AuthController extends BaseController
             $scheme = $forwarded !== '' ? explode(',', $forwarded)[0] : ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http');
             $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
             $setupUrl = $scheme . '://' . $host . '/setup?token=YOUR_TOKEN';
-            $hint = 'Sign-in is temporarily unavailable. Please run setup to initialize the database: ' . $setupUrl;
+            $safeMsg = preg_replace('/(password|pwd|pass|secret)=([^;\s]+)/i', '$1=***', (string)$e->getMessage());
+            $hint = 'Sign-in is temporarily unavailable. Please run setup to initialize the database: ' . $setupUrl . ' | Error: ' . $safeMsg;
             $from = (string)($_POST['from'] ?? '');
             if ($from === 'landing') {
                 $this->showLanding($hint);
