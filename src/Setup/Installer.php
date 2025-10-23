@@ -75,21 +75,50 @@ class Installer
             // Non-fatal during setup; columns may already exist in some environments
         }
 
-        // Seed POCC branches if missing
+        // Seed/ensure POCC branches with addresses (idempotent)
         $branches = [
-            ['code' => 'QC',   'name' => 'QUEZON CITY'],
-            ['code' => 'MNL',  'name' => 'MANILA'],
-            ['code' => 'STB',  'name' => 'STO. TOMAS BATANGAS'],
-            ['code' => 'SFLU', 'name' => 'SAN FERNANDO CITY LA UNION'],
-            ['code' => 'DASC', 'name' => 'DASMARINAS CAVITE'],
+            [
+                'code' => 'QC',
+                'name' => 'QUEZON CITY',
+                'address' => "POCC Centralized Services Office (CSO)\nTel: (2) 8283-2232\nMobile: +63 917-122-6186\nEmail: pocc.cares@gmail.com\n\nPOCC Fairview Cancer Center\nBasement Marian Medical Arts Bldg., Dahlia Ave, West Fairview, Quezon City 1118\nTel: +63 (2) 8429-5179\nMobile: +63 917-705-6057\nEmail: info.pocc@gmail.com\nWeb: https://www.philippineoncologycenter.com",
+            ],
+            [
+                'code' => 'MNL',
+                'name' => 'MANILA',
+                'address' => "POCC-MCM Radiation Therapy Unit\nYWCA Annex Bldg., G/F, UN Ave Ermita, Manila 1000\nTel: +63 (2) 9975-6533, 523-8131 loc 2647\nMobile: +63 917-706-7301\nEmail: info.RT.manilamed@gmail.com",
+            ],
+            [
+                'code' => 'STB',
+                'name' => 'STO. TOMAS BATANGAS',
+                'address' => "St. Frances Cabrini Medical Center & Cancer Institute, Radiotherapy Section\nSt. Frances Cabrini Medical Tourism Park, Maharlika Highway, Poblacion 2, Sto. Tomas, Batangas 4234\nTel: +63 (43) 7784-8411 loc 8832 or 728-0216\nMobile: +63 917-715-5283\nEmail: pca@gmail.com",
+            ],
+            [
+                'code' => 'SFLU',
+                'name' => 'SAN FERNANDO CITY LA UNION',
+                'address' => "Bethany Cancer Center\nBasement, Northwing, Bethany Hospital, Inc.\nWiddoes St., Brgy 2, San Fernando, La Union 2500\nTel: +63 (72) 888-2930 loc 172\nMobile: +63 917-715-5273\nEmail: info.RT.bethany.pocc@gmail.com",
+            ],
+            [
+                'code' => 'DASC',
+                'name' => 'DASMARINAS CAVITE',
+                'address' => "DLSUMC Cancer Center Radiotherapy Dept.\nDe La Salle University Medical Center (DLSUMC)\nJose Sotto Tantiansu (JST) Cancer Center G/F\nGov D. Mangubat Ave., Dasmarinas City, Cavite 4114\nTel: +63 (46) 8416-0686\nMobile: +63 917-705-6508\nEmail: info.RT.lasalle@mail.com",
+            ],
         ];
         foreach ($branches as $b) {
-            $exists = $this->pdo->prepare('SELECT 1 FROM branches WHERE code = :c OR name = :n LIMIT 1');
+            $exists = $this->pdo->prepare('SELECT branch_id, address FROM branches WHERE code = :c OR name = :n LIMIT 1');
             $exists->execute(['c' => $b['code'], 'n' => $b['name']]);
-            if ($exists->fetchColumn() === false) {
-                $ins = $this->pdo->prepare('INSERT INTO branches (code, name, is_active) VALUES (:c,:n, TRUE)');
-                $ins->execute(['c' => $b['code'], 'n' => $b['name']]);
+            $row = $exists->fetch(PDO::FETCH_ASSOC);
+            if ($row === false) {
+                $ins = $this->pdo->prepare('INSERT INTO branches (code, name, address, is_active) VALUES (:c,:n,:a, TRUE)');
+                $ins->execute(['c' => $b['code'], 'n' => $b['name'], 'a' => $b['address']]);
                 $logs[] = 'Seeded branch ' . $b['name'];
+            } else {
+                // If address is empty, update it; otherwise keep existing value
+                $addr = (string)($row['address'] ?? '');
+                if (trim($addr) === '') {
+                    $up = $this->pdo->prepare('UPDATE branches SET address = :a WHERE (code = :c OR name = :n)');
+                    $up->execute(['a' => $b['address'], 'c' => $b['code'], 'n' => $b['name']]);
+                    $logs[] = 'Updated address for branch ' . $b['name'];
+                }
             }
         }
         $branchId = (int)$this->pdo->query('SELECT branch_id FROM branches ORDER BY branch_id ASC LIMIT 1')->fetchColumn();

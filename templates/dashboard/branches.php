@@ -56,7 +56,7 @@
                         <tr>
                             <td><?= htmlspecialchars((string)$b['code'], ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)$b['name'], ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= htmlspecialchars((string)($b['address'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= nl2br(htmlspecialchars((string)($b['address'] ?? '—'), ENT_QUOTES, 'UTF-8')) ?></td>
                             <td><?= !empty($b['is_active']) ? 'Active' : 'Disabled' ?></td>
                             <td>
                                 <div style="display:flex; gap:6px; flex-wrap:wrap">
