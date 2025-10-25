@@ -33,6 +33,9 @@
     .nav svg{ width:18px; height:18px; fill: var(--accent); }
     @media (max-width: 900px){ .layout{ grid-template-columns: 1fr; } .grid{ grid-template-columns: 1fr; } }
     @media (max-width: 1100px){ .grid{ grid-template-columns: 1fr; } }
+    /* Unread emphasis */
+    tr.unread td{ font-weight:700; background: color-mix(in oklab, var(--accent) 6%, var(--card)); }
+    .btn.muted{ background:transparent; color:var(--muted); border:1px solid var(--border); }
     </style>
 </head>
 <body>
@@ -43,13 +46,23 @@
         <div class="grid">
             <div class="card" style="overflow:auto;">
                 <table>
-                    <thead><tr><th>From</th><th>Subject</th><th>Date</th></tr></thead>
+                    <thead><tr><th>From</th><th>Subject</th><th>Date</th><th>Action</th></tr></thead>
                     <tbody>
                         <?php if (!empty($inbox)): foreach ($inbox as $m): ?>
-                        <tr>
+                        <tr class="<?= !empty($m['is_read']) ? '' : 'unread' ?>">
                             <td><?= htmlspecialchars((string)$m['from_name'], ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)$m['subject'], ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)$m['created_at'], ENT_QUOTES, 'UTF-8') ?></td>
+                            <td>
+                                <?php if (empty($m['is_read'])): ?>
+                                    <form method="POST" action="/admin/messages/mark-read" style="display:inline;">
+                                        <input type="hidden" name="id" value="<?= (int)$m['id'] ?>" />
+                                        <button type="submit" class="btn muted">Mark as read</button>
+                                    </form>
+                                <?php else: ?>
+                                    <span class="muted">Read</span>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                         <?php endforeach; else: ?>
                         <tr><td colspan="3" style="color:#64748b">No messages.</td></tr>

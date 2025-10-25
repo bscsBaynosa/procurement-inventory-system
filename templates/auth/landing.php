@@ -73,11 +73,17 @@
         .form-group { margin-bottom: 10px; display:block; }
         .form-group label { display:block; font-weight:600; margin-bottom:6px; color:#111827; }
         .form-group input, .form-group select { width:100%; max-width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; font: inherit; background:#fff; color:#111; display:block; }
+        /* Password visibility toggle */
+        .password-wrap{ position:relative; }
+        .password-wrap input{ padding-right:84px; }
+        .pw-toggle{ position:absolute; right:8px; top:50%; transform:translateY(-50%); height:36px; padding:0 10px; border-radius:8px; border:1px solid #e5e7eb; background:#f8fafc; color:#0f172a; font-weight:700; cursor:pointer; }
     .roles { display:flex; gap:10px; margin: 6px 0 10px 0; flex-wrap: wrap; }
-    .chip { padding:10px 12px; border-radius:10px; border:1.5px solid #e5e7eb; background:#fff; cursor:pointer; transition: all .15s ease; color:#111; min-width: 130px; display:inline-flex; justify-content:center; align-items:center; font-weight:600; }
+    .chip { padding:10px 12px; border-radius:10px; border:1.5px solid #e5e7eb; background:#fff; cursor:pointer; transition: all .15s ease; color:#111; width: 150px; height:44px; display:inline-flex; justify-content:center; align-items:center; font-weight:600; text-align:center; }
         .chip input { display:none; }
         .chip.active { border-color: var(--accent); color: var(--accent); box-shadow: 0 6px 14px color-mix(in oklab, var(--accent) 35%, #000 65%); }
-    .signin-actions { display:flex; gap:10px; justify-content:flex-end; align-items:center; margin-top: 6px; }
+    /* Uniform button sizing and centered primary action */
+    .btn{ min-width:140px; height:44px; }
+    .signin-actions { display:flex; gap:10px; justify-content:center; align-items:center; margin-top: 6px; }
 
     /* Responsive: stack username/password vertically on narrow screens to avoid overflow */
     @media (max-width: 700px) { .form-row { flex-direction: column; } }
@@ -156,7 +162,10 @@
                                 </div>
                                 <div class="form-group" style="flex:1;">
                                     <label for="password">Password</label>
-                                    <input id="password" name="password" type="password" required />
+                                    <div class="password-wrap">
+                                        <input id="password" name="password" type="password" required />
+                                        <button class="pw-toggle" type="button" onclick="togglePassword()" aria-controls="password" aria-label="Show password">Show</button>
+                                    </div>
                                 </div>
                             </div>
                             <div class="form-group">
@@ -177,7 +186,7 @@
                                 <!-- dynamic description goes here -->
                             </div>
                             <div class="signin-actions">
-                                <button type="submit" class="btn btn-primary" style="min-width:120px;">Sign in</button>
+                                <button type="submit" class="btn btn-primary">Sign in</button>
                             </div>
                         </form>
                     </div>
@@ -278,6 +287,15 @@
             // Ensure selected chip syncs to hidden select before submit
             const active = document.querySelector('#roleChips .chip.active input');
             if (active) document.getElementById('roleSelect').value = active.value;
+        }
+        function togglePassword(){
+            const input = document.getElementById('password');
+            const btn = document.querySelector('.pw-toggle');
+            if (!input || !btn) return;
+            const isPw = input.type === 'password';
+            input.type = isPw ? 'text' : 'password';
+            btn.textContent = isPw ? 'Hide' : 'Show';
+            btn.setAttribute('aria-label', isPw ? 'Hide password' : 'Show password');
         }
         // Dynamic role descriptions
         const roleDescriptions = {

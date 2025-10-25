@@ -231,6 +231,11 @@ if ($method === 'POST' && $path === '/admin/messages') {
 	$admin->sendMessage();
 	exit;
 }
+if ($method === 'POST' && $path === '/admin/messages/mark-read') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$admin->markMessageRead();
+	exit;
+}
 
 // Settings (profile)
 if ($method === 'GET' && $path === '/settings') {

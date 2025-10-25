@@ -514,6 +514,23 @@ class AdminController extends BaseController
         }
     }
 
+    /** Mark a message as read for the current user. */
+    public function markMessageRead(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        if ($me <= 0 || $id <= 0) { header('Location: /admin/messages'); return; }
+        try {
+            $st = $this->pdo->prepare('UPDATE messages SET is_read = TRUE WHERE id = :id AND recipient_id = :me');
+            $st->execute(['id' => $id, 'me' => $me]);
+        } catch (\Throwable $e) {
+            // ignore errors for UX; still redirect back
+        }
+        $ref = $_SERVER['HTTP_REFERER'] ?? '/admin/messages';
+        header('Location: ' . $ref);
+    }
+
     public function notifications(): void
     {
         if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
