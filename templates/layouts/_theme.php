@@ -1,8 +1,8 @@
 <?php
-// Shared theme helpers: include on every dashboard template.
+
 ?>
 <style>
-/* Toggle switch (iOS-like) */
+
 .switch { --h: 26px; --w: 48px; position: relative; display:inline-block; width: var(--w); height: var(--h); }
 .switch input { opacity:0; width:0; height:0; }
 .slider { position:absolute; cursor:pointer; inset:0; background:#d1d5db; transition:.2s; border-radius: 999px; box-shadow: inset 0 0 0 1px rgba(0,0,0,.06); }
@@ -10,11 +10,11 @@
 .switch input:checked + .slider { background: #22c55e; }
 .switch input:checked + .slider:before { transform: translateX(calc(var(--w) - var(--h))); }
 
-/* Ensure theme variables are respected even without a toggle present */
+
 :root{ --bg:#f8fafc; --card:#ffffff; --text:#0f172a; --muted:#64748b; --border:#e2e8f0; --accent:#22c55e; }
 html[data-theme="dark"]{ --bg:#0b0b0b; --card:#0f172a; --text:#e2e8f0; --muted:#94a3b8; --border:#1f2937; --accent:#22c55e; }
 
-/* Global layout fixes to avoid overlapping fields */
+
 *, *::before, *::after { box-sizing: border-box; }
 input, select, textarea { width: 100%; max-width: 100%; min-width: 0; display: block; }
 .card form { display: grid; gap: 12px; }
@@ -22,7 +22,7 @@ input, select, textarea { width: 100%; max-width: 100%; min-width: 0; display: b
 @media (max-width: 1100px){ .form-row { grid-template-columns: 1fr; } }
 </style>
 <script>
-// Apply saved theme on load across all modules
+
 (function(){
   try{
     var saved = localStorage.getItem('pocc_admin_theme');
@@ -32,7 +32,7 @@ input, select, textarea { width: 100%; max-width: 100%; min-width: 0; display: b
   }catch(e){}
 })();
 
-// Helper to bind a checkbox (class .theme-toggle) to theme changes
+
 function bindThemeToggle(selector){
   var el = document.querySelector(selector);
   if(!el) return;

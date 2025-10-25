@@ -1,5 +1,5 @@
 <?php
-    // Favicon: prefer repo-root logo.png; fallback to public locations
+    
     $root = realpath(__DIR__ . '/../../');
     $publicDir = $root . DIRECTORY_SEPARATOR . 'public';
     $iconCandidates = [

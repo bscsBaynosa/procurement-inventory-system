@@ -10,7 +10,7 @@ class InventoryTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** @test */
+
     public function it_can_create_an_inventory_item()
     {
         $response = $this->post('/inventory', [
@@ -28,7 +28,7 @@ class InventoryTest extends TestCase
         ]);
     }
 
-    /** @test */
+
     public function it_can_update_an_inventory_item()
     {
         $item = InventoryItem::create([
@@ -49,7 +49,7 @@ class InventoryTest extends TestCase
         ]);
     }
 
-    /** @test */
+
     public function it_can_toggle_inventory_item_status()
     {
         $item = InventoryItem::create([
@@ -68,10 +68,10 @@ class InventoryTest extends TestCase
         ]);
     }
 
-    /** @test */
+
     public function it_can_generate_inventory_report()
     {
-        // Create some inventory items
+
         InventoryItem::factory()->count(5)->create(['status' => 'Good']);
         InventoryItem::factory()->count(3)->create(['status' => 'For Repair']);
 
@@ -82,7 +82,7 @@ class InventoryTest extends TestCase
         $this->assertSee('Total Items: 8');
     }
 
-    /** @test */
+
     public function it_can_view_inventory_items()
     {
         InventoryItem::factory()->create([

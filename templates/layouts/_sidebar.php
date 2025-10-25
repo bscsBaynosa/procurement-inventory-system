@@ -1,5 +1,4 @@
 <?php
-// Shared sidebar navigation for all roles
 if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
 $role = $_SESSION['role'] ?? 'guest';
 $meName = $_SESSION['full_name'] ?? null;
@@ -17,7 +16,7 @@ function nav_active($href, $path) {
     return strpos($path, $href) === 0 ? 'active' : '';
 }
 
-// Compute unread notifications count (safe if messages table doesn't exist)
+
 $unreadCount = 0;
 try {
     if (class_exists('App\\Database\\Connection')) {
@@ -30,7 +29,7 @@ try {
         }
     }
 } catch (\Throwable $ignored) {
-    // silently ignore if table missing; badge just won't show
+    
 }
 ?>
 <aside class="sidebar">

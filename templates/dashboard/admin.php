@@ -142,7 +142,6 @@
 </div>
 
 <script>
-        // Client-side filter for recent requests
         (function(){
             var s = document.getElementById('rqSearch');
             var f = document.getElementById('rqFilter');

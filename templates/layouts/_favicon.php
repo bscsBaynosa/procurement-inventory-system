@@ -1,6 +1,4 @@
 <?php
-// Output favicon and apple-touch-icon links using repo root logo.png when available.
-// If not found, fall back to a small inline SVG so the tab icon is always consistent.
 $root = realpath(__DIR__ . '/../../');
 $candidates = [
     $root . DIRECTORY_SEPARATOR . 'logo.png',
@@ -21,7 +19,6 @@ foreach ($candidates as $cand) {
     }
 }
 if (!$printed) {
-    // Simple green cross on white background as an inline SVG fallback (POCC-themed)
     $svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
          . '<rect width="64" height="64" rx="12" ry="12" fill="#ffffff"/>'
          . '<rect x="28" y="12" width="8" height="40" rx="3" fill="#22c55e"/>'

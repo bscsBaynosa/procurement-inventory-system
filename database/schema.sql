@@ -1,7 +1,3 @@
--- PostgreSQL schema for the Procurement & Inventory System
--- This script is intended for use on Heroku Postgres or any managed PostgreSQL instance.
--- Run with: psql "$DATABASE_URL" -f database/schema.sql
-
 BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

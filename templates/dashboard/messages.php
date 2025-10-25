@@ -33,7 +33,7 @@
     .nav svg{ width:18px; height:18px; fill: var(--accent); }
     @media (max-width: 900px){ .layout{ grid-template-columns: 1fr; } .grid{ grid-template-columns: 1fr; } }
     @media (max-width: 1100px){ .grid{ grid-template-columns: 1fr; } }
-    /* Unread emphasis */
+
     tr.unread td{ font-weight:700; background: color-mix(in oklab, var(--accent) 6%, var(--card)); }
     .btn.muted{ background:transparent; color:var(--muted); border:1px solid var(--border); }
     </style>

@@ -1,5 +1,4 @@
 <?php
-// create.php - Form for creating new inventory items
 
 require_once '../../src/controllers/CustodianController.php';
 
