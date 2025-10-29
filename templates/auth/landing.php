@@ -42,7 +42,7 @@
         }
 
     .hero { padding: 36px 22px; display:flex; align-items:center; justify-content:center; min-height: calc(100vh - 80px); }
-    .hero-inner { max-width: 1100px; width: 100%; margin: 0 auto; background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03)); border:1px solid rgba(255,255,255,.08); border-radius:16px; padding: 28px; display:grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items:stretch; box-shadow: 0 30px 80px rgba(0,0,0,.35); }
+    .hero-inner { max-width: 1100px; width: 100%; margin: 0 auto; background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03)); border:1px solid rgba(255,255,255,.08); border-radius:16px; padding: 28px; display:grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items:start; box-shadow: 0 30px 80px rgba(0,0,0,.35); }
     @media (max-width: 900px) { 
         .hero { display:block; min-height:auto; padding: 22px 16px; }
         .hero-inner { grid-template-columns: 1fr; }
@@ -64,29 +64,30 @@
     .subhead { color: #cbd5e1; font-size: 15px; max-width: 640px; }
 
         /* Inline sign-in glass card */
-    .signin-card { background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 14px; padding: 18px; color:#0f172a; height:100%; display:flex; flex-direction:column; }
+    .signin-card { background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-radius: 14px; padding: 18px; color:#0f172a; display:flex; flex-direction:column; }
         .signin-header { display:flex; align-items:center; justify-content:space-between; margin-bottom: 8px; }
         .signin-title { color:#f8fafc; font-weight:800; font-size: 18px; }
         .signin-sub { color:#cbd5e1; font-size: 13px; }
-    .signin { background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.75)); border:1px solid rgba(15,23,42,.06); border-radius: 12px; padding: 14px; flex:1; display:flex; flex-direction:column; overflow:hidden; }
-        .form-row { display:flex; gap:12px; }
+    .signin { background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.75)); border:1px solid rgba(15,23,42,.06); border-radius: 12px; padding: 16px; display:flex; flex-direction:column; overflow:hidden; }
+        .form-row { display:flex; flex-direction:column; gap:12px; }
         .form-group { margin-bottom: 10px; display:block; }
-        .form-group label { display:block; font-weight:600; margin-bottom:6px; color:#111827; }
-        .form-group input, .form-group select { width:100%; max-width:100%; padding:10px 12px; border:1px solid #e5e7eb; border-radius:8px; font: inherit; background:#fff; color:#111; display:block; }
+        .form-group label { display:block; font-weight:600; margin-bottom:8px; color:#111827; }
+        .form-group input, .form-group select { width:100%; max-width:100%; height:48px; padding:12px 14px; border:1px solid #e5e7eb; border-radius:10px; font-size:16px; font-family: inherit; background:#fff; color:#111; display:block; }
         /* Password visibility toggle */
-        .password-wrap{ position:relative; }
-        .password-wrap input{ padding-right:84px; }
-        .pw-toggle{ position:absolute; right:8px; top:50%; transform:translateY(-50%); height:36px; padding:0 10px; border-radius:8px; border:1px solid #e5e7eb; background:#f8fafc; color:#0f172a; font-weight:700; cursor:pointer; }
+    .password-wrap{ position:relative; }
+    .password-wrap input{ padding-right:96px; }
+    .pw-toggle{ position:absolute; right:8px; top:50%; transform:translateY(-50%); height:38px; padding:0 12px; border-radius:10px; border:1px solid #e5e7eb; background:#f8fafc; color:#0f172a; font-weight:700; cursor:pointer; }
     .roles { display:flex; gap:10px; margin: 6px 0 10px 0; flex-wrap: wrap; }
     .chip { padding:10px 12px; border-radius:10px; border:1.5px solid #e5e7eb; background:#fff; cursor:pointer; transition: all .15s ease; color:#111; width: 150px; height:44px; display:inline-flex; justify-content:center; align-items:center; font-weight:600; text-align:center; }
         .chip input { display:none; }
         .chip.active { border-color: var(--accent); color: var(--accent); box-shadow: 0 6px 14px color-mix(in oklab, var(--accent) 35%, #000 65%); }
     /* Uniform button sizing and centered primary action */
-    .btn{ min-width:140px; height:44px; }
-    .signin-actions { display:flex; gap:10px; justify-content:center; align-items:center; margin-top: 6px; }
+    .btn{ min-width:160px; height:48px; font-size:16px; }
+    .signin-actions { display:flex; gap:10px; justify-content:center; align-items:center; margin-top: 10px; }
+    .signin-actions .btn { width:100%; max-width:100%; }
 
-    /* Responsive: stack username/password vertically on narrow screens to avoid overflow */
-    @media (max-width: 700px) { .form-row { flex-direction: column; } }
+    /* Responsive: inputs already stacked; widen tap targets further on small screens */
+    @media (max-width: 700px) { .btn{ height:50px; } }
     /* Sections */
     .section { padding: 30px 22px; }
     .section-inner { max-width: 1100px; margin: 0 auto; }
