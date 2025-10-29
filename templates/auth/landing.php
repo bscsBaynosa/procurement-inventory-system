@@ -68,7 +68,7 @@
         .signin-header { display:flex; align-items:center; justify-content:space-between; margin-bottom: 8px; }
         .signin-title { color:#f8fafc; font-weight:800; font-size: 18px; }
         .signin-sub { color:#cbd5e1; font-size: 13px; }
-    .signin { background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.75)); border:1px solid rgba(15,23,42,.06); border-radius: 12px; padding: 16px; display:flex; flex-direction:column; overflow:hidden; }
+    .signin { background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.75)); border:1px solid rgba(15,23,42,.06); border-radius: 12px; padding: 16px; display:flex; flex-direction:column; overflow:auto; max-height:70vh; }
         .form-row { display:flex; flex-direction:column; gap:12px; }
         .form-group { margin-bottom: 10px; display:block; }
         .form-group label { display:block; font-weight:600; margin-bottom:8px; color:#111827; }
@@ -85,6 +85,9 @@
     .btn{ min-width:160px; height:48px; font-size:16px; }
     .signin-actions { display:flex; gap:10px; justify-content:center; align-items:center; margin-top: 10px; }
     .signin-actions .btn { width:100%; max-width:100%; }
+    .hidden { display:none; }
+    .grid-2 { display:grid; grid-template-columns: 1fr 1fr; gap:12px; }
+    @media (max-width: 760px){ .grid-2 { grid-template-columns: 1fr; } }
 
     /* Responsive: inputs already stacked; widen tap targets further on small screens */
     @media (max-width: 700px) { .btn{ height:50px; } }
@@ -144,17 +147,32 @@
                     <div class="signin-card" id="signin">
                     <div class="signin-header">
                         <div>
-                            <div class="signin-title">Sign in</div>
-                            <div class="signin-sub">Enter your credentials to continue.</div>
+                            <div class="signin-title" id="formTitle">Sign in</div>
+                            <div class="signin-sub" id="formSubtitle">Enter your credentials to continue.</div>
+                        </div>
+                        <div>
+                            <a href="#" id="switchToSignin" class="hidden" style="color:#2563eb;text-decoration:none;font-weight:700;">Back to sign in</a>
                         </div>
                     </div>
                     <div class="signin">
                         <?php if (!empty($error)): ?>
-                            <div style="background:#fee2e2;border:1px solid #fecaca;color:#991b1b;padding:10px;border-radius:10px;margin-bottom:8px;font-weight:600;">
+                            <div id="signinError" style="background:#fee2e2;border:1px solid #fecaca;color:#991b1b;padding:10px;border-radius:10px;margin-bottom:8px;font-weight:600;">
                                 <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?>
                             </div>
                         <?php endif; ?>
-                        <form action="/auth/login" method="POST">
+                        <?php if (!empty($signup_error)): ?>
+                            <div id="signupError" style="background:#fee2e2;border:1px solid #fecaca;color:#991b1b;padding:10px;border-radius:10px;margin-bottom:8px;font-weight:600;" class="hidden">
+                                <?= htmlspecialchars($signup_error, ENT_QUOTES, 'UTF-8') ?>
+                            </div>
+                        <?php endif; ?>
+                        <?php if (!empty($signup_success)): ?>
+                            <div id="signupSuccess" style="background:#ecfdf5;border:1px solid #a7f3d0;color:#065f46;padding:10px;border-radius:10px;margin-bottom:8px;font-weight:600;">
+                                <?= htmlspecialchars($signup_success, ENT_QUOTES, 'UTF-8') ?>
+                            </div>
+                        <?php endif; ?>
+
+                        <!-- Sign in form -->
+                        <form id="signinForm" action="/auth/login" method="POST">
                             <input type="hidden" name="from" value="landing" />
                             <div class="form-row">
                                 <div class="form-group" style="flex:1;">
@@ -173,7 +191,37 @@
                                 <button type="submit" class="btn btn-primary">Sign in</button>
                             </div>
                             <div style="text-align:center;margin-top:14px;">
-                                <a href="/signup" style="color:#2563eb;text-decoration:none;font-weight:700;">Supplier? Create an account</a>
+                                <a href="#" id="switchToSignup" style="color:#2563eb;text-decoration:none;font-weight:700;">Supplier? Create an account</a>
+                            </div>
+                        </form>
+
+                        <!-- Sign up form (supplier) -->
+                        <form id="signupForm" class="hidden" method="POST" action="/signup">
+                            <input type="hidden" name="from" value="landing" />
+                            <div class="grid-2">
+                                <div class="form-group">
+                                    <label for="su_company">Company Name</label>
+                                    <input id="su_company" name="company" required />
+                                </div>
+                                <div class="form-group">
+                                    <label for="su_category">Category</label>
+                                    <input id="su_category" name="category" placeholder="e.g., Office Supplies" required />
+                                </div>
+                                <div class="form-group">
+                                    <label for="su_username">Username</label>
+                                    <input id="su_username" name="username" required />
+                                </div>
+                                <div class="form-group">
+                                    <label for="su_email">Email</label>
+                                    <input id="su_email" name="email" type="email" required />
+                                </div>
+                                <div class="form-group" style="grid-column:1 / -1;">
+                                    <label for="su_contact">Contact Number (optional)</label>
+                                    <input id="su_contact" name="contact" />
+                                </div>
+                            </div>
+                            <div class="signin-actions">
+                                <button type="submit" class="btn btn-primary">Sign Up</button>
                             </div>
                         </form>
                     </div>
@@ -265,8 +313,37 @@
             btn.textContent = isPw ? 'Hide' : 'Show';
             btn.setAttribute('aria-label', isPw ? 'Hide password' : 'Show password');
         }
-        // Initialize default accent
+        // Toggle between sign in and sign up without leaving the page
+        const signinForm = document.getElementById('signinForm');
+        const signupForm = document.getElementById('signupForm');
+        const toSignup = document.getElementById('switchToSignup');
+        const toSignin = document.getElementById('switchToSignin');
+        const title = document.getElementById('formTitle');
+        const subtitle = document.getElementById('formSubtitle');
+        const signinError = document.getElementById('signinError');
+        const signupError = document.getElementById('signupError');
+        const signupSuccess = document.getElementById('signupSuccess');
+
+        function show(view){
+            const isSignup = view === 'signup';
+            signinForm.classList.toggle('hidden', isSignup);
+            signupForm.classList.toggle('hidden', !isSignup);
+            toSignin.classList.toggle('hidden', !isSignup);
+            if (signinError) signinError.style.display = isSignup ? 'none' : '';
+            if (signupError) signupError.classList.toggle('hidden', !isSignup);
+            // keep success visible only on sign-in view to prompt login
+            if (signupSuccess) signupSuccess.style.display = isSignup ? 'none' : '';
+            title.textContent = isSignup ? 'Create account' : 'Sign in';
+            subtitle.textContent = isSignup ? 'Enter your details to continue.' : 'Enter your credentials to continue.';
+        }
+
+        if (toSignup) toSignup.addEventListener('click', function(e){ e.preventDefault(); show('signup'); });
+        if (toSignin) toSignin.addEventListener('click', function(e){ e.preventDefault(); show('signin'); });
+
+        // Initialize default accent and initial view (from server if provided)
         document.body.setAttribute('data-role', 'admin');
+        const initialView = '<?= isset($mode) ? htmlspecialchars($mode, ENT_QUOTES, "UTF-8") : 'signin' ?>';
+        show(initialView);
     </script>
 </body>
 </html>

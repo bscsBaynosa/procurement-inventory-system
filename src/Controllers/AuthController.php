@@ -25,9 +25,14 @@ class AuthController extends BaseController
         return $this->auth;
     }
 
-    public function showLanding(?string $error = null): void
+    public function showLanding(?string $error = null, ?string $signupError = null, ?string $signupSuccess = null, ?string $mode = null): void
     {
-        $this->render('auth/landing.php', [ 'error' => $error ]);
+        $this->render('auth/landing.php', [
+            'error' => $error,
+            'signup_error' => $signupError,
+            'signup_success' => $signupSuccess,
+            'mode' => $mode,
+        ]);
     }
 
     public function showLoginForm(?string $error = null): void
@@ -98,7 +103,12 @@ class AuthController extends BaseController
         $username = trim((string)($_POST['username'] ?? ''));
         $email = trim((string)($_POST['email'] ?? ''));
         $contact = trim((string)($_POST['contact'] ?? ''));
+        $from = (string)($_POST['from'] ?? '');
         if ($company === '' || $category === '' || $username === '' || $email === '') {
+            if ($from === 'landing') {
+                $this->showLanding(null, 'All required fields must be filled.', null, 'signup');
+                return;
+            }
             $this->showSupplierSignup('All required fields must be filled.');
             return;
         }
@@ -121,9 +131,16 @@ class AuthController extends BaseController
             // Send email with the generated password
             $mail = new \App\Services\MailService();
             $mail->send($email, 'Your Supplier Account Credentials', "Hello,\n\nYour supplier account has been created.\nUsername: {$username}\nPassword: {$pwd}\n\nPlease sign in and change your password in Settings.\n");
-
+            if ($from === 'landing') {
+                $this->showLanding(null, null, 'Account created. Please check your email for the password.', 'signin');
+                return;
+            }
             $this->showSupplierSignup(null, 'Account created. Please check your email for the password.');
         } catch (\Throwable $e) {
+            if ($from === 'landing') {
+                $this->showLanding(null, 'Signup failed: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'), null, 'signup');
+                return;
+            }
             $this->showSupplierSignup('Signup failed: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
         }
     }
