@@ -73,6 +73,19 @@
                 </div>
             </form>
         </div>
+        <div class="card" style="margin-top:12px;">
+            <h3 style="margin-top:0">Test email delivery</h3>
+            <form method="POST" action="/settings/test-email" style="display:grid; gap:10px;">
+                <div>
+                    <label>Send to (default: your email)</label>
+                    <input name="to" type="email" placeholder="you@example.com" />
+                </div>
+                <div>
+                    <button class="btn" type="submit">Send test email</button>
+                </div>
+            </form>
+            <p class="muted">Uses SMTP if configured (SMTP_HOST/PORT/SECURE/USER/PASS), otherwise falls back to mail().</p>
+        </div>
     </main>
 </div>
 <script>

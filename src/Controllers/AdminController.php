@@ -665,4 +665,26 @@ class AdminController extends BaseController
             header('Location: /settings?error=' . $msg);
         }
     }
+
+    /** Send a test email using configured SMTP/mail to verify delivery. */
+    public function sendTestEmail(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        if ($me <= 0) { header('Location: /login'); return; }
+        try {
+            $to = trim((string)($_POST['to'] ?? ''));
+            if ($to === '') {
+                $stmt = $this->pdo->prepare('SELECT email FROM users WHERE user_id = :id');
+                $stmt->execute(['id' => $me]);
+                $to = (string)($stmt->fetchColumn() ?: '');
+            }
+            if ($to === '') { header('Location: /settings?error=' . rawurlencode('No recipient email set. Add your email, save, then try again.')); return; }
+            $mail = new \App\Services\MailService();
+            $ok = $mail->send($to, 'SMTP Test • Procurement System', "This is a test email from the Procurement & Inventory System.\nIf you can read this, email delivery works.");
+            header('Location: /settings?' . ($ok ? 'saved=1' : ('error=' . rawurlencode('Send failed. Check SMTP settings or spam folder.'))));
+        } catch (\Throwable $e) {
+            header('Location: /settings?error=' . rawurlencode($e->getMessage()));
+        }
+    }
 }

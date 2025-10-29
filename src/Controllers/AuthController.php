@@ -128,14 +128,15 @@ class AuthController extends BaseController
             $fn = $company; $ln = $category;
             $stmt->execute(['u' => $username, 'p' => $hash, 'fn' => $fn, 'ln' => $ln, 'n' => $company, 'e' => $email]);
 
-            // Send email with the generated password
+            // Send email with the generated password; also show credentials on screen for local/dev reliability
             $mail = new \App\Services\MailService();
-            $mail->send($email, 'Your Supplier Account Credentials', "Hello,\n\nYour supplier account has been created.\nUsername: {$username}\nPassword: {$pwd}\n\nPlease sign in and change your password in Settings.\n");
+            $sent = $mail->send($email, 'Your Supplier Account Credentials', "Hello,\n\nYour supplier account has been created.\nUsername: {$username}\nPassword: {$pwd}\n\nPlease sign in and change your password in Settings.\n");
+            $succ = 'Account created. ' . ($sent ? 'We emailed your credentials as well.' : 'Email sending may be unavailable; copy your credentials below.') . ' Username: ' . $username . ' • Password: ' . $pwd . ' — Please sign in and change your password in Settings.';
             if ($from === 'landing') {
-                $this->showLanding(null, null, 'Account created. Please check your email for the password.', 'signin');
+                $this->showLanding(null, null, $succ, 'signin');
                 return;
             }
-            $this->showSupplierSignup(null, 'Account created. Please check your email for the password.');
+            $this->showSupplierSignup(null, $succ);
         } catch (\Throwable $e) {
             if ($from === 'landing') {
                 $this->showLanding(null, 'Signup failed: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'), null, 'signup');
