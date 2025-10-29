@@ -140,11 +140,11 @@
             </div>
             <div class="right-col">
                 <!-- Inline glass sign-in -->
-                <div class="signin-card" id="signin">
+                    <div class="signin-card" id="signin">
                     <div class="signin-header">
                         <div>
                             <div class="signin-title">Sign in</div>
-                            <div class="signin-sub">Choose your role, then enter your credentials.</div>
+                            <div class="signin-sub">Enter your credentials to continue.</div>
                         </div>
                     </div>
                     <div class="signin">
@@ -168,13 +168,10 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="form-group" aria-live="polite" style="margin-top:6px;color:#475569;">
-                                Sign up is only for Suppliers. Admin, Admin Assistant, and Procurement accounts are created by the Administrator.
-                            </div>
                             <div class="signin-actions">
                                 <button type="submit" class="btn btn-primary">Sign in</button>
                             </div>
-                            <div style="text-align:center;margin-top:10px;">
+                            <div style="text-align:center;margin-top:14px;">
                                 <a href="/signup" style="color:#2563eb;text-decoration:none;font-weight:700;">Supplier? Create an account</a>
                             </div>
                         </form>
