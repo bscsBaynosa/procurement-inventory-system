@@ -3,6 +3,8 @@
 namespace App\Controllers;
 
 use App\Services\AuthService;
+use App\Services\MailService;
+use App\Database\Connection;
 
 class AuthController extends BaseController
 {
@@ -87,6 +89,112 @@ class AuthController extends BaseController
     {
     $this->auth()->logout();
         header('Location: /');
+    }
+
+    /** Forgot password (GET): show request form on landing */
+    public function showForgot(?string $msg = null, ?string $err = null): void
+    {
+        $this->showLanding($err, null, $msg, 'forgot');
+    }
+
+    /** Ensure password_resets support table exists */
+    private function ensurePasswordResetsTable(): void
+    {
+        $pdo = Connection::resolve();
+        $pdo->exec('CREATE TABLE IF NOT EXISTS password_resets (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+            token_hash CHAR(64) NOT NULL,
+            expires_at TIMESTAMPTZ NOT NULL,
+            used_at TIMESTAMPTZ NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )');
+        // Helpful index
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token_hash)');
+    }
+
+    /** Forgot password (POST): send reset link via email */
+    public function sendReset(): void
+    {
+        $identifier = trim((string)($_POST['identifier'] ?? ''));
+        if ($identifier === '') { $this->showForgot(null, 'Please enter your username or email.'); return; }
+        try {
+            $this->ensurePasswordResetsTable();
+            $pdo = Connection::resolve();
+            $stmt = $pdo->prepare('SELECT user_id, username, email FROM users WHERE LOWER(username)=LOWER(:id) OR LOWER(email)=LOWER(:id) LIMIT 1');
+            $stmt->execute(['id' => $identifier]);
+            $user = $stmt->fetch(\PDO::FETCH_ASSOC);
+            // Always behave as if success to prevent user enumeration; only send if we find the user
+            if ($user && !empty($user['email'])) {
+                $token = bin2hex(random_bytes(32));
+                $hash = hash('sha256', $token);
+                $exp  = date('Y-m-d H:i:sP', time() + 3600); // 1 hour
+                $ins = $pdo->prepare('INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES (:u,:h,:e)');
+                $ins->execute(['u' => (int)$user['user_id'], 'h' => $hash, 'e' => $exp]);
+
+                // Compose email
+                $forwarded = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
+                $scheme = $forwarded !== '' ? explode(',', $forwarded)[0] : ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http');
+                $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+                $link = $scheme . '://' . $host . '/reset-password?token=' . $token;
+                $body = "Hello,\n\nWe received a request to reset your password.\n" .
+                        "If you made this request, click the link below to set a new password.\n\n" .
+                        $link . "\n\nThis link will expire in 1 hour. If you didn't request this, you can ignore this email.";
+                (new MailService())->send((string)$user['email'], 'Reset your password', $body);
+            }
+            $this->showForgot('If the account exists, we sent a reset link to its email address. Please check your inbox.', null);
+        } catch (\Throwable $e) {
+            $this->showForgot(null, 'Could not process request at this time.');
+        }
+    }
+
+    /** Reset form (GET) */
+    public function showResetForm(): void
+    {
+        $token = isset($_GET['token']) ? trim((string)$_GET['token']) : '';
+        $this->render('auth/reset.php', ['token' => $token, 'error' => null]);
+    }
+
+    /** Reset handler (POST) */
+    public function handleReset(): void
+    {
+        $token = trim((string)($_POST['token'] ?? ''));
+        $password = (string)($_POST['password'] ?? '');
+        $confirm = (string)($_POST['confirm'] ?? '');
+        if ($token === '' || $password === '' || $confirm === '') {
+            $this->render('auth/reset.php', ['token' => $token, 'error' => 'All fields are required.']); return;
+        }
+        if ($password !== $confirm) {
+            $this->render('auth/reset.php', ['token' => $token, 'error' => 'Passwords do not match.']); return;
+        }
+        if (strlen($password) < 6) {
+            $this->render('auth/reset.php', ['token' => $token, 'error' => 'Password must be at least 6 characters.']); return;
+        }
+        try {
+            $this->ensurePasswordResetsTable();
+            $pdo = Connection::resolve();
+            $hash = hash('sha256', $token);
+            $sel = $pdo->prepare('SELECT id, user_id, expires_at, used_at FROM password_resets WHERE token_hash=:h ORDER BY id DESC LIMIT 1');
+            $sel->execute(['h' => $hash]);
+            $row = $sel->fetch(\PDO::FETCH_ASSOC);
+            if (!$row) { $this->render('auth/reset.php', ['token' => $token, 'error' => 'Invalid or expired link.']); return; }
+            if (!empty($row['used_at'])) { $this->render('auth/reset.php', ['token' => $token, 'error' => 'This link has already been used.']); return; }
+            if (strtotime((string)$row['expires_at']) < time()) { $this->render('auth/reset.php', ['token' => $token, 'error' => 'This link has expired.']); return; }
+
+            // Update user password
+            $newHash = password_hash($password, PASSWORD_BCRYPT);
+            $upd = $pdo->prepare('UPDATE users SET password_hash=:p WHERE user_id=:u');
+            $upd->execute(['p' => $newHash, 'u' => (int)$row['user_id']]);
+
+            // Mark token as used
+            $mark = $pdo->prepare('UPDATE password_resets SET used_at=NOW() WHERE id=:id');
+            $mark->execute(['id' => (int)$row['id']]);
+
+            // Show success on landing
+            $this->showLanding(null, null, 'Password updated. You can now sign in with your new password.', 'signin');
+        } catch (\Throwable $e) {
+            $this->render('auth/reset.php', ['token' => $token, 'error' => 'Could not reset password.']);
+        }
     }
 
     /** Supplier Signup (GET) */

@@ -190,8 +190,9 @@
                             <div class="signin-actions">
                                 <button type="submit" class="btn btn-primary">Sign in</button>
                             </div>
-                            <div style="text-align:center;margin-top:14px;">
+                            <div style="text-align:center;margin-top:14px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
                                 <a href="#" id="switchToSignup" style="color:#2563eb;text-decoration:none;font-weight:700;">Supplier? Create an account</a>
+                                <a href="#" id="switchToForgot" style="color:#2563eb;text-decoration:none;font-weight:700;">Forgot password?</a>
                             </div>
                         </form>
 
@@ -222,6 +223,20 @@
                             </div>
                             <div class="signin-actions">
                                 <button type="submit" class="btn btn-primary">Sign Up</button>
+                            </div>
+                        </form>
+                        
+                        <!-- Forgot password form -->
+                        <form id="forgotForm" class="hidden" method="POST" action="/auth/forgot">
+                            <div class="form-group">
+                                <label for="identifier">Username or Email</label>
+                                <input id="identifier" name="identifier" required />
+                            </div>
+                            <div class="signin-actions">
+                                <button type="submit" class="btn btn-primary">Send reset link</button>
+                            </div>
+                            <div style="text-align:center;margin-top:14px;">
+                                <a href="#" id="switchToSignin2" style="color:#2563eb;text-decoration:none;font-weight:700;">Back to sign in</a>
                             </div>
                         </form>
                     </div>
@@ -313,11 +328,14 @@
             btn.textContent = isPw ? 'Hide' : 'Show';
             btn.setAttribute('aria-label', isPw ? 'Hide password' : 'Show password');
         }
-        // Toggle between sign in and sign up without leaving the page
+        // Toggle between sign in, sign up, and forgot without leaving the page
         const signinForm = document.getElementById('signinForm');
         const signupForm = document.getElementById('signupForm');
         const toSignup = document.getElementById('switchToSignup');
         const toSignin = document.getElementById('switchToSignin');
+        const toSignin2 = document.getElementById('switchToSignin2');
+        const toForgot = document.getElementById('switchToForgot');
+        const forgotForm = document.getElementById('forgotForm');
         const title = document.getElementById('formTitle');
         const subtitle = document.getElementById('formSubtitle');
         const signinError = document.getElementById('signinError');
@@ -326,19 +344,23 @@
 
         function show(view){
             const isSignup = view === 'signup';
-            signinForm.classList.toggle('hidden', isSignup);
+            const isForgot = view === 'forgot';
+            signinForm.classList.toggle('hidden', isSignup || isForgot);
             signupForm.classList.toggle('hidden', !isSignup);
+            if (forgotForm) forgotForm.classList.toggle('hidden', !isForgot);
             toSignin.classList.toggle('hidden', !isSignup);
             if (signinError) signinError.style.display = isSignup ? 'none' : '';
             if (signupError) signupError.classList.toggle('hidden', !isSignup);
             // keep success visible only on sign-in view to prompt login
             if (signupSuccess) signupSuccess.style.display = isSignup ? 'none' : '';
-            title.textContent = isSignup ? 'Create account' : 'Sign in';
-            subtitle.textContent = isSignup ? 'Enter your details to continue.' : 'Enter your credentials to continue.';
+            title.textContent = isSignup ? 'Create account' : (isForgot ? 'Reset password' : 'Sign in');
+            subtitle.textContent = isSignup ? 'Enter your details to continue.' : (isForgot ? 'Enter your username or email to receive a reset link.' : 'Enter your credentials to continue.');
         }
 
         if (toSignup) toSignup.addEventListener('click', function(e){ e.preventDefault(); show('signup'); });
         if (toSignin) toSignin.addEventListener('click', function(e){ e.preventDefault(); show('signin'); });
+        if (toSignin2) toSignin2.addEventListener('click', function(e){ e.preventDefault(); show('signin'); });
+        if (toForgot) toForgot.addEventListener('click', function(e){ e.preventDefault(); show('forgot'); });
 
         // Initialize default accent and initial view (from server if provided)
         document.body.setAttribute('data-role', 'admin');

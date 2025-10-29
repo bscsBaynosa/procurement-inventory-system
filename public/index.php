@@ -88,6 +88,24 @@ if ($method === 'GET' && $path === '/login') {
 	exit;
 }
 
+// Forgot password shortcuts
+if ($method === 'GET' && $path === '/forgot') {
+	$auth->showForgot();
+	exit;
+}
+if ($method === 'POST' && $path === '/auth/forgot') {
+	$auth->sendReset();
+	exit;
+}
+if ($method === 'GET' && $path === '/reset-password') {
+	$auth->showResetForm();
+	exit;
+}
+if ($method === 'POST' && $path === '/auth/reset') {
+	$auth->handleReset();
+	exit;
+}
+
 if ($method === 'POST' && $path === '/auth/login') {
 	$auth->login();
 	exit;
