@@ -64,6 +64,42 @@
             <?php endif; ?>
             </tbody>
         </table>
+
+        <div class="h1" style="margin-top:20px;">Existing POs</div>
+        <table style="margin-top:12px;">
+            <thead>
+                <tr>
+                    <th>PO Number</th>
+                    <th>Request ID</th>
+                    <th>Branch</th>
+                    <th>Item</th>
+                    <th>Qty</th>
+                    <th>PO Status</th>
+                    <th>Created</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php if (!empty($pos)): ?>
+                <?php foreach ($pos as $po): ?>
+                    <tr>
+                        <td><?= htmlspecialchars((string)$po['po_number'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><?= htmlspecialchars((string)$po['request_id'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><?= htmlspecialchars((string)($po['branch_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><?= htmlspecialchars((string)($po['item_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><?= htmlspecialchars((string)($po['quantity'] ?? '1'), ENT_QUOTES, 'UTF-8') ?> <?= htmlspecialchars((string)($po['unit'] ?? 'pcs'), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><span class="badge"><?= htmlspecialchars((string)($po['po_status'] ?? 'issued'), ENT_QUOTES, 'UTF-8') ?></span></td>
+                        <td><?= htmlspecialchars((string)($po['created_at'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td>
+                            <a class="btn" href="/procurement/po/create?request_id=<?= urlencode((string)$po['request_id']) ?>">View/Download</a>
+                        </td>
+                    </tr>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <tr><td colspan="8" class="muted">No POs yet.</td></tr>
+            <?php endif; ?>
+            </tbody>
+        </table>
     </main>
 </div>
 </body>

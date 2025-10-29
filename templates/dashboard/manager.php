@@ -84,7 +84,14 @@
                                     <form action="/manager/requests/update-status" method="POST" style="display:inline-flex; gap:6px; align-items:center;">
                                         <input type="hidden" name="request_id" value="<?= htmlspecialchars((string)$request['request_id'], ENT_QUOTES, 'UTF-8') ?>" />
                                         <select class="inline" name="status">
-                                            <?php $statuses = ['for_approval' => 'For Approval', 'waiting_for_release' => 'Waiting for Release', 'disapproved' => 'Disapproved'];
+                                            <?php $statuses = [
+                                                'pending' => 'Pending',
+                                                'approved' => 'Approved',
+                                                'rejected' => 'Rejected',
+                                                'in_progress' => 'In Progress',
+                                                'completed' => 'Completed',
+                                                'cancelled' => 'Cancelled',
+                                            ];
                                             foreach ($statuses as $val => $label): ?>
                                                 <option value="<?= $val ?>" <?= ($request['status'] === $val ? 'selected' : '') ?>><?= $label ?></option>
                                             <?php endforeach; ?>

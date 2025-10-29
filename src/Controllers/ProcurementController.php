@@ -66,9 +66,10 @@ class ProcurementController extends BaseController
         }
 
         $requestId = isset($_POST['request_id']) ? (int)$_POST['request_id'] : 0;
-        $status = isset($_POST['status']) ? trim((string)$_POST['status']) : '';
-        $notes = isset($_POST['notes']) ? trim((string)$_POST['notes']) : null;
-        $allowed = ['for_approval','waiting_for_release','disapproved'];
+    $status = isset($_POST['status']) ? trim((string)$_POST['status']) : '';
+    $notes = isset($_POST['notes']) ? trim((string)$_POST['notes']) : null;
+    // Align with request_status enum
+    $allowed = ['pending','approved','rejected','in_progress','completed','cancelled'];
         if ($requestId <= 0 || !in_array($status, $allowed, true)) {
             header('Location: /dashboard');
             return;
@@ -157,8 +158,32 @@ class ProcurementController extends BaseController
             'branch_id' => $branchId ? (int)$branchId : null,
             'status' => 'approved',
         ]);
+        // Load existing POs
+        $pdo = \App\Database\Connection::resolve();
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS purchase_orders (
+                po_id BIGSERIAL PRIMARY KEY,
+                po_number VARCHAR(64) NOT NULL UNIQUE,
+                request_id BIGINT NOT NULL REFERENCES purchase_requests(request_id) ON DELETE CASCADE,
+                status VARCHAR(32) NOT NULL DEFAULT 'issued',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                created_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL
+            )");
+        } catch (\Throwable $e) {}
+        $pos = [];
+        try {
+            $sql = 'SELECT po.po_id, po.po_number, po.status AS po_status, po.created_at, pr.request_id, pr.quantity, pr.unit,
+                           i.name AS item_name, b.name AS branch_name
+                    FROM purchase_orders po
+                    JOIN purchase_requests pr ON pr.request_id = po.request_id
+                    LEFT JOIN inventory_items i ON i.item_id = pr.item_id
+                    LEFT JOIN branches b ON b.branch_id = pr.branch_id
+                    ORDER BY po.created_at DESC';
+            $st = $pdo->query($sql);
+            $pos = $st ? $st->fetchAll() : [];
+        } catch (\Throwable $e) {}
 
-        $this->render('procurement/po_list.php', [ 'approved' => $approved ]);
+        $this->render('procurement/po_list.php', [ 'approved' => $approved, 'pos' => $pos ]);
     }
 
     /**
