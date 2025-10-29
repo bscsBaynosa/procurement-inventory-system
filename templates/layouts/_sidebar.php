@@ -1,13 +1,21 @@
 <?php
 if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
 $role = $_SESSION['role'] ?? 'guest';
+// Normalize legacy roles to new naming
+function norm_role($r){
+    if ($r === 'custodian') return 'admin_assistant';
+    if ($r === 'procurement_manager') return 'procurement';
+    return $r;
+}
+$role = norm_role($role);
 $meName = $_SESSION['full_name'] ?? null;
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
 
 $brand = 'Dashboard';
-if ($role === 'admin') { $brand = 'Admin Control'; }
-elseif ($role === 'custodian') { $brand = 'Custodian'; }
-elseif ($role === 'procurement_manager') { $brand = 'Manager'; }
+if ($role === 'admin') { $brand = 'Administrator'; }
+elseif ($role === 'admin_assistant') { $brand = 'Admin Assistant'; }
+elseif ($role === 'procurement') { $brand = 'Procurement'; }
+elseif ($role === 'supplier') { $brand = 'Supplier'; }
 
 function nav_active($href, $path) {
     if ($href === '/dashboard') {
@@ -41,11 +49,16 @@ try {
             <a href="/admin/branches" class="<?= nav_active('/admin/branches', $path) ?>"><svg viewBox="0 0 24 24"><path d="M12 2l7 6v12H5V8l7-6zm0 2.2L7 8v10h10V8l-5-3.8z"/></svg> Branches</a>
             <a href="/admin/messages" class="<?= nav_active('/admin/messages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
         <?php elseif ($role === 'custodian'): ?>
+        <?php elseif ($role === 'admin_assistant'): ?>
             <a href="/custodian/inventory" class="<?= nav_active('/custodian/inventory', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm4 0h14v-2H7v2zM3 17h2v-2H3v2zm4 0h14v-2H7v2zM3 9h2V7H3v2zm4 0h14V7H7v2z"/></svg> Inventory</a>
             <a href="/custodian/requests/new" class="<?= nav_active('/custodian/requests', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 3h18v14H6l-3 3V3z"/></svg> Purchase Request</a>
             <a href="/admin/messages" class="<?= nav_active('/admin/messages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
-        <?php elseif ($role === 'procurement_manager'): ?>
+        <?php elseif ($role === 'procurement'): ?>
             <!-- Manager uses /dashboard for requests listing in current router -->
+            <a href="/admin/messages" class="<?= nav_active('/admin/messages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
+        <?php elseif ($role === 'supplier'): ?>
+            <a href="/dashboard" class="<?= nav_active('/dashboard', $path) ?>"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-5v-6H11v6H6v-9H3z"/></svg> Dashboard</a>
+            <a href="/supplier/items" class="<?= nav_active('/supplier/items', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Items Listing</a>
             <a href="/admin/messages" class="<?= nav_active('/admin/messages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
         <?php endif; ?>
         <?php if ($role !== 'guest'): ?>

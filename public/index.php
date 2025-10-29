@@ -51,6 +51,7 @@ use App\Controllers\AuthController;
 use App\Controllers\CustodianController;
 use App\Controllers\ProcurementController;
 use App\Controllers\AdminController;
+use App\Controllers\SupplierController;
 use App\Setup\Installer;
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
@@ -69,6 +70,7 @@ $auth = new AuthController();
 $custodian = new CustodianController();
 $manager = new ProcurementController();
 $admin = new AdminController();
+$supplier = new SupplierController();
 
 // Routes
 // Landing page first (role selection)
@@ -99,18 +101,32 @@ if ($method === 'GET' && $path === '/logout') {
 	exit;
 }
 
+// Supplier signup
+if ($method === 'GET' && $path === '/signup') {
+	$auth->showSupplierSignup();
+	exit;
+}
+if ($method === 'POST' && $path === '/signup') {
+	$auth->signupSupplier();
+	exit;
+}
+
 if ($method === 'GET' && $path === '/dashboard') {
 	$role = $_SESSION['role'] ?? null;
-	if ($role === 'custodian') {
+	if ($role === 'custodian' || $role === 'admin_assistant') {
 		$custodian->dashboard();
 		exit;
 	}
-	if ($role === 'procurement_manager') {
+	if ($role === 'procurement_manager' || $role === 'procurement') {
 		$manager->index();
 		exit;
 	}
 	if ($role === 'admin') {
 		$admin->dashboard();
+		exit;
+	}
+	if ($role === 'supplier') {
+		$supplier->dashboard();
 		exit;
 	}
 	header('Location: /login');
@@ -135,37 +151,42 @@ if ($method === 'GET' && $path === '/notifications') {
 	$admin->notifications();
 	exit;
 }
+if ($method === 'GET' && $path === '/notifications/view') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$admin->viewNotification();
+	exit;
+}
 
 // Custodian: Inventory
 if ($method === 'GET' && $path === '/custodian/inventory') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin'], true)) { header('Location: /login'); exit; }
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
 	$custodian->inventoryPage();
 	exit;
 }
 if ($method === 'POST' && $path === '/custodian/inventory') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin'], true)) { header('Location: /login'); exit; }
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
 	$custodian->inventoryCreate();
 	exit;
 }
 if ($method === 'POST' && $path === '/custodian/inventory/update') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin'], true)) { header('Location: /login'); exit; }
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
 	$custodian->inventoryUpdate();
 	exit;
 }
 if ($method === 'POST' && $path === '/custodian/inventory/delete') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin'], true)) { header('Location: /login'); exit; }
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
 	$custodian->inventoryDelete();
 	exit;
 }
 
 // Custodian: Purchase Request
 if ($method === 'GET' && $path === '/custodian/requests/new') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin'], true)) { header('Location: /login'); exit; }
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
 	$custodian->newRequest();
 	exit;
 }
 if ($method === 'POST' && $path === '/custodian/requests') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin'], true)) { header('Location: /login'); exit; }
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
 	$custodian->createRequest();
 	exit;
 }
@@ -234,6 +255,11 @@ if ($method === 'POST' && $path === '/admin/messages') {
 if ($method === 'POST' && $path === '/admin/messages/mark-read') {
 	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
 	$admin->markMessageRead();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/messages/delete') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$admin->deleteMessage();
 	exit;
 }
 

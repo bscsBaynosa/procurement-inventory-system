@@ -36,7 +36,7 @@
                 <?php if (!empty($notifications)): foreach ($notifications as $n): ?>
                     <tr>
                         <td><?= htmlspecialchars((string)$n['from_name'], ENT_QUOTES, 'UTF-8') ?></td>
-                        <td><?= htmlspecialchars((string)$n['subject'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><a href="/notifications/view?id=<?= (int)$n['id'] ?>" style="text-decoration:none;color:inherit;"><?= htmlspecialchars((string)$n['subject'], ENT_QUOTES, 'UTF-8') ?></a></td>
                         <td><?= htmlspecialchars((string)$n['created_at'], ENT_QUOTES, 'UTF-8') ?></td>
                         <td>
                             <div style="display:flex; gap:8px;">

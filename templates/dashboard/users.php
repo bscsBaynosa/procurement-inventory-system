@@ -136,7 +136,7 @@
                         <div>
                             <label>Role</label>
                             <select name="role" required>
-                                <?php $roles=['custodian','procurement_manager','admin']; foreach ($roles as $r): ?>
+                                <?php $roles=['admin','admin_assistant','procurement','supplier']; foreach ($roles as $r): ?>
                                     <option value="<?= $r ?>" <?= ($editUser['role']===$r?'selected':'') ?>><?= ucwords(str_replace('_',' ', $r)) ?></option>
                                 <?php endforeach; ?>
                             </select>
@@ -195,9 +195,10 @@
                         <div>
                             <label>Role</label>
                             <select name="role" required>
-                                <option value="custodian">Custodian</option>
-                                <option value="procurement_manager">Procurement manager</option>
                                 <option value="admin">Admin</option>
+                                <option value="admin_assistant">Admin Assistant</option>
+                                <option value="procurement">Procurement</option>
+                                <option value="supplier">Supplier</option>
                             </select>
                         </div>
                     </div>

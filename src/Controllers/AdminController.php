@@ -259,7 +259,11 @@ class AdminController extends BaseController
             return;
         }
 
-        if (!in_array($role, ['custodian','procurement_manager','admin'], true)) {
+        // Ensure new roles exist
+        try { $this->pdo->exec("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'supplier'"); } catch (\Throwable $e) {}
+        try { $this->pdo->exec("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'admin_assistant'"); } catch (\Throwable $e) {}
+        try { $this->pdo->exec("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'procurement'"); } catch (\Throwable $e) {}
+        if (!in_array($role, ['admin','admin_assistant','procurement','supplier','custodian','procurement_manager'], true)) {
             header('Location: /admin/users?error=Invalid+role');
             return;
         }
@@ -507,6 +511,29 @@ class AdminController extends BaseController
         try {
             $stmt = $this->pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
             $stmt->execute(['s' => $me, 'r' => $to, 'j' => $subject, 'b' => $body]);
+            $msgId = (int)$this->pdo->lastInsertId('messages_id_seq');
+            // Handle optional attachment upload
+            if (!empty($_FILES['attachment']) && is_uploaded_file($_FILES['attachment']['tmp_name'])) {
+                // Ensure attachments table
+                try {
+                    $this->pdo->exec('CREATE TABLE IF NOT EXISTS messages_attachments (
+                        id BIGSERIAL PRIMARY KEY,
+                        message_id BIGINT REFERENCES messages(id) ON DELETE CASCADE,
+                        file_name VARCHAR(255) NOT NULL,
+                        file_path TEXT NOT NULL,
+                        uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )');
+                } catch (\Throwable $e) {}
+                $name = basename((string)$_FILES['attachment']['name']);
+                $safe = preg_replace('/[^A-Za-z0-9._-]+/', '_', $name);
+                $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage';
+                if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+                $dest = $dir . DIRECTORY_SEPARATOR . uniqid('att_') . '_' . $safe;
+                if (@move_uploaded_file($_FILES['attachment']['tmp_name'], $dest)) {
+                    $insA = $this->pdo->prepare('INSERT INTO messages_attachments (message_id, file_name, file_path) VALUES (:m,:n,:p)');
+                    $insA->execute(['m' => $msgId, 'n' => $safe, 'p' => $dest]);
+                }
+            }
             header('Location: /admin/messages');
         } catch (\Throwable $e) {
             $msg = rawurlencode($e->getMessage());
@@ -546,6 +573,49 @@ class AdminController extends BaseController
             http_response_code(500);
             header('Content-Type: text/plain');
             echo 'Error loading notifications: ' . $e->getMessage();
+        }
+    }
+
+    /** View a single notification (message) without removing it; allow actions. */
+    public function viewNotification(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+        if ($me <= 0 || $id <= 0) { header('Location: /notifications'); return; }
+        try {
+            $st = $this->pdo->prepare('SELECT m.id, m.subject, m.body, m.is_read, m.created_at, m.sender_id, u.full_name AS from_name
+                FROM messages m JOIN users u ON u.user_id = m.sender_id WHERE m.id = :id AND m.recipient_id = :me');
+            $st->execute(['id' => $id, 'me' => $me]);
+            $msg = $st->fetch();
+            if (!$msg) { header('Location: /notifications'); return; }
+            $this->render('dashboard/notification_view.php', ['message' => $msg]);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            header('Content-Type: text/plain');
+            echo 'Error loading message: ' . $e->getMessage();
+        }
+    }
+
+    /** Delete a message after password confirmation. */
+    public function deleteMessage(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        $pwd = (string)($_POST['password'] ?? '');
+        if ($me <= 0 || $id <= 0 || $pwd === '') { header('Location: /notifications'); return; }
+        try {
+            $st = $this->pdo->prepare('SELECT password_hash FROM users WHERE user_id = :id');
+            $st->execute(['id' => $me]);
+            $hash = (string)$st->fetchColumn();
+            if ($hash === '' || !password_verify($pwd, $hash)) { header('Location: /notifications?error=Bad+password'); return; }
+            $del = $this->pdo->prepare('DELETE FROM messages WHERE id = :mid AND recipient_id = :me');
+            $del->execute(['mid' => $id, 'me' => $me]);
+            $ref = $_SERVER['HTTP_REFERER'] ?? '/notifications';
+            header('Location: ' . $ref);
+        } catch (\Throwable $e) {
+            header('Location: /notifications?error=' . rawurlencode($e->getMessage()));
         }
     }
 

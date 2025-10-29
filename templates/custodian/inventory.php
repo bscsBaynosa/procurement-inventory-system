@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Custodian • Inventory</title>
+    <title>Admin Assistant • Inventory</title>
     <link rel="stylesheet" href="/css/main.css">
     <?php require __DIR__ . '/../layouts/_favicon.php'; ?>
     <?php require __DIR__ . '/../layouts/_theme.php'; ?>
@@ -37,6 +37,8 @@
     <main class="content">
         <div class="h1">Inventory</div>
         <div class="grid">
+            <?php $role = $_SESSION['role'] ?? ''; if ($role === 'custodian') $role = 'admin_assistant'; ?>
+            <?php if ($role !== 'admin_assistant'): ?>
             <div class="card">
                 <div style="font-weight:700; margin-bottom:8px;">Add Item</div>
                 <form method="POST" action="/custodian/inventory">
@@ -70,6 +72,7 @@
                     </div>
                 </form>
             </div>
+            <?php endif; ?>
             <div class="card">
                 <div style="font-weight:700; margin-bottom:8px;">Items</div>
                 <table>
@@ -85,6 +88,7 @@
                             <td><?= (int)($it['quantity'] ?? 0) ?></td>
                             <td><?= htmlspecialchars((string)($it['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                             <td class="actions">
+                                <?php if ($role !== 'admin_assistant'): ?>
                                 <form method="POST" action="/custodian/inventory/update" style="display:inline-flex; gap:6px; align-items:center;">
                                     <input type="hidden" name="item_id" value="<?= (int)$it['item_id'] ?>">
                                     <select name="status">
@@ -98,6 +102,9 @@
                                     <input type="hidden" name="item_id" value="<?= (int)$it['item_id'] ?>">
                                     <button class="btn muted" type="submit">Delete</button>
                                 </form>
+                                <?php else: ?>
+                                    <span class="muted">No actions</span>
+                                <?php endif; ?>
                             </td>
                         </tr>
                     <?php endforeach; else: ?>

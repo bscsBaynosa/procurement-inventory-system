@@ -153,7 +153,7 @@
                                 <?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?>
                             </div>
                         <?php endif; ?>
-                        <form action="/auth/login" method="POST" onsubmit="syncRoleToSelect()">
+                        <form action="/auth/login" method="POST">
                             <input type="hidden" name="from" value="landing" />
                             <div class="form-row">
                                 <div class="form-group" style="flex:1;">
@@ -168,25 +168,14 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="form-group">
-                                <label>Sign in as</label>
-                                <div class="roles" id="roleChips">
-                                    <label class="chip"><input type="radio" name="role_chip" value="procurement_manager"> Manager</label>
-                                    <label class="chip"><input type="radio" name="role_chip" value="custodian"> Custodian</label>
-                                    <label class="chip active"><input type="radio" name="role_chip" value="admin" checked> Admin</label>
-                                </div>
-                                <!-- real field submitted -->
-                                <select id="roleSelect" name="role" style="display:none">
-                                    <option value="procurement_manager">Procurement Manager</option>
-                                    <option value="custodian">Custodian</option>
-                                    <option value="admin" selected>Administrator</option>
-                                </select>
-                            </div>
-                            <div class="form-group" id="roleInfo" aria-live="polite" style="margin-top:6px;">
-                                <!-- dynamic description goes here -->
+                            <div class="form-group" aria-live="polite" style="margin-top:6px;color:#475569;">
+                                Sign up is only for Suppliers. Admin, Admin Assistant, and Procurement accounts are created by the Administrator.
                             </div>
                             <div class="signin-actions">
                                 <button type="submit" class="btn btn-primary">Sign in</button>
+                            </div>
+                            <div style="text-align:center;margin-top:10px;">
+                                <a href="/signup" style="color:#2563eb;text-decoration:none;font-weight:700;">Supplier? Create an account</a>
                             </div>
                         </form>
                     </div>
@@ -268,26 +257,7 @@
     <script>
         function toggleMenu(){ document.getElementById('navLinks').classList.toggle('open'); }
         function closeMenu(){ document.getElementById('navLinks').classList.remove('open'); }
-        const chips = document.getElementById('roleChips');
-        chips.addEventListener('click', (e) => {
-            const label = e.target.closest('label.chip');
-            if (!label) return;
-            [...chips.querySelectorAll('.chip')].forEach(c => c.classList.remove('active'));
-            label.classList.add('active');
-            const value = label.querySelector('input').value;
-            const select = document.getElementById('roleSelect');
-            select.value = value;
-            // Update page accent theme based on role
-            document.body.setAttribute('data-role', value);
-            // Update role description
-            updateRoleInfo(value);
-        });
-
-        function syncRoleToSelect(){
-            // Ensure selected chip syncs to hidden select before submit
-            const active = document.querySelector('#roleChips .chip.active input');
-            if (active) document.getElementById('roleSelect').value = active.value;
-        }
+        // remove role chips; keep password toggle only
         function togglePassword(){
             const input = document.getElementById('password');
             const btn = document.querySelector('.pw-toggle');
@@ -297,40 +267,8 @@
             btn.textContent = isPw ? 'Hide' : 'Show';
             btn.setAttribute('aria-label', isPw ? 'Hide password' : 'Show password');
         }
-        // Dynamic role descriptions
-        const roleDescriptions = {
-            procurement_manager: `
-                <strong>Manager</strong>
-                <ul style="margin:6px 0 0 18px;color:#475569;">
-                    <li>Review and approve purchase requests</li>
-                    <li>Track supplier performance and budgets</li>
-                    <li>Monitor inventory health across branches</li>
-                </ul>
-            `,
-            custodian: `
-                <strong>Custodian</strong>
-                <ul style="margin:6px 0 0 18px;color:#475569;">
-                    <li>Log stock in/out and current quantities</li>
-                    <li>Submit purchase requests when low</li>
-                    <li>Maintain accurate item records</li>
-                </ul>
-            `,
-            admin: `
-                <strong>Admin</strong>
-                <ul style="margin:6px 0 0 18px;color:#475569;">
-                    <li>Manage users, roles, and branches</li>
-                    <li>Configure system settings and access</li>
-                    <li>Audit logs and compliance reports</li>
-                </ul>
-            `,
-        };
-        function updateRoleInfo(role){
-            const el = document.getElementById('roleInfo');
-            el.innerHTML = roleDescriptions[role] || '';
-        }
-        // Initialize default
-    document.body.setAttribute('data-role', 'admin');
-    updateRoleInfo('admin');
+        // Initialize default accent
+        document.body.setAttribute('data-role', 'admin');
     </script>
 </body>
 </html>

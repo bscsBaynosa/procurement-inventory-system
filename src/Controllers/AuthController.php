@@ -32,29 +32,24 @@ class AuthController extends BaseController
 
     public function showLoginForm(?string $error = null): void
     {
-        $selectedRole = isset($_GET['role']) ? (string)$_GET['role'] : null;
-        $this->render('auth/login.php', [
-            'error' => $error,
-            'selectedRole' => $selectedRole,
-        ]);
+        $this->render('auth/login.php', [ 'error' => $error ]);
     }
 
     public function login(): void
     {
         $username = trim($_POST['username'] ?? '');
         $password = (string)($_POST['password'] ?? '');
-        $role = (string)($_POST['role'] ?? '');
 
         $ip = $_SERVER['REMOTE_ADDR'] ?? '';
         $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
 
-        if ($username === '' || $password === '' || $role === '') {
+        if ($username === '' || $password === '') {
             $this->showLoginForm('All fields are required.');
             return;
         }
 
         try {
-            if ($this->auth()->attempt($username, $password, $role, $ip, $ua)) {
+            if ($this->auth()->attempt($username, $password, $ip, $ua)) {
                 header('Location: /dashboard');
                 return;
             }
@@ -87,6 +82,50 @@ class AuthController extends BaseController
     {
     $this->auth()->logout();
         header('Location: /');
+    }
+
+    /** Supplier Signup (GET) */
+    public function showSupplierSignup(?string $error = null, ?string $success = null): void
+    {
+        $this->render('auth/signup_supplier.php', [ 'error' => $error, 'success' => $success ]);
+    }
+
+    /** Supplier Signup (POST): creates a new supplier user and emails a random password */
+    public function signupSupplier(): void
+    {
+        $company = trim((string)($_POST['company'] ?? ''));
+        $category = trim((string)($_POST['category'] ?? ''));
+        $username = trim((string)($_POST['username'] ?? ''));
+        $email = trim((string)($_POST['email'] ?? ''));
+        $contact = trim((string)($_POST['contact'] ?? ''));
+        if ($company === '' || $category === '' || $username === '' || $email === '') {
+            $this->showSupplierSignup('All required fields must be filled.');
+            return;
+        }
+        try {
+            // Ensure new roles exist in enum
+            $pdo = \App\Database\Connection::resolve();
+            try { $pdo->exec("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'supplier'"); } catch (\Throwable $e) {}
+            try { $pdo->exec("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'admin_assistant'"); } catch (\Throwable $e) {}
+            try { $pdo->exec("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'procurement'"); } catch (\Throwable $e) {}
+
+            // Generate random 6-char password
+            $pwd = \App\Services\PasswordService::randomPassword(6);
+            $hash = password_hash($pwd, PASSWORD_BCRYPT);
+
+            // Create user as supplier; store company in first_name, last_name fallback
+            $stmt = $pdo->prepare('INSERT INTO users (username, password_hash, first_name, last_name, full_name, email, role, is_active) VALUES (:u,:p,:fn,:ln,:n,:e,\'supplier\', TRUE)');
+            $fn = $company; $ln = $category;
+            $stmt->execute(['u' => $username, 'p' => $hash, 'fn' => $fn, 'ln' => $ln, 'n' => $company, 'e' => $email]);
+
+            // Send email with the generated password
+            $mail = new \App\Services\MailService();
+            $mail->send($email, 'Your Supplier Account Credentials', "Hello,\n\nYour supplier account has been created.\nUsername: {$username}\nPassword: {$pwd}\n\nPlease sign in and change your password in Settings.\n");
+
+            $this->showSupplierSignup(null, 'Account created. Please check your email for the password.');
+        } catch (\Throwable $e) {
+            $this->showSupplierSignup('Signup failed: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8'));
+        }
     }
 }
 ?>

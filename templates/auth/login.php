@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login - Procurement and Inventory System</title>
+    <title>Sign in - Procurement and Inventory System</title>
     <link rel="stylesheet" href="/css/main.css">
     <?php require __DIR__ . '/../layouts/_favicon.php'; ?>
 </head>
 <body>
     <div class="container">
-        <h1>Login</h1>
+        <h1>Sign in</h1>
         <?php if (!empty($error)): ?>
             <div class="error"><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></div>
         <?php endif; ?>
@@ -22,17 +22,11 @@
                 <label for="password">Password</label>
                 <input type="password" id="password" name="password" required>
             </div>
-            <div class="form-group">
-                <label for="role">Login as:</label>
-                <select id="role" name="role" required>
-                    <?php $selectedRole = $selectedRole ?? 'admin'; ?>
-                    <option value="custodian" <?= ($selectedRole === 'custodian') ? 'selected' : '' ?>>Custodian</option>
-                    <option value="procurement_manager" <?= ($selectedRole === 'procurement_manager') ? 'selected' : '' ?>>Procurement Manager</option>
-                    <option value="admin" <?= ($selectedRole === 'admin') ? 'selected' : '' ?>>Administrator</option>
-                </select>
-            </div>
             <button type="submit">Login</button>
         </form>
+        <div style="margin-top:10px;">
+            <a href="/signup">Supplier? Create an account</a>
+        </div>
         <div class="footer">
             <p>&copy; 2023 Procurement and Inventory System</p>
         </div>

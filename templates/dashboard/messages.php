@@ -51,7 +51,7 @@
                         <?php if (!empty($inbox)): foreach ($inbox as $m): ?>
                         <tr class="<?= !empty($m['is_read']) ? '' : 'unread' ?>">
                             <td><?= htmlspecialchars((string)$m['from_name'], ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= htmlspecialchars((string)$m['subject'], ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><a href="/notifications/view?id=<?= (int)$m['id'] ?>" style="text-decoration:none;color:inherit;"><?= htmlspecialchars((string)$m['subject'], ENT_QUOTES, 'UTF-8') ?></a></td>
                             <td><?= htmlspecialchars((string)$m['created_at'], ENT_QUOTES, 'UTF-8') ?></td>
                             <td>
                                 <?php if (empty($m['is_read'])): ?>
@@ -72,7 +72,7 @@
             </div>
             <div class="card">
                 <h3 style="margin-top:0">Compose</h3>
-                <form method="POST" action="/admin/messages" style="display:grid; gap:10px;">
+                <form method="POST" action="/admin/messages" style="display:grid; gap:10px;" enctype="multipart/form-data">
                     <div>
                         <label>To</label>
                         <select name="to" required>
@@ -89,6 +89,10 @@
                     <div>
                         <label>Message</label>
                         <textarea name="body" rows="10" required placeholder="Write your message..."></textarea>
+                    </div>
+                    <div>
+                        <label>Attachment (optional)</label>
+                        <input type="file" name="attachment" />
                     </div>
                     <div style="display:flex; justify-content:flex-end; gap:10px;">
                         <button class="btn" type="submit">Send</button>

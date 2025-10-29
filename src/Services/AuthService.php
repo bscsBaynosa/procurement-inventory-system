@@ -17,8 +17,9 @@ class AuthService
 
 	/**
 	 * Attempt to authenticate a user and start a session.
+	 * Role is now derived from the database; no role selection at login.
 	 */
-	public function attempt(string $username, string $password, string $role, string $ip = '', string $userAgent = ''): bool
+	public function attempt(string $username, string $password, string $ip = '', string $userAgent = ''): bool
 	{
 		$stmt = $this->pdo->prepare('SELECT user_id, username, password_hash, role, branch_id, is_active FROM users WHERE username = :u LIMIT 1');
 		$stmt->execute(['u' => $username]);
@@ -30,13 +31,6 @@ class AuthService
 		}
 		if (!$user['is_active']) {
 			$this->lastError = 'Account is disabled.';
-			return false;
-		}
-
-		// Strict role check: selected role must match the user's actual role
-		if ($user['role'] !== $role) {
-			// Give a friendly hint to switch roles.
-			$this->lastError = 'Selected role does not match this user. Try signing in as ' . (string)$user['role'] . '.';
 			return false;
 		}
 

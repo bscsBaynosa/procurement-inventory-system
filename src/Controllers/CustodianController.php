@@ -29,7 +29,9 @@ class CustodianController extends BaseController
 
     public function dashboard(): void
     {
-        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['custodian', 'admin'], true)) {
+        $role = $_SESSION['role'] ?? '';
+        if ($role === 'custodian') { $role = 'admin_assistant'; }
+        if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant', 'admin'], true)) {
             header('Location: /login');
             return;
         }
@@ -44,7 +46,9 @@ class CustodianController extends BaseController
     /** Inventory list & simple create form for custodian */
     public function inventoryPage(): void
     {
-        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['custodian', 'admin'], true)) {
+        $role = $_SESSION['role'] ?? '';
+        if ($role === 'custodian') { $role = 'admin_assistant'; }
+        if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant', 'admin'], true)) {
             header('Location: /login'); return;
         }
         $branchId = $_SESSION['branch_id'] ?? null;
@@ -59,7 +63,11 @@ class CustodianController extends BaseController
 
     public function inventoryCreate(): void
     {
-        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['custodian', 'admin'], true)) { header('Location: /login'); return; }
+    $role = $_SESSION['role'] ?? '';
+    if ($role === 'custodian') { $role = 'admin_assistant'; }
+    if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant', 'admin'], true)) { header('Location: /login'); return; }
+    // Admin Assistant may not create inventory items
+    if ($role === 'admin_assistant') { header('Location: /custodian/inventory?error=Not+allowed'); return; }
         $name = trim((string)($_POST['name'] ?? ''));
         $category = trim((string)($_POST['category'] ?? ''));
         $status = (string)($_POST['status'] ?? 'good');
@@ -80,7 +88,10 @@ class CustodianController extends BaseController
 
     public function inventoryUpdate(): void
     {
-        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['custodian', 'admin'], true)) { header('Location: /login'); return; }
+    $role = $_SESSION['role'] ?? '';
+    if ($role === 'custodian') { $role = 'admin_assistant'; }
+    if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant', 'admin'], true)) { header('Location: /login'); return; }
+    if ($role === 'admin_assistant') { header('Location: /custodian/inventory?error=Not+allowed'); return; }
         $id = (int)($_POST['item_id'] ?? 0);
         if ($id <= 0) { header('Location: /custodian/inventory?error=Invalid+item'); return; }
         $payload = [];
@@ -93,7 +104,10 @@ class CustodianController extends BaseController
 
     public function inventoryDelete(): void
     {
-        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['custodian', 'admin'], true)) { header('Location: /login'); return; }
+    $role = $_SESSION['role'] ?? '';
+    if ($role === 'custodian') { $role = 'admin_assistant'; }
+    if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant', 'admin'], true)) { header('Location: /login'); return; }
+    if ($role === 'admin_assistant') { header('Location: /custodian/inventory?error=Not+allowed'); return; }
         $id = (int)($_POST['item_id'] ?? 0);
         if ($id <= 0) { header('Location: /custodian/inventory?error=Invalid+item'); return; }
         $this->inventory()->deleteItem($id);
@@ -112,7 +126,9 @@ class CustodianController extends BaseController
     /** Handle Purchase Request submission */
     public function createRequest(): void
     {
-        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['custodian', 'admin'], true)) { header('Location: /login'); return; }
+    $role = $_SESSION['role'] ?? '';
+    if ($role === 'custodian') { $role = 'admin_assistant'; }
+    if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant', 'admin'], true)) { header('Location: /login'); return; }
         $userId = (int)($_SESSION['user_id'] ?? 0);
         $branchId = (int)($_SESSION['branch_id'] ?? 0);
         $payload = [
@@ -131,7 +147,7 @@ class CustodianController extends BaseController
         // Optional: notify all procurement managers by message
         try {
             $pdo = \App\Database\Connection::resolve();
-            $managers = $pdo->query("SELECT user_id FROM users WHERE role = 'procurement_manager' AND is_active = TRUE")->fetchAll();
+            $managers = $pdo->query("SELECT user_id FROM users WHERE role IN ('procurement_manager','procurement') AND is_active = TRUE")->fetchAll();
             if ($managers) {
                 $ins = $pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
                 foreach ($managers as $m) {
