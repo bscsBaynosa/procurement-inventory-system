@@ -43,6 +43,9 @@ if (!class_exists(\App\Controllers\ProcurementController::class) && file_exists(
 if (!class_exists(\App\Controllers\AdminController::class) && file_exists(__DIR__ . '/../src/Controllers/AdminController.php')) {
 	require_once __DIR__ . '/../src/Controllers/AdminController.php';
 }
+if (!class_exists(\App\Controllers\SupplierController::class) && file_exists(__DIR__ . '/../src/Controllers/SupplierController.php')) {
+	require_once __DIR__ . '/../src/Controllers/SupplierController.php';
+}
 
 // Lazy-load DB connections in services; don't force-connect on every request
 // to allow the landing page to render even if the DB is momentarily unavailable.
@@ -130,6 +133,28 @@ if ($method === 'GET' && $path === '/dashboard') {
 		exit;
 	}
 	header('Location: /login');
+	exit;
+}
+
+// Supplier: Items Listing
+if ($method === 'GET' && $path === '/supplier/items') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
+	$supplier->itemsPage();
+	exit;
+}
+if ($method === 'POST' && $path === '/supplier/items') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
+	$supplier->itemsCreate();
+	exit;
+}
+if ($method === 'POST' && $path === '/supplier/items/update') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
+	$supplier->itemsUpdate();
+	exit;
+}
+if ($method === 'POST' && $path === '/supplier/items/delete') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
+	$supplier->itemsDelete();
 	exit;
 }
 

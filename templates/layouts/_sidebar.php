@@ -62,7 +62,6 @@ try {
             <a href="/procurement/po" class="<?= nav_active('/procurement/po', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Purchase Orders</a>
             <!-- Manager uses /dashboard for requests listing in current router -->
         <?php elseif ($role === 'supplier'): ?>
-            <a href="/dashboard" class="<?= nav_active('/dashboard', $path) ?>"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-5v-6H11v6H6v-9H3z"/></svg> Dashboard</a>
             <a href="/supplier/items" class="<?= nav_active('/supplier/items', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Items Listing</a>
         <?php endif; ?>
         <?php if ($role !== 'guest'): ?>
