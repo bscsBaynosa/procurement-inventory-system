@@ -24,6 +24,13 @@ function nav_active($href, $path) {
     return strpos($path, $href) === 0 ? 'active' : '';
 }
 
+function nav_active_many(array $hrefs, $path) {
+    foreach ($hrefs as $h) {
+        if (nav_active($h, $path) === 'active') return 'active';
+    }
+    return '';
+}
+
 
 $unreadCount = 0;
 try {
@@ -50,8 +57,8 @@ try {
             <a href="/admin/messages" class="<?= nav_active('/admin/messages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
         <?php elseif ($role === 'custodian'): ?>
         <?php elseif ($role === 'admin_assistant'): ?>
-            <a href="/custodian/inventory" class="<?= nav_active('/custodian/inventory', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm4 0h14v-2H7v2zM3 17h2v-2H3v2zm4 0h14v-2H7v2zM3 9h2V7H3v2zm4 0h14V7H7v2z"/></svg> Inventory</a>
-            <a href="/custodian/requests/new" class="<?= nav_active('/custodian/requests', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 3h18v14H6l-3 3V3z"/></svg> Purchase Request</a>
+            <a href="/admin-assistant/inventory" class="<?= nav_active_many(['/admin-assistant/inventory','/custodian/inventory'], $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm4 0h14v-2H7v2zM3 17h2v-2H3v2zm4 0h14v-2H7v2zM3 9h2V7H3v2zm4 0h14V7H7v2z"/></svg> Inventory</a>
+            <a href="/admin-assistant/requests/new" class="<?= nav_active_many(['/admin-assistant/requests','/custodian/requests'], $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 3h18v14H6l-3 3V3z"/></svg> Purchase Request</a>
             <a href="/admin/messages" class="<?= nav_active('/admin/messages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
         <?php elseif ($role === 'procurement'): ?>
             <!-- Manager uses /dashboard for requests listing in current router -->

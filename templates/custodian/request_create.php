@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Custodian • Purchase Request</title>
+    <title>Admin Assistant • Purchase Request</title>
     <link rel="stylesheet" href="/css/main.css">
     <?php require __DIR__ . '/../layouts/_favicon.php'; ?>
     <?php require __DIR__ . '/../layouts/_theme.php'; ?>
@@ -34,7 +34,7 @@
             <div class="card" style="border-color:#86efac; background:color-mix(in oklab, var(--card) 92%, #86efac); margin-bottom:12px;">Request submitted. You can also download the PDF.</div>
         <?php endif; ?>
         <div class="card">
-            <form method="POST" action="/custodian/requests">
+            <form method="POST" action="/admin-assistant/requests">
                 <label for="item_id">Item</label>
                 <select id="item_id" name="item_id" required>
                     <option value="">Select item…</option>

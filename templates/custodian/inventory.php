@@ -16,7 +16,8 @@
         html[data-theme="dark"] .sidebar{ background:#0f172a; }
         .content{ padding:18px 20px; }
         .h1{ font-weight:800; font-size:22px; margin: 6px 0 12px; }
-        .grid{ display:grid; grid-template-columns: 360px 1fr; gap:14px; }
+    .grid{ display:grid; grid-template-columns: 360px 1fr; gap:14px; }
+    .grid.single{ grid-template-columns: 1fr; }
         @media (max-width: 980px){ .layout{ grid-template-columns: 1fr; } .sidebar{ position:relative;height:auto; } .grid{ grid-template-columns: 1fr; } }
         .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; }
         label{ display:block; font-size:13px; color:var(--muted); margin:8px 0 6px; }
@@ -36,12 +37,12 @@
     <?php require __DIR__ . '/../layouts/_sidebar.php'; ?>
     <main class="content">
         <div class="h1">Inventory</div>
-        <div class="grid">
-            <?php $role = $_SESSION['role'] ?? ''; if ($role === 'custodian') $role = 'admin_assistant'; ?>
+        <?php $role = $_SESSION['role'] ?? ''; if ($role === 'custodian') $role = 'admin_assistant'; ?>
+        <div class="grid <?= ($role === 'admin_assistant') ? 'single' : '' ?>">
             <?php if ($role !== 'admin_assistant'): ?>
             <div class="card">
                 <div style="font-weight:700; margin-bottom:8px;">Add Item</div>
-                <form method="POST" action="/custodian/inventory">
+                <form method="POST" action="/admin-assistant/inventory">
                     <label for="name">Item Name</label>
                     <input id="name" name="name" type="text" required>
 
@@ -89,7 +90,7 @@
                             <td><?= htmlspecialchars((string)($it['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                             <td class="actions">
                                 <?php if ($role !== 'admin_assistant'): ?>
-                                <form method="POST" action="/custodian/inventory/update" style="display:inline-flex; gap:6px; align-items:center;">
+                                <form method="POST" action="/admin-assistant/inventory/update" style="display:inline-flex; gap:6px; align-items:center;">
                                     <input type="hidden" name="item_id" value="<?= (int)$it['item_id'] ?>">
                                     <select name="status">
                                         <option value="good" <?= ($it['status']==='good'?'selected':'') ?>>Good</option>
@@ -98,7 +99,7 @@
                                     </select>
                                     <button class="btn muted" type="submit">Update</button>
                                 </form>
-                                <form method="POST" action="/custodian/inventory/delete" onsubmit="return confirm('Delete this item?');">
+                                <form method="POST" action="/admin-assistant/inventory/delete" onsubmit="return confirm('Delete this item?');">
                                     <input type="hidden" name="item_id" value="<?= (int)$it['item_id'] ?>">
                                     <button class="btn muted" type="submit">Delete</button>
                                 </form>

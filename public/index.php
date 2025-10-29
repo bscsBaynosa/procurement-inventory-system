@@ -163,6 +163,27 @@ if ($method === 'GET' && $path === '/custodian/inventory') {
 	$custodian->inventoryPage();
 	exit;
 }
+// Admin Assistant alias routes (friendly naming)
+if ($method === 'GET' && $path === '/admin-assistant/inventory') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->inventoryPage();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin-assistant/inventory') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->inventoryCreate();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin-assistant/inventory/update') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->inventoryUpdate();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin-assistant/inventory/delete') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->inventoryDelete();
+	exit;
+}
 if ($method === 'POST' && $path === '/custodian/inventory') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
 	$custodian->inventoryCreate();
@@ -186,6 +207,18 @@ if ($method === 'GET' && $path === '/custodian/requests/new') {
 	exit;
 }
 if ($method === 'POST' && $path === '/custodian/requests') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->createRequest();
+	exit;
+}
+
+// Admin Assistant alias routes (purchase requests)
+if ($method === 'GET' && $path === '/admin-assistant/requests/new') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->newRequest();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin-assistant/requests') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
 	$custodian->createRequest();
 	exit;
