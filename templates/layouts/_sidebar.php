@@ -61,6 +61,7 @@ try {
             <a href="/admin-assistant/requests/new" class="<?= nav_active_many(['/admin-assistant/requests','/custodian/requests'], $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 3h18v14H6l-3 3V3z"/></svg> Purchase Request</a>
             <a href="/admin/messages" class="<?= nav_active('/admin/messages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
         <?php elseif ($role === 'procurement'): ?>
+            <a href="/procurement/po" class="<?= nav_active('/procurement/po', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Purchase Orders</a>
             <!-- Manager uses /dashboard for requests listing in current router -->
             <a href="/admin/messages" class="<?= nav_active('/admin/messages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
         <?php elseif ($role === 'supplier'): ?>
@@ -69,9 +70,9 @@ try {
             <a href="/admin/messages" class="<?= nav_active('/admin/messages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
         <?php endif; ?>
         <?php if ($role !== 'guest'): ?>
-            <a href="/notifications" class="<?= nav_active('/notifications', $path) ?>">
+            <a href="/inbox" class="<?= nav_active_many(['/inbox','/notifications'], $path) ?>">
                 <svg viewBox="0 0 24 24"><path d="M12 22a2 2 0 0 0 2-2H10a2 2 0 0 0 2 2zm6-6v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1l-2-2z"/></svg>
-                Notifications
+                Inbox
                 <?php if ($unreadCount > 0): ?>
                     <span style="margin-left:8px; display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px; padding:0 6px; border-radius:999px; background:#dc2626; color:#fff; font-size:12px; font-weight:700;"><?= (int)$unreadCount ?></span>
                 <?php endif; ?>

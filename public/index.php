@@ -145,13 +145,36 @@ if ($method === 'GET' && $path === '/manager/requests/generate-po') {
 	exit;
 }
 
-// Notifications (unread messages) for all roles
+// Procurement: PO module
+if ($method === 'GET' && $path === '/procurement/po') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->po();
+	exit;
+}
+if ($method === 'GET' && $path === '/procurement/po/create') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->createPO();
+	exit;
+}
+
+// Inbox (all messages) for all roles
 if ($method === 'GET' && $path === '/notifications') {
 	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
 	$admin->notifications();
 	exit;
 }
 if ($method === 'GET' && $path === '/notifications/view') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$admin->viewNotification();
+	exit;
+}
+// New friendly inbox routes
+if ($method === 'GET' && $path === '/inbox') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$admin->notifications();
+	exit;
+}
+if ($method === 'GET' && $path === '/inbox/view') {
 	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
 	$admin->viewNotification();
 	exit;

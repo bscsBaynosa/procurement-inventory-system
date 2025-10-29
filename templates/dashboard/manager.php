@@ -91,7 +91,11 @@
                                         </select>
                                         <button class="btn primary" type="submit">Update</button>
                                     </form>
-                                    <a class="btn" href="/manager/requests/generate-po?request_id=<?= urlencode((string)$request['request_id']) ?>">Generate PO</a>
+                                    <?php if (($request['status'] ?? '') === 'approved' || ($request['status'] ?? '') === 'in_progress'): ?>
+                                        <a class="btn" href="/procurement/po/create?request_id=<?= urlencode((string)$request['request_id']) ?>">Create/Download PO</a>
+                                    <?php else: ?>
+                                        <span class="btn" style="opacity:0.6; cursor:not-allowed;" title="PO available once approved">Create/Download PO</span>
+                                    <?php endif; ?>
                                     <?php if (!empty($request['requested_by_id'])): ?>
                                         <a class="btn" href="/admin/messages?to=<?= urlencode((string)$request['requested_by_id']) ?>&subject=<?= urlencode('Regarding Request #' . (string)$request['request_id'] . ' - ' . (string)$request['status']) ?>">Message</a>
                                     <?php endif; ?>

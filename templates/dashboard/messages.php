@@ -51,7 +51,7 @@
                         <?php if (!empty($inbox)): foreach ($inbox as $m): ?>
                         <tr class="<?= !empty($m['is_read']) ? '' : 'unread' ?>">
                             <td><?= htmlspecialchars((string)$m['from_name'], ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><a href="/notifications/view?id=<?= (int)$m['id'] ?>" style="text-decoration:none;color:inherit;"><?= htmlspecialchars((string)$m['subject'], ENT_QUOTES, 'UTF-8') ?></a></td>
+                            <td><a href="/inbox/view?id=<?= (int)$m['id'] ?>" style="text-decoration:none;color:inherit;"><?= htmlspecialchars((string)$m['subject'], ENT_QUOTES, 'UTF-8') ?></a></td>
                             <td><?= htmlspecialchars((string)$m['created_at'], ENT_QUOTES, 'UTF-8') ?></td>
                             <td>
                                 <?php if (empty($m['is_read'])): ?>

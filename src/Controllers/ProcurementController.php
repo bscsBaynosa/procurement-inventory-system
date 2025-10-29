@@ -33,12 +33,21 @@ class ProcurementController extends BaseController
 
     public function index(): void
     {
-        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager', 'admin'], true)) {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager', 'procurement', 'admin'], true)) {
             header('Location: /login');
             return;
         }
 
         $branchId = $_SESSION['branch_id'] ?? null;
+        // If there are approved requests, send Procurement to the PO flow
+        $approved = $this->requests()->getAllRequests([
+            'branch_id' => $branchId ? (int)$branchId : null,
+            'status' => 'approved',
+        ]);
+        if (!empty($approved)) {
+            header('Location: /procurement/po');
+            return;
+        }
         $requests = $this->requests()->getAllRequests([
             'branch_id' => $branchId ? (int)$branchId : null,
         ]);
@@ -51,7 +60,7 @@ class ProcurementController extends BaseController
      */
     public function updateRequestStatus(): void
     {
-        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager', 'admin'], true)) {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager', 'procurement', 'admin'], true)) {
             header('Location: /login');
             return;
         }
@@ -131,6 +140,83 @@ class ProcurementController extends BaseController
         ];
 
         $this->pdf()->generatePurchaseOrderPDF($poData);
+    }
+
+    /**
+     * GET: Procurement PO list (approved requests awaiting PO).
+     */
+    public function po(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager', 'procurement', 'admin'], true)) {
+            header('Location: /login');
+            return;
+        }
+
+        $branchId = $_SESSION['branch_id'] ?? null;
+        $approved = $this->requests()->getAllRequests([
+            'branch_id' => $branchId ? (int)$branchId : null,
+            'status' => 'approved',
+        ]);
+
+        $this->render('procurement/po_list.php', [ 'approved' => $approved ]);
+    }
+
+    /**
+     * GET: Create a PO record for an approved request then stream the PO PDF.
+     */
+    public function createPO(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager', 'procurement', 'admin'], true)) {
+            header('Location: /login');
+            return;
+        }
+
+        $requestId = isset($_GET['request_id']) ? (int)$_GET['request_id'] : 0;
+        if ($requestId <= 0) { header('Location: /procurement/po'); return; }
+
+        // Ensure the request exists and is approved
+        $req = $this->requests()->getRequestById($requestId);
+        if (!$req || (string)($req['status'] ?? '') !== 'approved') {
+            header('Location: /procurement/po');
+            return;
+        }
+
+        // Create purchase_orders table if missing and insert a PO record (idempotent by request)
+        $pdo = \App\Database\Connection::resolve();
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS purchase_orders (
+                po_id BIGSERIAL PRIMARY KEY,
+                po_number VARCHAR(64) NOT NULL UNIQUE,
+                request_id BIGINT NOT NULL REFERENCES purchase_requests(request_id) ON DELETE CASCADE,
+                status VARCHAR(32) NOT NULL DEFAULT 'issued',
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                created_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL
+            )");
+        } catch (\Throwable $e) {
+            // Continue even if creation fails; we'll still attempt to generate PDF for UX
+        }
+
+        // If a PO already exists for this request, reuse its number; else create one
+        $poNumber = null;
+        try {
+            $st = $pdo->prepare('SELECT po_number FROM purchase_orders WHERE request_id = :rid LIMIT 1');
+            $st->execute(['rid' => $requestId]);
+            $poNumber = $st->fetchColumn() ?: null;
+            if (!$poNumber) {
+                $poNumber = 'PO-' . date('Ymd') . '-' . $requestId;
+                $ins = $pdo->prepare("INSERT INTO purchase_orders (po_number, request_id, status, created_by) VALUES (:n,:r, 'issued', :by)");
+                $ins->execute(['n' => $poNumber, 'r' => $requestId, 'by' => $_SESSION['user_id'] ?? null]);
+                // Optionally move request to in_progress state now that a PO exists
+                $this->requests()->updateRequestStatus($requestId, 'in_progress', (int)($_SESSION['user_id'] ?? 0), 'PO created');
+            }
+        } catch (\Throwable $e) {
+            // Ignore DB write issues and fallback to a computed PO number for the PDF
+            if (!$poNumber) { $poNumber = 'PO-' . date('Ymd') . '-' . $requestId; }
+        }
+
+        // Delegate to PDF generation (will stream the PO)
+        $_GET['request_id'] = (string)$requestId; // keep generatePO flow simple
+        $this->generatePO();
     }
 }
  

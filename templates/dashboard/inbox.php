@@ -19,9 +19,10 @@
         table{ width:100%; border-collapse: collapse; }
         th, td{ padding:10px 12px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
         th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
-    .btn{ font-family:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; font-weight:700; font-size:14px; line-height:1; height:40px; padding:0 14px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center; transition:all .15s ease; cursor:pointer; }
-    .btn.muted{ background:transparent; color:var(--muted); border:1px solid var(--border); }
-    .btn.primary{ background:var(--accent); color:#fff; border:0; }
+        tr.unread td{ font-weight:700; }
+        .btn{ font-family:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; font-weight:700; font-size:14px; line-height:1; height:36px; padding:0 12px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center; transition:all .15s ease; cursor:pointer; }
+        .btn.muted{ background:transparent; color:var(--muted); border:1px solid var(--border); }
+        .btn.primary{ background:var(--accent); color:#fff; border:0; }
     </style>
 </head>
 <body>

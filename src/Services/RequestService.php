@@ -162,6 +162,38 @@ class RequestService
 				'new_status' => $status,
 				'notes' => $notes,
 			]);
+			// Notify procurement when a request is approved
+			if ($status === 'approved') {
+				try {
+					// Ensure messages table exists
+					$this->pdo->exec('CREATE TABLE IF NOT EXISTS messages (
+						id BIGSERIAL PRIMARY KEY,
+						sender_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+						recipient_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+						subject VARCHAR(255) NOT NULL,
+						body TEXT NOT NULL,
+						is_read BOOLEAN NOT NULL DEFAULT FALSE,
+						created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+					)');
+					// Send a message to all procurement roles
+					$recipients = $this->pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('procurement','procurement_manager')")->fetchAll();
+					$subject = 'Purchase Request #' . (string)$requestId . ' approved';
+					$body = 'A purchase request has been approved by Admin and is ready for PO issuance.';
+					if ($recipients) {
+						$ins = $this->pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
+						foreach ($recipients as $row) {
+							$ins->execute([
+								's' => $performedBy,
+								'r' => (int)$row['user_id'],
+								'j' => $subject,
+								'b' => $body,
+							]);
+						}
+					}
+				} catch (\Throwable $ignored) {
+					// best-effort notification; ignore errors
+				}
+			}
 		}
 
 		return $result;

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Notification</title>
+    <title>Message</title>
     <link rel="stylesheet" href="/css/main.css">
     <?php require __DIR__ . '/../layouts/_favicon.php'; ?>
     <?php require __DIR__ . '/../layouts/_theme.php'; ?>
@@ -43,11 +43,7 @@
             <div style="white-space:pre-wrap;"><?= nl2br(htmlspecialchars((string)$message['body'], ENT_QUOTES, 'UTF-8')) ?></div>
             <div style="margin-top:16px; display:flex; gap:10px; align-items:center;">
                 <a class="btn primary" href="/admin/messages?subject=Re:%20<?= rawurlencode((string)$message['subject']) ?>&to=<?= (int)$message['sender_id'] ?>">Reply / Forward</a>
-                <form method="POST" action="/admin/messages/delete" onsubmit="return confirm('Delete this notification?');" style="display:flex; gap:8px; align-items:center;">
-                    <input type="hidden" name="id" value="<?= (int)$message['id'] ?>" />
-                    <input type="password" name="password" placeholder="Confirm your password" required style="width:260px;" />
-                    <button type="submit" class="btn danger">Delete</button>
-                </form>
+                <a class="btn muted" href="/inbox">Back to Inbox</a>
             </div>
         </div>
     </main>

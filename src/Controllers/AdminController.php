@@ -564,11 +564,14 @@ class AdminController extends BaseController
         $me = (int)($_SESSION['user_id'] ?? 0);
         if ($me <= 0) { header('Location: /login'); return; }
         try {
-            $stmt = $this->pdo->prepare('SELECT m.id, m.subject, m.body, m.created_at, m.sender_id, u.full_name AS from_name
-                FROM messages m JOIN users u ON u.user_id = m.sender_id WHERE m.recipient_id = :me AND m.is_read = FALSE ORDER BY m.created_at DESC');
+            // Inbox: show all messages (read and unread), newest first
+            $stmt = $this->pdo->prepare('SELECT m.id, m.subject, m.body, m.created_at, m.sender_id, m.is_read, u.full_name AS from_name
+                FROM messages m JOIN users u ON u.user_id = m.sender_id
+                WHERE m.recipient_id = :me
+                ORDER BY m.created_at DESC');
             $stmt->execute(['me' => $me]);
             $list = $stmt->fetchAll();
-            $this->render('dashboard/notifications.php', ['notifications' => $list]);
+            $this->render('dashboard/inbox.php', ['inbox' => $list]);
         } catch (\Throwable $e) {
             http_response_code(500);
             header('Content-Type: text/plain');
