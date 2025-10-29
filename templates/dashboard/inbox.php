@@ -30,7 +30,11 @@
     <?php require __DIR__ . '/../layouts/_sidebar.php'; ?>
     <main class="content">
         <div class="card">
-            <h2 style="margin:0 0 12px 0;">Inbox</h2>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+                <h2 style="margin:0;">Inbox</h2>
+                <a class="btn primary" href="/admin/messages" style="text-decoration:none;">New Message</a>
+            </div>
+            <div style="height:8px;"></div>
             <table>
                 <thead><tr><th>From</th><th>Subject</th><th>Date</th><th>Action</th></tr></thead>
                 <tbody>

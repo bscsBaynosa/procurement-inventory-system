@@ -54,20 +54,16 @@ try {
         <?php if ($role === 'admin'): ?>
             <a href="/admin/users" class="<?= nav_active('/admin/users', $path) ?>"><svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zM8 11c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.67 0-8 1.34-8 4v2h10v-2c0-2.66-5.33-4-8-4zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.96 1.97 3.45v2h6v-2c0-2.66-5.33-4-8-4z"/></svg> Users</a>
             <a href="/admin/branches" class="<?= nav_active('/admin/branches', $path) ?>"><svg viewBox="0 0 24 24"><path d="M12 2l7 6v12H5V8l7-6zm0 2.2L7 8v10h10V8l-5-3.8z"/></svg> Branches</a>
-            <a href="/admin/messages" class="<?= nav_active('/admin/messages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
         <?php elseif ($role === 'custodian'): ?>
         <?php elseif ($role === 'admin_assistant'): ?>
             <a href="/admin-assistant/inventory" class="<?= nav_active_many(['/admin-assistant/inventory','/custodian/inventory'], $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm4 0h14v-2H7v2zM3 17h2v-2H3v2zm4 0h14v-2H7v2zM3 9h2V7H3v2zm4 0h14V7H7v2z"/></svg> Inventory</a>
             <a href="/admin-assistant/requests/new" class="<?= nav_active_many(['/admin-assistant/requests','/custodian/requests'], $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 3h18v14H6l-3 3V3z"/></svg> Purchase Request</a>
-            <a href="/admin/messages" class="<?= nav_active('/admin/messages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
         <?php elseif ($role === 'procurement'): ?>
             <a href="/procurement/po" class="<?= nav_active('/procurement/po', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Purchase Orders</a>
             <!-- Manager uses /dashboard for requests listing in current router -->
-            <a href="/admin/messages" class="<?= nav_active('/admin/messages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
         <?php elseif ($role === 'supplier'): ?>
             <a href="/dashboard" class="<?= nav_active('/dashboard', $path) ?>"><svg viewBox="0 0 24 24"><path d="M12 3l9 8h-3v9h-5v-6H11v6H6v-9H3z"/></svg> Dashboard</a>
             <a href="/supplier/items" class="<?= nav_active('/supplier/items', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Items Listing</a>
-            <a href="/admin/messages" class="<?= nav_active('/admin/messages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> Messages</a>
         <?php endif; ?>
         <?php if ($role !== 'guest'): ?>
             <a href="/inbox" class="<?= nav_active_many(['/inbox','/notifications'], $path) ?>">
