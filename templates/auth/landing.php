@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="/css/main.css" />
     <?php require __DIR__ . '/../layouts/_favicon.php'; ?>
     <style>
+        html { scroll-behavior: smooth; }
         /* Theme variables */
         :root {
             --bg-gradient: radial-gradient(1000px 600px at 15% 10%, #1b6b39 0%, #0d4f2a 35%, #062e19 60%, #0b0b0b 100%);
@@ -100,7 +101,8 @@
     .about-grid p { color:#cbd5e1; }
     @media (max-width: 900px){ .about-grid { grid-template-columns: 1fr; } }
     .cards { display:grid; grid-template-columns: repeat(4, 1fr); gap: 14px; padding: 22px; }
-    .card { background: rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:16px; color:#e5e7eb; }
+    .card { background: rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.12); border-radius:12px; padding:16px; color:#e5e7eb; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+    .card:hover { transform: translateY(-3px); box-shadow: 0 16px 40px rgba(0,0,0,.35); border-color: rgba(255,255,255,.25); }
     .card h3 { margin:8px 0; font-size:18px; }
     .card p { color:#cbd5e1; font-size:14px; }
     @media (max-width: 1100px){ .cards { grid-template-columns: repeat(2, 1fr); } }
@@ -108,6 +110,15 @@
     .muted { color:#a7f3d0; font-weight:700; font-size:12px; letter-spacing:.08em; text-transform:uppercase; }
     .contact { display:grid; grid-template-columns: 1fr 1fr; gap:16px; padding:22px; }
     @media (max-width: 800px){ .contact { grid-template-columns: 1fr; } }
+
+    /* Click-highlight animation for sections */
+    @keyframes sectionFlash { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.0); } 50% { box-shadow: 0 0 0 6px rgba(34,197,94,.25); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,.0); } }
+    .flash { animation: sectionFlash .9s ease-out 1; border-radius: 14px; }
+    @media (prefers-reduced-motion: reduce) {
+        html { scroll-behavior: auto; }
+        .card { transition: none; }
+        .flash { animation: none; }
+    }
     </style>
     </head>
 <body>
@@ -250,15 +261,15 @@
         <div class="section-inner glass about-grid">
             <div>
                 <div class="muted">About Us</div>
-                <h2>Built for hospital procurement and stock stewardship</h2>
+                <h2>Designed for fast, transparent hospital procurement</h2>
                 <p>
-                    This lightweight system helps the Philippine Oncology Center Corporation streamline purchasing,
-                    track stock accurately across branches, and reduce delays due to manual hand‑offs. It centralizes
-                    requests, approvals, and inventory updates so teams can focus on patient care.
+                    Our platform helps teams move from manual spreadsheets to a clear, automated flow—
+                    from purchase requests to approvals, inventory updates, and audit‑ready records.
+                    Everything is organized, searchable, and consistent across branches.
                 </p>
                 <p>
-                    Admins manage users and branches, managers review and approve purchase requests, and custodians
-                    keep inventory counts up to date—all in one place.
+                    The result: fewer delays, better visibility, and time back to focus on patient care.
+                    Role‑based access keeps responsibilities tidy for Admins, Managers, and Custodians.
                 </p>
                 <div class="cta" style="margin-top:10px;">
                     <a class="btn btn-outline" href="#learn">Learn more</a>
@@ -267,10 +278,10 @@
             <div class="card" style="background: rgba(4,120,87,.18); border-color: rgba(16,185,129,.35);">
                 <h3 style="margin-top:0;">At a glance</h3>
                 <ul style="margin:8px 0 0 18px; color:#e2e8f0;">
-                    <li>Role‑based access: Admin, Manager, Custodian</li>
-                    <li>Branch‑aware tracking and reporting</li>
-                    <li>Fast approvals and audit‑ready records</li>
-                    <li>Dark mode and mobile‑friendly UI</li>
+                    <li>Clear statuses from request to PO</li>
+                    <li>Branch‑aware stock and simple reports</li>
+                    <li>Built‑in PDF exports for compliance</li>
+                    <li>Fast, mobile‑friendly UI with dark mode</li>
                 </ul>
             </div>
         </div>
@@ -281,20 +292,20 @@
         <div class="section-inner glass">
             <div class="cards">
                 <div class="card">
-                    <h3>Streamlined Approvals</h3>
-                    <p>Requests move from submission to approval with clear statuses and fewer bottlenecks.</p>
+                    <h3>Streamlined approvals</h3>
+                    <p>Move requests forward with clear steps—no email ping‑pong, no guesswork.</p>
                 </div>
                 <div class="card">
-                    <h3>Real‑time Inventory</h3>
-                    <p>Custodians log stock movements so managers always see accurate counts per branch.</p>
+                    <h3>Real‑time inventory</h3>
+                    <p>See accurate counts by branch as custodians log movements in seconds.</p>
                 </div>
                 <div class="card">
-                    <h3>Branch Management</h3>
-                    <p>Manage POCC branches centrally and assign custodians to the right locations.</p>
+                    <h3>Branch management</h3>
+                    <p>Centralize branches, roles, and access so teams see exactly what they need.</p>
                 </div>
                 <div class="card">
                     <h3>Audit‑ready PDFs</h3>
-                    <p>Generate consistent, printable reports and requests for compliance and archiving.</p>
+                    <p>Consistent, printable PDFs for POs and requests—ready for audits anytime.</p>
                 </div>
             </div>
         </div>
@@ -316,8 +327,8 @@
     </section>
 
     <script>
-        function toggleMenu(){ document.getElementById('navLinks').classList.toggle('open'); }
-        function closeMenu(){ document.getElementById('navLinks').classList.remove('open'); }
+    function toggleMenu(){ document.getElementById('navLinks').classList.toggle('open'); }
+    function closeMenu(){ document.getElementById('navLinks').classList.remove('open'); }
         // remove role chips; keep password toggle only
         function togglePassword(){
             const input = document.getElementById('password');
@@ -362,10 +373,30 @@
         if (toSignin2) toSignin2.addEventListener('click', function(e){ e.preventDefault(); show('signin'); });
         if (toForgot) toForgot.addEventListener('click', function(e){ e.preventDefault(); show('forgot'); });
 
+        // Smooth-scroll with section highlight on in-page links
+        function setupSmoothAnchors(){
+            const anchors = document.querySelectorAll('a[href^="#"]');
+            anchors.forEach(a => {
+                a.addEventListener('click', (e) => {
+                    const href = a.getAttribute('href') || '';
+                    if (href.length < 2) return;
+                    const id = href.slice(1);
+                    const target = document.getElementById(id);
+                    if (!target) return;
+                    e.preventDefault();
+                    closeMenu();
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    target.classList.add('flash');
+                    setTimeout(() => target.classList.remove('flash'), 900);
+                });
+            });
+        }
+
         // Initialize default accent and initial view (from server if provided)
         document.body.setAttribute('data-role', 'admin');
         const initialView = '<?= isset($mode) ? htmlspecialchars($mode, ENT_QUOTES, "UTF-8") : 'signin' ?>';
         show(initialView);
+        setupSmoothAnchors();
     </script>
 </body>
 </html>

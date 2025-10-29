@@ -59,7 +59,22 @@
                 </div>
                 <div style="margin-top:10px; margin-bottom:12px;">
                     <label>Change password (optional)</label>
-                    <input name="password" type="password" />
+                    <div class="row">
+                        <div>
+                            <label>Current password</label>
+                            <input name="current_password" type="password" autocomplete="current-password" />
+                        </div>
+                        <div></div>
+                        <div>
+                            <label>New password</label>
+                            <input name="new_password" type="password" autocomplete="new-password" />
+                        </div>
+                        <div>
+                            <label>Re-type new password</label>
+                            <input name="confirm_password" type="password" autocomplete="new-password" />
+                        </div>
+                    </div>
+                    <div style="color:#64748b; font-size:12px; margin-top:6px;">To change your password, fill in all three fields.</div>
                 </div>
                 <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
                     <div style="display:flex; align-items:center; gap:12px;">

@@ -15,12 +15,12 @@
         .sidebar{ background:#fff; border-right:1px solid var(--border); padding:18px 12px; position:sticky; top:0; height:100vh; }
         html[data-theme="dark"] .sidebar{ background:#0f172a; }
         .content{ padding:18px 20px; }
-        .grid{ display:grid; grid-template-columns: 360px 1fr; gap:14px; }
+    .grid{ display:grid; grid-template-columns: 420px 1fr; gap:14px; }
         .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; }
         table{ width:100%; border-collapse: collapse; }
         th, td{ padding:10px 12px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
         th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
-        input, textarea{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:#fff; color:#111; }
+    input, textarea, select{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:#fff; color:#111; }
         .btn{ background:var(--accent); color:#fff; border:0; padding:10px 12px; border-radius:10px; font-weight:700; text-decoration:none; display:inline-block; }
         .btn.muted{ background:transparent; color:var(--muted); border:1px solid var(--border); }
     </style>
@@ -33,13 +33,29 @@
         <div class="grid">
             <div class="card">
                 <form method="POST" action="/supplier/items">
-                    <label>Name</label>
-                    <input name="name" required />
+                    <label>Product name</label>
+                    <input name="name" placeholder="Bond paper" required />
                     <label>Description</label>
-                    <textarea name="description" rows="4"></textarea>
-                    <div style="display:flex; gap:10px;">
+                    <textarea name="description" rows="3" placeholder="e.g., A4 size white"></textarea>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                        <div>
+                            <label>Package label</label>
+                            <select name="package_label">
+                                <option value="rim">rim</option>
+                                <option value="box">box</option>
+                                <option value="pack">pack</option>
+                                <option value="bundle">bundle</option>
+                                <option value="unit">unit</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label>Pieces per package</label>
+                            <input name="pieces_per_package" type="number" min="1" value="500" />
+                        </div>
+                    </div>
+                    <div style="display:flex; gap:10px; margin-top:10px;">
                         <div style="flex:1;">
-                            <label>Price</label>
+                            <label>Price (per package)</label>
                             <input name="price" type="number" step="0.01" min="0" value="0" required />
                         </div>
                         <div style="width:140px;">
@@ -55,17 +71,20 @@
             </div>
             <div class="card">
                 <table>
-                    <thead><tr><th>Name</th><th>Price</th><th>Unit</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Name</th><th>Package</th><th>Price</th><th>Unit</th><th>Actions</th></tr></thead>
                     <tbody>
                     <?php if (!empty($items)): foreach ($items as $it): ?>
                         <tr>
                             <td><?= htmlspecialchars((string)$it['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= (int)($it['pieces_per_package'] ?? 1) . ' ' . htmlspecialchars((string)($it['package_label'] ?? 'pack'), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= number_format((float)$it['price'], 2) ?></td>
                             <td><?= htmlspecialchars((string)$it['unit'], ENT_QUOTES, 'UTF-8') ?></td>
                             <td>
-                                <form method="POST" action="/supplier/items/update" style="display:inline-flex; gap:6px; align-items:center;">
+                                <form method="POST" action="/supplier/items/update" style="display:inline-flex; gap:6px; align-items:center; flex-wrap:wrap;">
                                     <input type="hidden" name="id" value="<?= (int)$it['id'] ?>" />
                                     <input name="name" value="<?= htmlspecialchars((string)$it['name'], ENT_QUOTES, 'UTF-8') ?>" />
+                                    <input name="pieces_per_package" type="number" min="1" value="<?= (int)($it['pieces_per_package'] ?? 1) ?>" style="width:120px;" />
+                                    <input name="package_label" value="<?= htmlspecialchars((string)($it['package_label'] ?? 'pack'), ENT_QUOTES, 'UTF-8') ?>" style="width:120px;" />
                                     <input name="price" type="number" step="0.01" min="0" value="<?= (float)$it['price'] ?>" style="width:120px;" />
                                     <input name="unit" value="<?= htmlspecialchars((string)$it['unit'], ENT_QUOTES, 'UTF-8') ?>" style="width:100px;" />
                                     <button class="btn muted" type="submit">Save</button>
@@ -77,7 +96,7 @@
                             </td>
                         </tr>
                     <?php endforeach; else: ?>
-                        <tr><td colspan="4" style="color:#64748b;">No items yet.</td></tr>
+                        <tr><td colspan="5" style="color:#64748b;">No items yet. Add your first product on the left.</td></tr>
                     <?php endif; ?>
                     </tbody>
                 </table>

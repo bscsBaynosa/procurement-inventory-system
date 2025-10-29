@@ -642,7 +642,9 @@ class AdminController extends BaseController
         $me = (int)($_SESSION['user_id'] ?? 0);
         $name = trim((string)($_POST['full_name'] ?? ''));
         $email = trim((string)($_POST['email'] ?? ''));
-        $pwd = (string)($_POST['password'] ?? '');
+        $current = (string)($_POST['current_password'] ?? '');
+        $new = (string)($_POST['new_password'] ?? '');
+        $confirm = (string)($_POST['confirm_password'] ?? '');
         if ($name === '') { header('Location: /settings'); return; }
         try {
             // Split full_name into first/last for consistency
@@ -651,14 +653,28 @@ class AdminController extends BaseController
             $last = $parts ? (string)array_pop($parts) : '';
             if ($first === '' && $name !== '') { $first = $name; }
             if ($last === '' && $first !== '' && $name !== $first) { $last = trim(str_replace($first, '', $name)); }
-            if ($pwd !== '') {
-                $hash = password_hash($pwd, PASSWORD_BCRYPT);
-                $stmt = $this->pdo->prepare('UPDATE users SET first_name = :fn, last_name = :ln, full_name = :n, email = :e, password_hash = :p WHERE user_id = :id');
-                $stmt->execute(['fn' => $first, 'ln' => $last, 'n' => $name, 'e' => $email !== '' ? $email : null, 'p' => $hash, 'id' => $me]);
-            } else {
-                $stmt = $this->pdo->prepare('UPDATE users SET first_name = :fn, last_name = :ln, full_name = :n, email = :e WHERE user_id = :id');
-                $stmt->execute(['fn' => $first, 'ln' => $last, 'n' => $name, 'e' => $email !== '' ? $email : null, 'id' => $me]);
+
+            // Always update profile fields first (without password)
+            $stmt = $this->pdo->prepare('UPDATE users SET first_name = :fn, last_name = :ln, full_name = :n, email = :e WHERE user_id = :id');
+            $stmt->execute(['fn' => $first, 'ln' => $last, 'n' => $name, 'e' => $email !== '' ? $email : null, 'id' => $me]);
+
+            // Handle password change if requested
+            $wantsChange = ($current !== '' || $new !== '' || $confirm !== '');
+            if ($wantsChange) {
+                if ($current === '' || $new === '' || $confirm === '') { header('Location: /settings?error=' . rawurlencode('Please fill all password fields.')); return; }
+                if ($new !== $confirm) { header('Location: /settings?error=' . rawurlencode('New passwords do not match.')); return; }
+                if (strlen($new) < 6) { header('Location: /settings?error=' . rawurlencode('New password must be at least 6 characters.')); return; }
+                // Verify old password
+                $st = $this->pdo->prepare('SELECT password_hash FROM users WHERE user_id = :id');
+                $st->execute(['id' => $me]);
+                $hash = (string)($st->fetchColumn() ?: '');
+                if ($hash === '' || !password_verify($current, $hash)) { header('Location: /settings?error=' . rawurlencode('Current password is incorrect.')); return; }
+                // Save new hash
+                $newHash = password_hash($new, PASSWORD_BCRYPT);
+                $up = $this->pdo->prepare('UPDATE users SET password_hash = :p, password_changed_at = NOW() WHERE user_id = :id');
+                $up->execute(['p' => $newHash, 'id' => $me]);
             }
+
             header('Location: /settings?saved=1');
         } catch (\Throwable $e) {
             $msg = rawurlencode($e->getMessage());
