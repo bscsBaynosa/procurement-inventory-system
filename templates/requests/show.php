@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Purchase Request Details</title>
-    <link rel="stylesheet" href="/public/css/main.css">
+    <link rel="stylesheet" href="/css/main.css">
 </head>
 <body>
-    <div class="container">
+    <div class="container" style="max-width:920px;margin:20px auto;padding:0 12px;">
         <h1>Purchase Request Details</h1>
         <?php if (!empty($request)): ?>
             <div class="request-details">
@@ -39,10 +39,10 @@
                     <p>No history recorded for this request yet.</p>
                 <?php endif; ?>
             </section>
-            <a href="/public/index.php" class="btn">Back to Requests</a>
+            <a href="/inbox" class="btn">Back</a>
         <?php else: ?>
             <p>No purchase request found.</p>
-            <a href="/public/index.php" class="btn">Back to Requests</a>
+            <a href="/dashboard" class="btn">Back to Dashboard</a>
         <?php endif; ?>
     </div>
 </body>

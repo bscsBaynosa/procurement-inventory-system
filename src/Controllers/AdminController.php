@@ -637,6 +637,26 @@ class AdminController extends BaseController
         }
     }
 
+    /** View a single purchase request details with history. */
+    public function viewRequest(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (!isset($_SESSION['user_id'])) { header('Location: /login'); return; }
+        $id = 0;
+        if (isset($_GET['request_id'])) { $id = (int)$_GET['request_id']; }
+        if ($id <= 0 && isset($_GET['id'])) { $id = (int)$_GET['id']; }
+        if ($id <= 0) { header('Location: /dashboard'); return; }
+        try {
+            $request = $this->requests()->getRequestById($id);
+            $history = $this->requests()->getRequestHistory($id);
+            $this->render('requests/show.php', ['request' => $request, 'history' => $history]);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            header('Content-Type: text/plain');
+            echo 'Error loading request: ' . $e->getMessage();
+        }
+    }
+
     public function saveSettings(): void
     {
         $me = (int)($_SESSION['user_id'] ?? 0);

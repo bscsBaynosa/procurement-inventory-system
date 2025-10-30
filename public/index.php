@@ -223,6 +223,13 @@ if ($method === 'GET' && $path === '/inbox/view') {
 	exit;
 }
 
+// Unified Request details view
+if ($method === 'GET' && $path === '/requests/view') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$admin->viewRequest();
+	exit;
+}
+
 // Custodian: Inventory
 if ($method === 'GET' && $path === '/custodian/inventory') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }

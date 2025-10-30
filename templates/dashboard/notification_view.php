@@ -41,7 +41,18 @@
             </div>
             <div class="muted" style="margin:6px 0 12px;">From <?= htmlspecialchars((string)$message['from_name'], ENT_QUOTES, 'UTF-8') ?> • <?= htmlspecialchars((string)$message['created_at'], ENT_QUOTES, 'UTF-8') ?></div>
             <div style="white-space:pre-wrap;"><?= nl2br(htmlspecialchars((string)$message['body'], ENT_QUOTES, 'UTF-8')) ?></div>
+            <?php
+                // If the subject contains a request id (e.g., "New Purchase Request #123"),
+                // offer a direct link to the PR details page.
+                $requestId = 0;
+                if (preg_match('/#(\d+)/', (string)($message['subject'] ?? ''), $m)) {
+                    $requestId = (int)$m[1];
+                }
+            ?>
             <div style="margin-top:16px; display:flex; gap:10px; align-items:center;">
+                <?php if ($requestId > 0): ?>
+                    <a class="btn" href="/requests/view?request_id=<?= (int)$requestId ?>">View Request Details</a>
+                <?php endif; ?>
                 <a class="btn primary" href="/admin/messages?subject=Re:%20<?= rawurlencode((string)$message['subject']) ?>&to=<?= (int)$message['sender_id'] ?>">Reply / Forward</a>
                 <a class="btn muted" href="/inbox">Back to Inbox</a>
             </div>
