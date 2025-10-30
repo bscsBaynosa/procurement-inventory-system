@@ -94,5 +94,49 @@ if ($existing === false) {
     fwrite(STDOUT, "Admin user '{$seedUsername}' already exists (ID {$existing}).\n");
 }
 
+// Seed common Office Supplies into inventory_items as global (branch_id IS NULL)
+try {
+    $existingNames = $pdo->query("SELECT LOWER(name) AS n FROM inventory_items")->fetchAll(PDO::FETCH_COLUMN);
+} catch (Throwable $e) {
+    $existingNames = [];
+}
+
+$existingSet = [];
+foreach ($existingNames as $n) { $existingSet[$n] = true; }
+
+$officeItems = [
+    ['Short Bondpaper Rim', 'Office Supplies', 0, 'rim'],
+    ['Long Bondpaper Rim', 'Office Supplies', 0, 'rim'],
+    ['A4 Bondpaper Rim', 'Office Supplies', 0, 'rim'],
+    ['Ballpen Black (Box of 12)', 'Office Supplies', 0, 'box'],
+    ['Ballpen Blue (Box of 12)', 'Office Supplies', 0, 'box'],
+    ['Whiteboard Marker Black (Box of 12)', 'Office Supplies', 0, 'box'],
+    ['Yellow Pad (Pack)', 'Office Supplies', 0, 'pack'],
+    ['Sticky Notes 3x3 (Pack)', 'Office Supplies', 0, 'pack'],
+    ['Stapler No.10', 'Office Supplies', 0, 'pc'],
+    ['Staple Wire No.10 (Box)', 'Office Supplies', 0, 'box'],
+    ['Paper Clips 33mm (Box)', 'Office Supplies', 0, 'box'],
+    ['Folder Long Manila (Pack of 10)', 'Office Supplies', 0, 'pack'],
+    ['Brown Envelope Long (Pack of 10)', 'Office Supplies', 0, 'pack'],
+    ['Correction Tape 5mm', 'Office Supplies', 0, 'pc'],
+    ['Highlighter Yellow', 'Office Supplies', 0, 'pc'],
+    ['Fastener Plastic (Pack of 50)', 'Office Supplies', 0, 'pack'],
+    ['Record Book 300 pages', 'Office Supplies', 0, 'pc'],
+];
+
+$inserted = 0;
+$stmt = $pdo->prepare('INSERT INTO inventory_items (name, category, quantity, unit, status, branch_id) VALUES (:n, :c, :q, :u, :s, NULL)');
+foreach ($officeItems as [$name, $category, $qty, $unit]) {
+    if (!isset($existingSet[strtolower($name)])) {
+        $stmt->execute(['n' => $name, 'c' => $category, 'q' => $qty, 'u' => $unit, 's' => 'good']);
+        $inserted++;
+    }
+}
+if ($inserted > 0) {
+    fwrite(STDOUT, "Seeded {$inserted} office supply item(s) into inventory_items.\n");
+} else {
+    fwrite(STDOUT, "Office supply seed items already present.\n");
+}
+
 fwrite(STDOUT, "Done.\n");
 exit(0);

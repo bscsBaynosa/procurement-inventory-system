@@ -39,7 +39,9 @@ class InventoryService
 		$sql = 'SELECT item_id, name, category, status, quantity, unit FROM inventory_items';
 		$params = [];
 		if ($branchId) {
-			$sql .= ' WHERE branch_id = :b';
+			// Include branch-specific items and global items (branch_id IS NULL) so common
+			// office supplies appear as choices for PR across branches.
+			$sql .= ' WHERE (branch_id = :b OR branch_id IS NULL)';
 			$params['b'] = $branchId;
 		}
 		$sql .= ' ORDER BY name ASC';
