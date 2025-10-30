@@ -71,32 +71,72 @@
             </div>
             <div class="card">
                 <table>
-                    <thead><tr><th>Name</th><th>Package</th><th>Price</th><th>Unit</th><th>Actions</th></tr></thead>
+                    <thead><tr><th>Name</th><th>Description</th><th>Package</th><th>Price</th><th>Unit</th><th>Actions</th></tr></thead>
                     <tbody>
                     <?php if (!empty($items)): foreach ($items as $it): ?>
                         <tr>
                             <td><?= htmlspecialchars((string)$it['name'], ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= (int)($it['pieces_per_package'] ?? 1) . ' ' . htmlspecialchars((string)($it['package_label'] ?? 'pack'), ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= htmlspecialchars((string)($it['description'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                            <td>
+                                <?php
+                                    $pp = (int)($it['pieces_per_package'] ?? 1);
+                                    $unit = htmlspecialchars((string)($it['unit'] ?? 'pcs'), ENT_QUOTES, 'UTF-8');
+                                    $pl = htmlspecialchars((string)($it['package_label'] ?? 'pack'), ENT_QUOTES, 'UTF-8');
+                                    // Example: 500 pcs per 1 rim
+                                    echo $pp . ' ' . $unit . ' per 1 ' . $pl;
+                                ?>
+                            </td>
                             <td><?= number_format((float)$it['price'], 2) ?></td>
                             <td><?= htmlspecialchars((string)$it['unit'], ENT_QUOTES, 'UTF-8') ?></td>
                             <td>
-                                <form method="POST" action="/supplier/items/update" style="display:inline-flex; gap:6px; align-items:center; flex-wrap:wrap;">
-                                    <input type="hidden" name="id" value="<?= (int)$it['id'] ?>" />
-                                    <input name="name" value="<?= htmlspecialchars((string)$it['name'], ENT_QUOTES, 'UTF-8') ?>" />
-                                    <input name="pieces_per_package" type="number" min="1" value="<?= (int)($it['pieces_per_package'] ?? 1) ?>" style="width:120px;" />
-                                    <input name="package_label" value="<?= htmlspecialchars((string)($it['package_label'] ?? 'pack'), ENT_QUOTES, 'UTF-8') ?>" style="width:120px;" />
-                                    <input name="price" type="number" step="0.01" min="0" value="<?= (float)$it['price'] ?>" style="width:120px;" />
-                                    <input name="unit" value="<?= htmlspecialchars((string)$it['unit'], ENT_QUOTES, 'UTF-8') ?>" style="width:100px;" />
-                                    <button class="btn muted" type="submit">Save</button>
-                                </form>
+                                <button class="btn muted" onclick="toggleEditRow(<?= (int)$it['id'] ?>)" type="button">Edit</button>
                                 <form method="POST" action="/supplier/items/delete" onsubmit="return confirm('Delete this item?');" style="display:inline-block; margin-left:6px;">
                                     <input type="hidden" name="id" value="<?= (int)$it['id'] ?>" />
                                     <button class="btn muted" type="submit">Delete</button>
                                 </form>
                             </td>
                         </tr>
+                        <tr id="edit-row-<?= (int)$it['id'] ?>" style="display:none; background:color-mix(in oklab, var(--card) 92%, var(--bg));">
+                            <td colspan="6">
+                                <form method="POST" action="/supplier/items/update" style="display:grid; grid-template-columns: 1.2fr 1fr 1fr 0.8fr 0.8fr 0.6fr auto; gap:8px; align-items:end;">
+                                    <input type="hidden" name="id" value="<?= (int)$it['id'] ?>" />
+                                    <div>
+                                        <label style="font-size:12px;color:var(--muted)">Name</label>
+                                        <input name="name" value="<?= htmlspecialchars((string)$it['name'], ENT_QUOTES, 'UTF-8') ?>" />
+                                    </div>
+                                    <div>
+                                        <label style="font-size:12px;color:var(--muted)">Description</label>
+                                        <input name="description" value="<?= htmlspecialchars((string)($it['description'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
+                                    </div>
+                                    <div>
+                                        <label style="font-size:12px;color:var(--muted)">Pieces per package</label>
+                                        <input name="pieces_per_package" type="number" min="1" value="<?= (int)($it['pieces_per_package'] ?? 1) ?>" />
+                                    </div>
+                                    <div>
+                                        <label style="font-size:12px;color:var(--muted)">Package label</label>
+                                        <select name="package_label">
+                                            <?php $opts=['rim','box','pack','bundle','unit']; $cur=(string)($it['package_label'] ?? 'pack'); foreach($opts as $o): ?>
+                                                <option value="<?= $o ?>" <?= $cur===$o?'selected':'' ?>><?= $o ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="font-size:12px;color:var(--muted)">Price (per package)</label>
+                                        <input name="price" type="number" step="0.01" min="0" value="<?= number_format((float)$it['price'], 2, '.', '') ?>" />
+                                    </div>
+                                    <div>
+                                        <label style="font-size:12px;color:var(--muted)">Unit</label>
+                                        <input name="unit" value="<?= htmlspecialchars((string)$it['unit'], ENT_QUOTES, 'UTF-8') ?>" />
+                                    </div>
+                                    <div style="display:flex; gap:6px;">
+                                        <button class="btn" type="submit">Save</button>
+                                        <button class="btn muted" type="button" onclick="toggleEditRow(<?= (int)$it['id'] ?>)">Cancel</button>
+                                    </div>
+                                </form>
+                            </td>
+                        </tr>
                     <?php endforeach; else: ?>
-                        <tr><td colspan="5" style="color:#64748b;">No items yet. Add your first product on the left.</td></tr>
+                        <tr><td colspan="6" style="color:#64748b;">No items yet. Add your first product on the left.</td></tr>
                     <?php endif; ?>
                     </tbody>
                 </table>
@@ -105,4 +145,11 @@
     </main>
 </div>
 </body>
+<script>
+function toggleEditRow(id){
+    var row = document.getElementById('edit-row-'+id);
+    if(!row) return;
+    row.style.display = (row.style.display === 'none' || row.style.display === '') ? 'table-row' : 'none';
+}
+</script>
 </html>
