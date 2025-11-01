@@ -75,6 +75,29 @@ $manager = new ProcurementController();
 $admin = new AdminController();
 $supplier = new SupplierController();
 
+// Minimal crash shield to avoid blank pages in production: wraps a controller call
+// and shows a simple error page if an uncaught exception bubbles up. Disable or
+// tighten messaging later if needed.
+$safeRun = static function (callable $fn): void {
+	try { $fn(); }
+	catch (\Throwable $e) {
+		http_response_code(500);
+		header('Content-Type: text/html; charset=utf-8');
+		$msg = htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
+		echo '<!doctype html><html><head><meta charset="utf-8"><title>Application Error</title>';
+		echo '<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;padding:24px;background:#0b0b0b;color:#e5e7eb} .box{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:18px;max-width:860px} code{background:#0b0b0b;padding:2px 6px;border-radius:6px} a{color:#22c55e;text-decoration:none}</style>';
+		echo '</head><body><div class="box">';
+		echo '<h2>Something went wrong</h2>';
+		echo '<p>An unexpected error occurred while rendering this page.</p>';
+		echo '<p><small>Reason: ' . $msg . '</small></p>';
+		echo '<p>Diagnostics:</p><ul>';
+		echo '<li><a href="/setup/status">Setup Status</a> (DB connectivity)</li>';
+		echo '<li><a href="/inbox">Inbox</a> (if dashboard fails)</li>';
+		echo '</ul>';
+		echo '</div></body></html>';
+	}
+};
+
 // Routes
 // Landing page first (role selection)
 if ($method === 'GET' && $path === '/') {
@@ -135,19 +158,19 @@ if ($method === 'POST' && $path === '/signup') {
 if ($method === 'GET' && $path === '/dashboard') {
 	$role = $_SESSION['role'] ?? null;
 	if ($role === 'custodian' || $role === 'admin_assistant') {
-		$custodian->dashboard();
+		$safeRun(static function() use ($custodian){ $custodian->dashboard(); });
 		exit;
 	}
 	if ($role === 'procurement_manager' || $role === 'procurement') {
-		$manager->index();
+		$safeRun(static function() use ($manager){ $manager->index(); });
 		exit;
 	}
 	if ($role === 'admin') {
-		$admin->dashboard();
+		$safeRun(static function() use ($admin){ $admin->dashboard(); });
 		exit;
 	}
 	if ($role === 'supplier') {
-		$supplier->dashboard();
+		$safeRun(static function() use ($supplier){ $supplier->dashboard(); });
 		exit;
 	}
 	header('Location: /login');
