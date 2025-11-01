@@ -41,12 +41,21 @@
             </div>
             <div class="muted" style="margin:6px 0 12px;">From <?= htmlspecialchars((string)$message['from_name'], ENT_QUOTES, 'UTF-8') ?> • <?= htmlspecialchars((string)$message['created_at'], ENT_QUOTES, 'UTF-8') ?></div>
             <div style="white-space:pre-wrap;"><?= nl2br(htmlspecialchars((string)$message['body'], ENT_QUOTES, 'UTF-8')) ?></div>
+            <?php if (!empty($message['attachment_name']) && !empty($message['attachment_path'])): ?>
+                <div style="margin-top:10px;">
+                    <a class="btn" href="/inbox/download?id=<?= (int)$message['id'] ?>" onclick="window.location.href='<?= htmlspecialchars((string)$message['attachment_path'], ENT_QUOTES, 'UTF-8') ?>'; return false;">Download Attachment: <?= htmlspecialchars((string)$message['attachment_name'], ENT_QUOTES, 'UTF-8') ?></a>
+                </div>
+            <?php endif; ?>
             <?php
                 // If the subject contains a request id (e.g., "New Purchase Request #123"),
                 // offer a direct link to the PR details page.
                 $requestId = 0;
                 if (preg_match('/#(\d+)/', (string)($message['subject'] ?? ''), $m)) {
                     $requestId = (int)$m[1];
+                }
+                $prNumber = null;
+                if (preg_match('/PR\s*([0-9\-]+)/i', (string)($message['subject'] ?? ''), $mm)) {
+                    $prNumber = $mm[1];
                 }
             ?>
             <div style="margin-top:16px; display:flex; gap:10px; align-items:center;">
@@ -56,6 +65,25 @@
                 <a class="btn primary" href="/admin/messages?subject=Re:%20<?= rawurlencode((string)$message['subject']) ?>&to=<?= (int)$message['sender_id'] ?>">Reply / Forward</a>
                 <a class="btn muted" href="/inbox">Back to Inbox</a>
             </div>
+
+            <?php if (($_SESSION['role'] ?? null) === 'admin' && stripos((string)$message['subject'], 'Canvassing For Approval') !== false && !empty($prNumber)): ?>
+                <div class="card" style="margin-top:14px;">
+                    <h3 style="margin-top:0;">Canvassing Approval</h3>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                        <form method="POST" action="/admin/canvassing/approve" onsubmit="return confirm('Approve canvassing for PR <?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>?');">
+                            <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>" />
+                            <input type="hidden" name="message_id" value="<?= (int)$message['id'] ?>" />
+                            <button class="btn primary" type="submit">Approve Canvassing</button>
+                        </form>
+                        <form method="POST" action="/admin/canvassing/reject" onsubmit="return confirm('Reject canvassing for PR <?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>?');" style="display:flex; gap:8px; align-items:center;">
+                            <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>" />
+                            <input type="hidden" name="message_id" value="<?= (int)$message['id'] ?>" />
+                            <input type="text" name="notes" placeholder="Reason (optional)" style="min-width:240px;" />
+                            <button class="btn danger" type="submit">Reject</button>
+                        </form>
+                    </div>
+                </div>
+            <?php endif; ?>
         </div>
     </main>
 </div>

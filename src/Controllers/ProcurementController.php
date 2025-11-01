@@ -42,7 +42,8 @@ class ProcurementController extends BaseController
         // If there are approved requests, send Procurement to the PO flow
         $approved = $this->requests()->getAllRequests([
             'branch_id' => $branchId ? (int)$branchId : null,
-            'status' => 'approved',
+            // Redirect to PO only when canvassing has been approved
+            'status' => 'canvassing_approved',
         ]);
         if (!empty($approved)) {
             header('Location: /procurement/po');
@@ -154,21 +155,13 @@ class ProcurementController extends BaseController
         $st->execute($chosen);
         $map = [];
         foreach ($st->fetchAll() as $s) { $map[(int)$s['user_id']] = (string)$s['full_name']; }
-        // Build PDF content (simplified canvassing form)
+    // Build PDF content (structured canvassing form)
         $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
         if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
         $file = $dir . DIRECTORY_SEPARATOR . 'Canvassing-PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '.pdf';
         $items = [];
-        foreach ($rows as $r) { $items[] = ($r['item_name'] ?? 'Item') . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''); }
-        $html = '<h1 style="text-align:center;margin:0 0 6px;">Canvassing Sheet</h1>';
-        $html .= '<table width="100%" border="1" cellspacing="0" cellpadding="6">';
-        $html .= '<tr><td><strong>PR Number</strong></td><td colspan="5">' . htmlspecialchars($pr) . '</td></tr>';
-        $html .= '<tr><td><strong>Items</strong></td><td colspan="5">' . nl2br(htmlspecialchars(implode("\n", $items))) . '</td></tr>';
-        $i = 1; foreach ($chosen as $sid) { $html .= '<tr><td><strong>Supplier ' . $i . '</strong></td><td colspan="5">' . htmlspecialchars($map[$sid] ?? ('#' . $sid)) . '</td></tr>'; $i++; }
-        $html .= '</table>';
-        $mpdf = (new \Mpdf\Mpdf(['format'=>'A4','orientation'=>'L','margin_left'=>10,'margin_right'=>10,'margin_top'=>10,'margin_bottom'=>10]));
-        $mpdf->WriteHTML($html);
-        $mpdf->Output($file, 'F');
+    foreach ($rows as $r) { $items[] = ($r['item_name'] ?? 'Item') . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''); }
+    $this->pdf()->generateCanvassingPDFToFile($pr, $items, array_values($map), $file);
         // Ensure message attachments columns
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
@@ -182,8 +175,8 @@ class ProcurementController extends BaseController
                 $ins->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$row['user_id'], 'j' => $subject, 'b' => $body, 'an' => basename($file), 'ap' => $file]);
             }
         }
-        // Optional: mark request as in_progress
-        try { $this->requests()->updateGroupStatus($pr, 'in_progress', (int)($_SESSION['user_id'] ?? 0), 'Canvassing submitted for admin approval'); } catch (\Throwable $ignored) {}
+    // Mark the PR group as canvassing_submitted (awaiting admin approval)
+    try { $this->requests()->updateGroupStatus($pr, 'canvassing_submitted', (int)($_SESSION['user_id'] ?? 0), 'Canvassing submitted for admin approval'); } catch (\Throwable $ignored) {}
         header('Location: /manager/requests?canvass=1');
     }
 
@@ -330,7 +323,7 @@ class ProcurementController extends BaseController
     $status = isset($_POST['status']) ? trim((string)$_POST['status']) : '';
     $notes = isset($_POST['notes']) ? trim((string)$_POST['notes']) : null;
     // Align with request_status enum
-    $allowed = ['pending','approved','rejected','in_progress','completed','cancelled'];
+    $allowed = ['pending','approved','rejected','in_progress','completed','cancelled','canvassing_submitted','canvassing_approved','canvassing_rejected'];
         if ($requestId <= 0 || !in_array($status, $allowed, true)) {
             header('Location: /dashboard');
             return;
@@ -417,7 +410,7 @@ class ProcurementController extends BaseController
         $branchId = $_SESSION['branch_id'] ?? null;
         $approved = $this->requests()->getAllRequests([
             'branch_id' => $branchId ? (int)$branchId : null,
-            'status' => 'approved',
+            'status' => 'canvassing_approved',
         ]);
         // Load existing POs
         $pdo = \App\Database\Connection::resolve();
@@ -460,9 +453,9 @@ class ProcurementController extends BaseController
         $requestId = isset($_GET['request_id']) ? (int)$_GET['request_id'] : 0;
         if ($requestId <= 0) { header('Location: /procurement/po'); return; }
 
-        // Ensure the request exists and is approved
+        // Ensure the request exists and canvassing is approved
         $req = $this->requests()->getRequestById($requestId);
-        if (!$req || (string)($req['status'] ?? '') !== 'approved') {
+        if (!$req || (string)($req['status'] ?? '') !== 'canvassing_approved') {
             header('Location: /procurement/po');
             return;
         }

@@ -84,7 +84,17 @@
                     <?php foreach ($groups as $g): ?>
                         <?php 
                             $status = (string)($g['status'] ?? 'pending');
-                            $labelMap = ['pending'=>'For Admin Approval','approved'=>'Approved','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled'];
+                            $labelMap = [
+                                'pending'=>'For Admin Approval',
+                                'approved'=>'Approved',
+                                'canvassing_submitted'=>'Canvassing Submitted',
+                                'canvassing_approved'=>'Canvassing Approved',
+                                'canvassing_rejected'=>'Canvassing Rejected',
+                                'rejected'=>'Rejected',
+                                'in_progress'=>'In Progress',
+                                'completed'=>'Completed',
+                                'cancelled'=>'Cancelled'
+                            ];
                             $statusLabel = $labelMap[$status] ?? $status;
                         ?>
                         <tr>

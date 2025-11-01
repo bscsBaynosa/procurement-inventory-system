@@ -523,6 +523,18 @@ if ($method === 'POST' && $path === '/admin/messages/delete') {
 	exit;
 }
 
+// Admin: Canvassing approval actions
+if ($method === 'POST' && $path === '/admin/canvassing/approve') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
+	$admin->approveCanvassing();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/canvassing/reject') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
+	$admin->rejectCanvassing();
+	exit;
+}
+
 // Settings (profile)
 if ($method === 'GET' && $path === '/settings') {
 	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }

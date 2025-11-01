@@ -213,11 +213,14 @@ class RequestService
 				-- Aggregate item summaries
 				STRING_AGG(CONCAT(COALESCE(i.name,''),' × ', pr.quantity, ' ', COALESCE(pr.unit,'')), '\n' ORDER BY pr.created_at) AS items_summary,
 				-- Status rollup: choose a single representative status per PR number
-				-- priority: pending > rejected > approved > in_progress > completed > cancelled
+				-- priority: pending > canvassing_rejected > rejected > canvassing_approved > approved > canvassing_submitted > in_progress > completed > cancelled
 				MAX(CASE pr.status
 					WHEN 'pending' THEN 100
+					WHEN 'canvassing_rejected' THEN 95
 					WHEN 'rejected' THEN 90
+					WHEN 'canvassing_approved' THEN 85
 					WHEN 'approved' THEN 80
+					WHEN 'canvassing_submitted' THEN 75
 					WHEN 'in_progress' THEN 70
 					WHEN 'completed' THEN 60
 					WHEN 'cancelled' THEN 50
@@ -268,7 +271,7 @@ class RequestService
 	/** Update status for all requests under the same PR number. */
 	public function updateGroupStatus(string $prNumber, string $status, int $performedBy, ?string $notes = null): bool
 	{
-		$allowed = ['pending','approved','rejected','in_progress','completed','cancelled'];
+		$allowed = ['pending','approved','rejected','in_progress','completed','cancelled','canvassing_submitted','canvassing_approved','canvassing_rejected'];
 		if (!in_array($status, $allowed, true)) { return false; }
 		$rows = $this->getGroupDetails($prNumber);
 		if (!$rows) { return false; }
@@ -406,8 +409,8 @@ class RequestService
 				'new_status' => $status,
 				'notes' => $notes,
 			]);
-			// Notify procurement when a request is approved
-			if ($status === 'approved') {
+			// Notify procurement when a request is approved (or canvassing approved)
+			if ($status === 'approved' || $status === 'canvassing_approved') {
 				try {
 					// Ensure messages table exists
 					$this->pdo->exec('CREATE TABLE IF NOT EXISTS messages (
@@ -421,8 +424,12 @@ class RequestService
 					)');
 					// Send a message to all procurement roles
 					$recipients = $this->pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('procurement','procurement_manager')")->fetchAll();
-					$subject = 'Purchase Request #' . (string)$requestId . ' approved';
-					$body = 'A purchase request has been approved by Admin and is ready for PO issuance.';
+					$subject = ($status === 'canvassing_approved')
+						? ('PR ' . (string)($current['pr_number'] ?? (string)$requestId) . ' • Canvassing Approved')
+						: ('Purchase Request #' . (string)$requestId . ' approved');
+					$body = ($status === 'canvassing_approved')
+						? 'Canvassing has been approved by Admin. You may proceed to create the PO.'
+						: 'A purchase request has been approved by Admin and is ready for next steps.';
 					if ($recipients) {
 						$ins = $this->pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
 						foreach ($recipients as $row) {
@@ -585,7 +592,17 @@ class RequestService
 	/** Map status codes to human-friendly labels used in UI. */
 	private function statusLabel(string $status): string
 	{
-		$labelMap = ['pending'=>'For Admin Approval','approved'=>'Approved','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled'];
+		$labelMap = [
+			'pending' => 'For Admin Approval',
+			'approved' => 'Approved',
+			'canvassing_submitted' => 'Canvassing Submitted',
+			'canvassing_approved' => 'Canvassing Approved',
+			'canvassing_rejected' => 'Canvassing Rejected',
+			'rejected' => 'Rejected',
+			'in_progress' => 'In Progress',
+			'completed' => 'Completed',
+			'cancelled' => 'Cancelled',
+		];
 		return $labelMap[$status] ?? $status;
 	}
 

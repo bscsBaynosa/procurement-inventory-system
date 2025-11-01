@@ -31,7 +31,7 @@
     <?php require __DIR__ . '/../layouts/_sidebar.php'; ?>
     <main class="content">
         <div class="h1">Purchase Orders</div>
-        <p class="muted" style="margin-top:-4px;">Approved requests ready for PO issuance.</p>
+    <p class="muted" style="margin-top:-4px;">Canvassing-approved requests ready for PO issuance.</p>
         <table style="margin-top:12px;">
             <thead>
                 <tr>
@@ -53,7 +53,7 @@
                         <td><?= htmlspecialchars((string)($r['item_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
                         <td><?= htmlspecialchars((string)($r['quantity'] ?? '1'), ENT_QUOTES, 'UTF-8') ?> <?= htmlspecialchars((string)($r['unit'] ?? 'pcs'), ENT_QUOTES, 'UTF-8') ?></td>
                         <td><?= htmlspecialchars((string)($r['needed_by'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                        <td><span class="badge">Approved</span></td>
+                        <td><span class="badge">Canvassing Approved</span></td>
                         <td>
                             <a class="btn primary" href="/procurement/po/create?request_id=<?= urlencode((string)$r['request_id']) ?>">Create PO</a>
                         </td>

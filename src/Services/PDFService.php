@@ -190,4 +190,55 @@ class PDFService
 		$fname = $fileName ?: 'consumption_report.pdf';
 		$mpdf->Output($fname, $output);
 	}
+
+
+	/**
+	 * Generate a Canvassing form PDF (landscape) with supplier columns and items grid, and save to a file.
+	 * @param string $prNumber PR identifier (e.g., 2025001)
+	 * @param array $items List of item strings like "Name × Qty Unit"
+	 * @param array $supplierNames List of supplier names (3–5 recommended)
+	 * @param string $filePath Destination absolute path to save the PDF
+	 */
+	public function generateCanvassingPDFToFile(string $prNumber, array $items, array $supplierNames, string $filePath): void
+	{
+		$mpdf = new Mpdf(['format' => 'A4', 'orientation' => 'L', 'margin_left' => 10, 'margin_right' => 10, 'margin_top' => 10, 'margin_bottom' => 10]);
+		$colCount = max(3, min(5, count($supplierNames)));
+		$names = array_slice(array_values($supplierNames), 0, $colCount);
+		// Header
+		$html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
+			. '<div style="font-size:20px;font-weight:700;">Canvassing Form</div>'
+			. '<div style="font-size:12px;color:#64748b;">PR: ' . htmlspecialchars($prNumber) . '</div>'
+			. '</div>';
+		// Build table header
+		$html .= '<table width="100%" border="1" cellspacing="0" cellpadding="6">';
+		$html .= '<thead><tr>'
+			. '<th style="width:35%;text-align:left;">Specification</th>';
+		foreach ($names as $n) {
+			$html .= '<th style="text-align:left;">' . htmlspecialchars((string)$n) . '</th>';
+		}
+		// Pad to consistent 5 columns visually
+		for ($i = count($names); $i < 5; $i++) { $html .= '<th style="text-align:left;">&nbsp;</th>'; }
+		$html .= '</tr></thead><tbody>';
+		// Item rows
+		foreach ($items as $it) {
+			$html .= '<tr>'
+				. '<td>' . htmlspecialchars((string)$it) . '</td>';
+			for ($i = 0; $i < max($colCount, 5); $i++) { $html .= '<td>&nbsp;</td>'; }
+			$html .= '</tr>';
+		}
+		// Awarded section
+		$html .= '<tr>'
+			. '<td style="font-weight:700;">AWARDED TO:</td>'
+			. '<td colspan="' . max($colCount, 5) . '">&nbsp;</td>'
+			. '</tr>';
+		$html .= '</tbody></table>';
+		// Signatures
+		$html .= '<div style="display:flex;justify-content:space-between;margin-top:12px;">'
+			. '<div style="width:32%;text-align:center;"><div style="height:48px;"></div><div style="border-top:1px solid #999;padding-top:6px;">Prepared by</div></div>'
+			. '<div style="width:32%;text-align:center;"><div style="height:48px;"></div><div style="border-top:1px solid #999;padding-top:6px;">Checked by</div></div>'
+			. '<div style="width:32%;text-align:center;"><div style="height:48px;"></div><div style="border-top:1px solid #999;padding-top:6px;">Approved by</div></div>'
+			. '</div>';
+		$mpdf->WriteHTML($html);
+		$mpdf->Output($filePath, 'F');
+	}
 }

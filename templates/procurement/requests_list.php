@@ -57,7 +57,7 @@
                 </select>
             </label>
             <label>Status
-                <?php $statuses = [''=>'All','pending'=>'For Admin Approval','approved'=>'Approved','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled']; ?>
+                <?php $statuses = [''=>'All','pending'=>'For Admin Approval','approved'=>'Approved','canvassing_submitted'=>'Canvassing Submitted','canvassing_approved'=>'Canvassing Approved','canvassing_rejected'=>'Canvassing Rejected','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled']; ?>
                 <select name="status">
                     <?php foreach ($statuses as $val => $label): $sel = (string)($filters['status'] ?? '') === (string)$val; ?>
                         <option value="<?= htmlspecialchars((string)$val, ENT_QUOTES, 'UTF-8') ?>" <?= $sel ? 'selected' : '' ?>><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></option>
@@ -98,9 +98,11 @@
                     <?php foreach ($groups as $g): ?>
                         <?php 
                             $status = (string)($g['status'] ?? 'pending');
-                            $labelMap = ['pending'=>'For Admin Approval','approved'=>'Approved','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled'];
+                            $labelMap = ['pending'=>'For Admin Approval','approved'=>'Approved','canvassing_submitted'=>'Canvassing Submitted','canvassing_approved'=>'Canvassing Approved','canvassing_rejected'=>'Canvassing Rejected','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled'];
                             $statusLabel = $labelMap[$status] ?? $status;
                             $canProcess = ($status === 'approved');
+                            $awaitingCanvass = ($status === 'canvassing_submitted');
+                            $canCreatePo = ($status === 'canvassing_approved');
                         ?>
                         <tr>
                             <td class="mono"><?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?></td>
@@ -126,7 +128,11 @@
                                         <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
                                         <button class="btn" type="submit">Archive</button>
                                     </form>
-                                    <?php if (!$canProcess): ?>
+                                    <?php if ($canCreatePo): ?>
+                                        <a class="btn primary" href="/procurement/po" title="Proceed to PO creation for items under this PR">Proceed to PO</a>
+                                    <?php elseif ($awaitingCanvass): ?>
+                                        <span class="muted">Awaiting Canvassing Approval</span>
+                                    <?php elseif (!$canProcess): ?>
                                         <form action="/manager/requests/send-for-approval" method="POST" style="display:inline;">
                                             <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
                                             <button class="btn primary" type="submit" title="Send to Admin for approval with attached PR PDF">Send for Admin Approval</button>

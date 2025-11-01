@@ -606,7 +606,7 @@ class AdminController extends BaseController
         $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
         if ($me <= 0 || $id <= 0) { header('Location: /notifications'); return; }
         try {
-            $st = $this->pdo->prepare('SELECT m.id, m.subject, m.body, m.is_read, m.created_at, m.sender_id, u.full_name AS from_name
+            $st = $this->pdo->prepare('SELECT m.id, m.subject, m.body, m.is_read, m.created_at, m.sender_id, m.attachment_name, m.attachment_path, u.full_name AS from_name
                 FROM messages m JOIN users u ON u.user_id = m.sender_id WHERE m.id = :id AND m.recipient_id = :me');
             $st->execute(['id' => $id, 'me' => $me]);
             $msg = $st->fetch();
@@ -617,6 +617,48 @@ class AdminController extends BaseController
             http_response_code(500);
             header('Content-Type: text/plain');
             echo 'Error loading message: ' . $e->getMessage();
+        }
+    }
+
+    /** Approve canvassing for a PR (admin action). */
+    public function approveCanvassing(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        $msgId = isset($_POST['message_id']) ? (int)$_POST['message_id'] : 0;
+        if ($pr === '') { header('Location: /inbox'); return; }
+        try {
+            $this->requests()->updateGroupStatus($pr, 'canvassing_approved', (int)($_SESSION['user_id'] ?? 0), 'Canvassing approved by Admin');
+            // Mark message read if provided
+            if ($msgId > 0) {
+                $st = $this->pdo->prepare('UPDATE messages SET is_read = TRUE WHERE id = :id AND recipient_id = :me');
+                $st->execute(['id' => $msgId, 'me' => (int)($_SESSION['user_id'] ?? 0)]);
+            }
+            header('Location: /inbox');
+        } catch (\Throwable $e) {
+            header('Location: /inbox?error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
+    /** Reject canvassing for a PR (admin action). */
+    public function rejectCanvassing(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        $notes = isset($_POST['notes']) ? trim((string)$_POST['notes']) : '';
+        $msgId = isset($_POST['message_id']) ? (int)$_POST['message_id'] : 0;
+        if ($pr === '') { header('Location: /inbox'); return; }
+        try {
+            $this->requests()->updateGroupStatus($pr, 'canvassing_rejected', (int)($_SESSION['user_id'] ?? 0), $notes !== '' ? ('Canvassing rejected: ' . $notes) : 'Canvassing rejected by Admin');
+            if ($msgId > 0) {
+                $st = $this->pdo->prepare('UPDATE messages SET is_read = TRUE WHERE id = :id AND recipient_id = :me');
+                $st->execute(['id' => $msgId, 'me' => (int)($_SESSION['user_id'] ?? 0)]);
+            }
+            header('Location: /inbox');
+        } catch (\Throwable $e) {
+            header('Location: /inbox?error=' . rawurlencode($e->getMessage()));
         }
     }
 
