@@ -7,9 +7,24 @@ use Mpdf\Mpdf;
 
 class PDFService
 {
+	/**
+	 * Create a preconfigured mPDF instance for A4 bond paper in portrait with reasonable margins.
+	 */
+	private function createMpdf(): Mpdf
+	{
+		return new Mpdf([
+			'format' => 'A4',        // A4 bond paper size
+			'orientation' => 'P',    // Portrait
+			'margin_left' => 12,
+			'margin_right' => 12,
+			'margin_top' => 12,
+			'margin_bottom' => 12,
+		]);
+	}
+
 	public function generatePurchaseRequestPDF(array $requestData): void
 	{
-		$mpdf = new Mpdf();
+		$mpdf = $this->createMpdf();
 		$html = '<h1 style="text-align:center">Purchase Request</h1>';
 		$html .= '<table width="100%" border="1" cellspacing="0" cellpadding="6">';
 		foreach ($requestData as $key => $value) {
@@ -24,7 +39,7 @@ class PDFService
 
 	public function generateInventoryReportPDF(array $meta, array $inventoryRows, string $output = 'D', ?string $fileName = null): void
 	{
-		$mpdf = new Mpdf();
+		$mpdf = $this->createMpdf();
 		// Footer with Prepared By and page numbers if available
 		$prepared = isset($meta['Prepared By']) ? (string)$meta['Prepared By'] : '';
 		$mpdf->SetFooter(($prepared !== '' ? ('Prepared by: ' . $prepared . ' | ') : '') . 'Page {PAGENO}/{nbpg}');
@@ -94,7 +109,7 @@ class PDFService
 
 	public function generatePurchaseOrderPDF(array $poData): void
 	{
-		$mpdf = new Mpdf();
+		$mpdf = $this->createMpdf();
 		$header = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
 			. '<div style="font-size:22px;font-weight:700;">Purchase Order</div>'
 			. '<div style="font-size:12px;color:#64748b;">Generated: ' . htmlspecialchars(date('Y-m-d H:i')) . '</div>'
@@ -111,7 +126,7 @@ class PDFService
 
 	public function generateConsumptionReportPDF(array $meta, array $rows, string $output = 'D', ?string $fileName = null): void
 	{
-		$mpdf = new Mpdf();
+		$mpdf = $this->createMpdf();
 		$prepared = isset($meta['Prepared By']) ? (string)$meta['Prepared By'] : '';
 		$mpdf->SetFooter(($prepared !== '' ? ('Prepared by: ' . $prepared . ' | ') : '') . 'Page {PAGENO}/{nbpg}');
 		$header = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">'
