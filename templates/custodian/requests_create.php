@@ -31,6 +31,9 @@
 	<?php require __DIR__ . '/../layouts/_sidebar.php'; ?>
 	<main class="content">
 		<div class="h1">Review Purchase Requisition</div>
+		<?php if (!empty($_GET['error']) && $_GET['error'] === 'cart_empty'): ?>
+			<div class="card" style="border-color:#fca5a5; background:color-mix(in oklab, var(--card) 92%, #fca5a5); margin-bottom:12px;">Your cart is empty. Please add items from Inventory before submitting.</div>
+		<?php endif; ?>
 		<div class="card">
 			<form method="POST" action="/admin-assistant/requests/submit">
 				<table>
@@ -48,10 +51,7 @@
 								<td style="width:140px;"><input type="number" name="items[<?= $i ?>][quantity]" min="1" value="<?= max(1,(int)($it['req_qty'] ?? 1)) ?>" /></td>
 								<td style="width:280px; display:flex; gap:8px; align-items:center;">
 									<input type="text" name="items[<?= $i ?>][unit]" value="<?= htmlspecialchars((string)($it['unit'] ?? 'pcs'), ENT_QUOTES, 'UTF-8') ?>" style="width:120px;" />
-									<form method="POST" action="/admin-assistant/requests/cart-remove" onsubmit="return confirm('Remove this item from the request?');">
-										<input type="hidden" name="item_id" value="<?= (int)$it['item_id'] ?>" />
-										<button class="btn muted" type="submit">Remove</button>
-									</form>
+									<button class="btn muted" type="submit" formaction="/admin-assistant/requests/cart-remove" formmethod="POST" name="item_id" value="<?= (int)$it['item_id'] ?>" onclick="return confirm('Remove this item from the request?');">Remove</button>
 								</td>
 							</tr>
 						<?php endforeach; else: ?>
@@ -59,6 +59,9 @@
 						<?php endif; ?>
 					</tbody>
 				</table>
+				<?php if (!empty($pr_preview)): ?>
+					<div style="margin-top:10px; font-size:13px; color:var(--muted);">Next Requisition ID (preview): <strong style="color:var(--text); font-weight:800;"><?= htmlspecialchars((string)$pr_preview, ENT_QUOTES, 'UTF-8') ?></strong></div>
+				<?php endif; ?>
 				<div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:12px;">
 					<div>
 						<label>Justification</label>
@@ -71,7 +74,7 @@
 				</div>
 				<div style="margin-top:12px; display:flex; gap:8px;">
 					<a href="/admin-assistant/inventory" class="btn muted">Back to Inventory</a>
-					<button class="btn primary" type="submit">Submit Purchase Requisition(s)</button>
+					<button class="btn primary" type="submit" <?= empty($cart) ? 'disabled' : '' ?>>Submit Purchase Requisition(s)</button>
 				</div>
 			</form>
 		</div>

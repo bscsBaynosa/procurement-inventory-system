@@ -296,7 +296,9 @@ class CustodianController extends BaseController
         foreach ($cart as $iid => $data) {
             if (isset($map[$iid])) { $list[] = $map[$iid] + ['req_qty' => (int)($data['quantity'] ?? 1)]; }
         }
-        $this->render('custodian/requests_create.php', ['cart' => $list]);
+        // Preview next PR number (first one that will be assigned when submitting)
+        $prPreview = $this->requests()->getNextPrNumberPreview();
+        $this->render('custodian/requests_create.php', ['cart' => $list, 'pr_preview' => $prPreview]);
     }
 
     /** Remove a single item from PR cart */
@@ -317,6 +319,15 @@ class CustodianController extends BaseController
         $userId = (int)($_SESSION['user_id'] ?? 0);
         $branchId = (int)($_SESSION['branch_id'] ?? 0);
         $items = isset($_POST['items']) ? (array)$_POST['items'] : [];
+        if (empty($items)) {
+            // Do not clear cart; redirect to review with error
+            header('Location: /admin-assistant/requests/review?error=cart_empty');
+            return;
+        }
+        // Generate a single PR number for the entire submission (multi-item PR)
+        $groupPrNumber = $this->requests()->generateNewPrNumber();
+        $justification = (string)($_POST['justification'] ?? 'Low stock auto-selected');
+        $neededBy = $_POST['needed_by'] ?? null;
         $created = 0;
         foreach ($items as $row) {
             $iid = (int)($row['item_id'] ?? 0);
@@ -330,17 +341,22 @@ class CustodianController extends BaseController
                     'request_type' => 'purchase_order',
                     'quantity' => $qty,
                     'unit' => $unit,
-                    'justification' => (string)($_POST['justification'] ?? 'Low stock auto-selected'),
+                    'justification' => $justification,
                     'status' => 'pending',
                     'priority' => 3,
-                    'needed_by' => $_POST['needed_by'] ?? null,
+                    'needed_by' => $neededBy,
+                    'pr_number' => $groupPrNumber,
                 ], $userId);
                 $created++;
             }
         }
-        // Clear cart
-        $_SESSION['pr_cart'] = [];
-        header('Location: /admin-assistant/requests/new?created=' . (int)$created);
+        if ($created > 0) {
+            // Clear cart only if something was created
+            $_SESSION['pr_cart'] = [];
+            header('Location: /admin-assistant/requests/new?created=' . (int)$created);
+        } else {
+            header('Location: /admin-assistant/requests/review?error=cart_empty');
+        }
     }
 
     /** Generate Inventory Report PDF for the selected category */
@@ -674,7 +690,8 @@ class CustodianController extends BaseController
         if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['custodian', 'admin'], true)) { header('Location: /login'); return; }
         $branchId = $_SESSION['branch_id'] ?? null;
         $items = $this->inventory()->listInventory($branchId ? (int)$branchId : null);
-        $this->render('custodian/request_create.php', [ 'items' => $items ]);
+        $prPreview = $this->requests()->getNextPrNumberPreview();
+        $this->render('custodian/request_create.php', [ 'items' => $items, 'pr_preview' => $prPreview ]);
     }
 
     /** Handle Purchase Request submission */

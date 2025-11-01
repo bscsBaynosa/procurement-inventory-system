@@ -19,7 +19,10 @@ class RequestService
 	{
 		// Ensure pr_number column and sequence table exist
 		try {
-			$this->pdo->exec("ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS pr_number VARCHAR(32) UNIQUE");
+			// Add column if missing (no UNIQUE to allow multi-item under same PR number)
+			$this->pdo->exec("ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS pr_number VARCHAR(32)");
+			// Drop legacy unique constraint if it exists to support grouping multiple items under one PR
+			$this->pdo->exec("ALTER TABLE purchase_requests DROP CONSTRAINT IF EXISTS purchase_requests_pr_number_key");
 		} catch (\Throwable $e) { /* ignore */ }
 		try {
 			$this->pdo->exec("CREATE TABLE IF NOT EXISTS purchase_requisition_sequences (
@@ -28,8 +31,10 @@ class RequestService
 				updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 			)");
 		} catch (\Throwable $e) { /* ignore */ }
-
-		$prNumber = $this->generatePrNumber();
+		// Use provided PR number (for grouped submissions), or generate a new one
+		$prNumber = isset($payload['pr_number']) && is_string($payload['pr_number']) && $payload['pr_number'] !== ''
+			? (string)$payload['pr_number']
+			: $this->generatePrNumber();
 
 		$stmt = $this->pdo->prepare(
 			'INSERT INTO purchase_requests (item_id, branch_id, requested_by, request_type, quantity, unit, justification, status, priority, needed_by, created_by, updated_by, pr_number)
@@ -82,7 +87,43 @@ class RequestService
 			$this->pdo->rollBack();
 			$next = 1; // fallback
 		}
-		return sprintf('%04d%04d', $year, $next);
+		// Format: YYYY + 3-digit sequential count (e.g., 2025001)
+		return sprintf('%04d%03d', $year, $next);
+	}
+
+	/**
+	 * Preview the next PR number without incrementing the counter.
+	 * Returns formatted as YYYY + 3-digit count (e.g., 2025001).
+	 */
+	public function getNextPrNumberPreview(): string
+	{
+		$year = (int)date('Y');
+		try {
+			// Ensure table exists and seed row for the year if missing (do not increment)
+			$this->pdo->exec("CREATE TABLE IF NOT EXISTS purchase_requisition_sequences (
+				calendar_year INTEGER PRIMARY KEY,
+				last_value INTEGER NOT NULL DEFAULT 0,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+			)");
+			$this->pdo->prepare('INSERT INTO purchase_requisition_sequences (calendar_year, last_value) VALUES (:y, 0) ON CONFLICT (calendar_year) DO NOTHING')
+				->execute(['y' => $year]);
+			$st = $this->pdo->prepare('SELECT last_value FROM purchase_requisition_sequences WHERE calendar_year = :y');
+			$st->execute(['y' => $year]);
+			$current = (int)$st->fetchColumn();
+			$next = $current + 1;
+			return sprintf('%04d%03d', $year, $next);
+		} catch (\Throwable $e) {
+			return sprintf('%04d%03d', $year, 1);
+		}
+	}
+
+	/**
+	 * Generate and reserve a new PR number for a grouped submission.
+	 * This increments the sequence once and returns the value for reuse across items.
+	 */
+	public function generateNewPrNumber(): string
+	{
+		return $this->generatePrNumber();
 	}
 
 	public function getPendingRequests(?int $branchId = null): array

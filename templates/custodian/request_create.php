@@ -35,6 +35,9 @@
         <?php endif; ?>
         <div class="card">
             <form method="POST" action="/admin-assistant/requests">
+                <?php if (!empty($pr_preview)): ?>
+                    <div style="margin-bottom:10px; font-size:13px; color:var(--muted);">Next Requisition ID (preview): <strong style="color:var(--text); font-weight:800;"><?= htmlspecialchars((string)$pr_preview, ENT_QUOTES, 'UTF-8') ?></strong></div>
+                <?php endif; ?>
                 <label for="item_id">Item</label>
                 <select id="item_id" name="item_id" required>
                     <option value="">Select item…</option>
