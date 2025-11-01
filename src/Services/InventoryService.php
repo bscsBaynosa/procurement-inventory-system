@@ -10,6 +10,19 @@ class InventoryService
 	private PDO $pdo;
 	private static ?bool $hasMaintaining = null;
 
+	/** Fixed set of categories used by the client (no 'Paper' category). */
+	private function allowedCategories(): array
+	{
+		return [
+			'Office Supplies',
+			'Medical Equipments',
+			'Medicines',
+			'Machines',
+			'Electronics',
+			'Appliances',
+		];
+	}
+
 	public function __construct(?PDO $pdo = null)
 	{
 		$this->pdo = $pdo ?? Connection::resolve();
@@ -42,21 +55,23 @@ class InventoryService
 	 */
 	public function getStatsByCategory(?int $branchId = null): array
 	{
-		$sql = "
-			SELECT
-				COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') AS category,
-				COUNT(*) AS total,
-				SUM(CASE WHEN status = 'good' THEN 1 ELSE 0 END) AS good,
-				SUM(CASE WHEN status = 'for_repair' THEN 1 ELSE 0 END) AS for_repair,
-				SUM(CASE WHEN status = 'for_replacement' THEN 1 ELSE 0 END) AS for_replacement,
-				SUM(CASE WHEN status = 'retired' THEN 1 ELSE 0 END) AS retired
-			FROM inventory_items
-		";
+		// Build a VALUES list for the fixed categories, then left join with aggregated counts.
+		$cats = $this->allowedCategories();
+		$vals = [];
 		$params = [];
+		foreach ($cats as $i => $c) {
+			$key = 'c' . $i;
+			$vals[] = '(:' . $key . ')';
+			$params[$key] = $c;
+		}
+		$sql = "WITH cats(category) AS (VALUES " . implode(',', $vals) . "),\nagg AS (\n    SELECT COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') AS category,\n           COUNT(*) AS total,\n           SUM(CASE WHEN status = 'good' THEN 1 ELSE 0 END) AS good,\n           SUM(CASE WHEN status = 'for_repair' THEN 1 ELSE 0 END) AS for_repair,\n           SUM(CASE WHEN status = 'for_replacement' THEN 1 ELSE 0 END) AS for_replacement,\n           SUM(CASE WHEN status = 'retired' THEN 1 ELSE 0 END) AS retired\n    FROM inventory_items";
 		$conds = [];
 		if ($branchId) { $conds[] = '(branch_id = :b OR branch_id IS NULL)'; $params['b'] = $branchId; }
+		// Exclude deprecated 'Paper' category completely
+		$conds[] = '(category IS NULL OR category NOT ILIKE :no_paper)';
+		$params['no_paper'] = 'paper%';
 		if ($conds) { $sql .= ' WHERE ' . implode(' AND ', $conds); }
-		$sql .= " GROUP BY COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') ORDER BY category ASC";
+		$sql .= "\n    GROUP BY COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized')\n)\nSELECT cats.category,\n       COALESCE(agg.total, 0) AS total,\n       COALESCE(agg.good, 0) AS good,\n       COALESCE(agg.for_repair, 0) AS for_repair,\n       COALESCE(agg.for_replacement, 0) AS for_replacement,\n       COALESCE(agg.retired, 0) AS retired\nFROM cats\nLEFT JOIN agg ON agg.category = cats.category\nORDER BY cats.category ASC";
 		$stmt = $this->pdo->prepare($sql);
 		$stmt->execute($params);
 		return $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -79,6 +94,9 @@ class InventoryService
 		// Temporary removal: hide any Bondpaper items from all listings
 		$wheres[] = 'name NOT ILIKE :hide_bondpaper';
 		$params['hide_bondpaper'] = '%bondpaper%';
+		// Exclude deprecated 'Paper' category entirely from any listings
+		$wheres[] = '(category IS NULL OR category NOT ILIKE :no_paper)';
+		$params['no_paper'] = 'paper%';
 		if ($wheres) { $sql .= ' WHERE ' . implode(' AND ', $wheres); }
 		$sql .= ' ORDER BY name ASC';
 		$stmt = $this->pdo->prepare($sql);

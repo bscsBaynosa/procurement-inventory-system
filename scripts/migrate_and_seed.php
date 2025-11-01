@@ -41,6 +41,18 @@ try {
     exit(5);
 }
 
+// Cleanup: remove deprecated 'Paper' category entirely
+try {
+    $cntStmt = $pdo->query("SELECT COUNT(*) FROM inventory_items WHERE category ILIKE 'paper%'");
+    $cnt = $cntStmt ? (int)$cntStmt->fetchColumn() : 0;
+    if ($cnt > 0) {
+        $pdo->exec("DELETE FROM inventory_items WHERE category ILIKE 'paper%'");
+        fwrite(STDOUT, "Removed {$cnt} inventory item(s) from deprecated 'Paper' category.\n");
+    }
+} catch (Throwable $e) {
+    fwrite(STDERR, "Warning: cleanup of 'Paper' category failed: " . $e->getMessage() . "\n");
+}
+
 // Seed a default branch if none exists
 try {
     $exists = $pdo->query("SELECT 1 FROM branches LIMIT 1");

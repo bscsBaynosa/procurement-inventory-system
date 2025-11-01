@@ -38,6 +38,17 @@ class Installer
         $this->pdo->exec($sql);
         $logs[] = 'Schema applied successfully';
 
+        // Remove legacy/unused 'Paper' category and its items (client no longer uses this category)
+        try {
+            $deleted = (int)$this->pdo->query("SELECT COUNT(*) FROM inventory_items WHERE category ILIKE 'paper%'")->fetchColumn();
+            if ($deleted > 0) {
+                $this->pdo->exec("DELETE FROM inventory_items WHERE category ILIKE 'paper%'");
+                $logs[] = "Removed {$deleted} inventory item(s) from deprecated 'Paper' category";
+            }
+        } catch (\Throwable $ignored) {
+            // Non-fatal; cleanup is best-effort and idempotent
+        }
+
         // Ensure users table has first_name/last_name columns; migrate legacy full_name data
         try {
             $colCheck = $this->pdo->query("SELECT column_name FROM information_schema.columns WHERE table_name='users'")
