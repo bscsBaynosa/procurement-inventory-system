@@ -97,8 +97,6 @@ class CustodianController extends BaseController
     $role = $_SESSION['role'] ?? '';
     if ($role === 'custodian') { $role = 'admin_assistant'; }
     if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant', 'admin'], true)) { header('Location: /login'); return; }
-    // Admin Assistant may not create inventory items
-    if ($role === 'admin_assistant') { header('Location: /custodian/inventory?error=Not+allowed'); return; }
         $name = trim((string)($_POST['name'] ?? ''));
         $category = trim((string)($_POST['category'] ?? ''));
         $status = (string)($_POST['status'] ?? 'good');
@@ -169,9 +167,10 @@ class CustodianController extends BaseController
                 changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )");
             // Get current
-            $st = $pdo->prepare('SELECT quantity FROM inventory_items WHERE item_id = :id');
+            $st = $pdo->prepare('SELECT quantity, name, category, unit FROM inventory_items WHERE item_id = :id');
             $st->execute(['id' => $itemId]);
-            $prev = (int)($st->fetchColumn() ?: 0);
+            $rowItem = $st->fetch(\PDO::FETCH_ASSOC) ?: ['quantity' => 0, 'name' => '', 'category' => null, 'unit' => ''];
+            $prev = (int)($rowItem['quantity'] ?? 0);
             // Update
             $up = $pdo->prepare('UPDATE inventory_items SET quantity = :q, updated_by = :by, updated_at = NOW() WHERE item_id = :id');
             $up->execute(['q' => $newCount, 'by' => $userId, 'id' => $itemId]);
@@ -179,6 +178,73 @@ class CustodianController extends BaseController
             $delta = $newCount - $prev; // negative -> consumed
             $ins = $pdo->prepare('INSERT INTO consumption_reports (item_id, previous_count, current_count, delta, changed_by) VALUES (:i,:p,:c,:d,:by)');
             $ins->execute(['i' => $itemId, 'p' => $prev, 'c' => $newCount, 'd' => $delta, 'by' => $userId]);
+
+            // Auto-archive a per-item monthly consumption report
+            try {
+                $start = date('Y-m-01');
+                $end = date('Y-m-d', strtotime($start . ' +1 month'));
+                // Fetch recent logs for this item in month
+                $q = $pdo->prepare('SELECT previous_count, current_count, delta, changed_at, u.full_name
+                                     FROM consumption_reports cr
+                                     LEFT JOIN users u ON u.user_id = cr.changed_by
+                                     WHERE cr.item_id = :iid AND cr.changed_at >= :s AND cr.changed_at < :e
+                                     ORDER BY cr.changed_at DESC');
+                $q->execute(['iid' => $itemId, 's' => $start, 'e' => $end]);
+                $rows = [];
+                foreach ($q->fetchAll(\PDO::FETCH_ASSOC) as $r) {
+                    $rows[] = [
+                        'name' => (string)($rowItem['name'] ?? ('Item #' . $itemId)),
+                        'previous' => (int)$r['previous_count'],
+                        'current' => (int)$r['current_count'],
+                        'delta' => (int)$r['delta'],
+                        'user' => (string)($r['full_name'] ?? ''),
+                        'at' => date('Y-m-d H:i', strtotime((string)$r['changed_at'])),
+                    ];
+                }
+                // Summary (beginning/delivered/consumed/ending)
+                $q2 = $pdo->prepare('SELECT
+                        (SELECT previous_count FROM consumption_reports WHERE item_id = :iid AND changed_at >= :s AND changed_at < :e ORDER BY changed_at ASC LIMIT 1) AS beginning,
+                        COALESCE(SUM(CASE WHEN delta > 0 THEN delta ELSE 0 END),0) AS delivered,
+                        COALESCE(SUM(CASE WHEN delta < 0 THEN -delta ELSE 0 END),0) AS consumed,
+                        (SELECT current_count FROM consumption_reports WHERE item_id = :iid AND changed_at >= :s AND changed_at < :e ORDER BY changed_at DESC LIMIT 1) AS ending
+                    FROM consumption_reports WHERE item_id = :iid AND changed_at >= :s AND changed_at < :e');
+                $q2->execute(['iid' => $itemId, 's' => $start, 'e' => $end]);
+                $agg = $q2->fetch(\PDO::FETCH_ASSOC) ?: ['beginning'=>null,'delivered'=>0,'consumed'=>0,'ending'=>null];
+                $summary = [[
+                    'name' => (string)($rowItem['name'] ?? ('Item #' . $itemId)),
+                    'unit' => (string)($rowItem['unit'] ?? ''),
+                    'beginning' => (int)($agg['beginning'] ?? $prev),
+                    'delivered' => (int)($agg['delivered'] ?? 0),
+                    'consumed' => (int)($agg['consumed'] ?? 0),
+                    'ending' => (int)($agg['ending'] ?? $newCount),
+                ]];
+                $meta = [
+                    'Item' => (string)($rowItem['name'] ?? ('Item #' . $itemId)),
+                    'Period' => date('Y-m-01') . ' to ' . date('Y-m-t'),
+                    'Prepared By' => (string)($_SESSION['full_name'] ?? ('User #' . $userId)),
+                    'Prepared At' => date('Y-m-d H:i'),
+                    '_summary' => $summary,
+                ];
+                $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
+                if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+                $fileBase = 'consumption_item' . (int)$itemId . '_' . date('Ym') . '_' . date('Ymd_His') . '.pdf';
+                $abs = $dir . DIRECTORY_SEPARATOR . $fileBase;
+                $pdf = new \App\Services\PDFService();
+                $pdf->generateConsumptionReportPDF($meta, $rows, 'F', $abs);
+                // Archive entry
+                try {
+                    $insA = $pdo->prepare('INSERT INTO report_archives (report_type, category, prepared_by, prepared_name, prepared_at, file_name, file_path) VALUES (:t,:c,:u,:n,:at,:fn,:fp)');
+                    $insA->execute([
+                        't' => 'consumption',
+                        'c' => null,
+                        'u' => $userId,
+                        'n' => (string)($_SESSION['full_name'] ?? ''),
+                        'at' => date('Y-m-d H:i:s'),
+                        'fn' => $fileBase,
+                        'fp' => $abs,
+                    ]);
+                } catch (\Throwable $ignored2) {}
+            } catch (\Throwable $ignored1) {}
             $redir = '/admin-assistant/inventory' . ($category !== '' ? ('?category=' . rawurlencode($category)) : '');
             header('Location: ' . $redir . '&stock_updated=1');
         } catch (\Throwable $e) {
@@ -415,11 +481,12 @@ class CustodianController extends BaseController
         @readfile($abs);
     }
 
-    /** Generate Consumption Report PDF for recent stock updates */
+    /** Generate Consumption Report PDF for recent stock updates; supports category or single item_id */
     public function consumptionReport(): void
     {
         if (!$this->auth()->isAuthenticated()) { header('Location: /login'); return; }
         $category = isset($_GET['category']) ? trim((string)$_GET['category']) : '';
+        $itemId = isset($_GET['item_id']) ? (int)$_GET['item_id'] : 0;
         $download = isset($_GET['download']) ? (string)$_GET['download'] === '1' : true;
         // Date range: month=YYYY-MM or start/end (ISO), default current month
         $month = isset($_GET['month']) ? trim((string)$_GET['month']) : '';
@@ -444,13 +511,14 @@ class CustodianController extends BaseController
             changed_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
             changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )");
-        $sql = 'SELECT cr.previous_count, cr.current_count, cr.delta, cr.changed_at, u.full_name, i.name, i.category
-                FROM consumption_reports cr
-                JOIN inventory_items i ON i.item_id = cr.item_id
-                LEFT JOIN users u ON u.user_id = cr.changed_by';
+    $sql = 'SELECT cr.previous_count, cr.current_count, cr.delta, cr.changed_at, u.full_name, i.name, i.category, i.unit
+        FROM consumption_reports cr
+        JOIN inventory_items i ON i.item_id = cr.item_id
+        LEFT JOIN users u ON u.user_id = cr.changed_by';
         $params = [];
         $wheres = [];
-        if ($category !== '') { $wheres[] = 'i.category ILIKE :cat'; $params['cat'] = $category; }
+    if ($itemId > 0) { $wheres[] = 'i.item_id = :iid'; $params['iid'] = $itemId; }
+    elseif ($category !== '') { $wheres[] = 'i.category ILIKE :cat'; $params['cat'] = $category; }
         $wheres[] = 'cr.changed_at >= :start AND cr.changed_at < :end';
         $params['start'] = $start; $params['end'] = $end;
         if ($wheres) { $sql .= ' WHERE ' . implode(' AND ', $wheres); }
@@ -475,7 +543,7 @@ class CustodianController extends BaseController
                 SELECT cr.*, i.name, i.unit
                 FROM consumption_reports cr
                 JOIN inventory_items i ON i.item_id = cr.item_id
-                WHERE i.category ILIKE :cat2 AND cr.changed_at >= :s AND cr.changed_at < :e
+                WHERE " . ($itemId > 0 ? 'i.item_id = :item2' : 'i.category ILIKE :cat2') . " AND cr.changed_at >= :s AND cr.changed_at < :e
             ),
             agg AS (
                 SELECT item_id,
@@ -500,12 +568,15 @@ class CustodianController extends BaseController
             LEFT JOIN agg a ON a.item_id = i.item_id
             LEFT JOIN firsts f ON f.item_id = i.item_id
             LEFT JOIN lasts l ON l.item_id = i.item_id
-            WHERE i.category ILIKE :cat3
+            WHERE " . ($itemId > 0 ? 'i.item_id = :item3' : 'i.category ILIKE :cat3') . "
               AND (a.delivered IS NOT NULL OR a.consumed IS NOT NULL)
             ORDER BY i.name ASC
         ";
         $stS = $pdo->prepare($summarySql);
-        $stS->execute(['cat2' => $category !== '' ? $category : '%', 's' => $start, 'e' => $end, 'cat3' => $category !== '' ? $category : '%']);
+        $paramsS = ['s' => $start, 'e' => $end];
+        if ($itemId > 0) { $paramsS += ['item2' => $itemId, 'item3' => $itemId]; }
+        else { $paramsS += ['cat2' => $category !== '' ? $category : '%', 'cat3' => $category !== '' ? $category : '%']; }
+        $stS->execute($paramsS);
         foreach ($stS->fetchAll(\PDO::FETCH_ASSOC) as $r) {
             $summary[] = [
                 'name' => (string)$r['name'],
@@ -516,7 +587,7 @@ class CustodianController extends BaseController
             ];
         }
         $meta = [
-            'Category' => $category !== '' ? $category : 'All',
+            $itemId > 0 ? 'Item' : 'Category' => $itemId > 0 ? (string)($summary[0]['name'] ?? ('Item #' . $itemId)) : ($category !== '' ? $category : 'All'),
             'Period' => date('Y-m-d', strtotime($start)) . ' to ' . date('Y-m-d', strtotime($end . ' -1 day')),
             'Prepared By' => (string)($_SESSION['full_name'] ?? ('User #' . (int)($_SESSION['user_id'] ?? 0))),
             'Prepared At' => date('Y-m-d H:i'),
@@ -524,8 +595,8 @@ class CustodianController extends BaseController
         ];
         $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
         if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
-        $slugCat = $category !== '' ? preg_replace('/[^A-Za-z0-9_-]+/', '_', $category) : 'All';
-        $fileBase = 'consumption_' . $slugCat . '_' . date('Ymd_His') . '.pdf';
+        $slug = $itemId > 0 ? ('item' . $itemId) : ($category !== '' ? preg_replace('/[^A-Za-z0-9_-]+/', '_', $category) : 'All');
+        $fileBase = 'consumption_' . $slug . '_' . date('Ymd_His') . '.pdf';
         $abs = $dir . DIRECTORY_SEPARATOR . $fileBase;
         $pdf = new \App\Services\PDFService();
         $pdf->generateConsumptionReportPDF($meta, $rows, 'F', $abs);
@@ -533,7 +604,7 @@ class CustodianController extends BaseController
             $ins = $pdo->prepare('INSERT INTO report_archives (report_type, category, prepared_by, prepared_name, prepared_at, file_name, file_path) VALUES (:t,:c,:u,:n,:at,:fn,:fp)');
             $ins->execute([
                 't' => 'consumption',
-                'c' => $category !== '' ? $category : null,
+                'c' => $itemId > 0 ? null : ($category !== '' ? $category : null),
                 'u' => (int)($_SESSION['user_id'] ?? 0),
                 'n' => (string)($_SESSION['full_name'] ?? ''),
                 'at' => date('Y-m-d H:i:s'),
@@ -545,6 +616,15 @@ class CustodianController extends BaseController
         header('Content-Disposition: ' . ($download ? 'attachment' : 'inline') . '; filename="' . basename($fileBase) . '"');
         header('Content-Length: ' . (string)@filesize($abs));
         @readfile($abs);
+    }
+
+    public function reportsModule(): void
+    {
+        if (!$this->auth()->isAuthenticated()) { header('Location: /login'); return; }
+        // Prepare simple category options and current month for convenience
+        $categories = ['Office Supplies','Medical Equipments','Medicines','Machines','Electronics','Appliances'];
+        $month = isset($_GET['month']) ? (string)$_GET['month'] : date('Y-m');
+        $this->render('dashboard/reports_module.php', ['categories' => $categories, 'month' => $month]);
     }
 
     public function reportsList(): void

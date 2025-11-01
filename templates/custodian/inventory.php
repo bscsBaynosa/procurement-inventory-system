@@ -45,19 +45,7 @@
                     <a class="btn <?= $active?'primary':'muted' ?>" href="/admin-assistant/inventory?category=<?= rawurlencode($c) ?>"><?= htmlspecialchars($c, ENT_QUOTES, 'UTF-8') ?></a>
                 <?php endforeach; ?>
                 <a class="btn muted" href="/admin-assistant/inventory">All</a>
-                <div style="margin-left:auto; display:flex; gap:8px; align-items:center;">
-                    <form method="GET" action="/admin-assistant/inventory" style="display:flex; gap:6px; align-items:center;">
-                        <input type="hidden" name="category" value="<?= htmlspecialchars($sel, ENT_QUOTES, 'UTF-8') ?>" />
-                        <input name="q" placeholder="Search name…" value="<?= htmlspecialchars((string)($search ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
-                        <select name="status">
-                            <option value="">All</option>
-                            <option value="low" <?= (($filter_status ?? '')==='low'?'selected':'') ?>>Low stock</option>
-                            <option value="ok" <?= (($filter_status ?? '')==='ok'?'selected':'') ?>>OK</option>
-                        </select>
-                        <button class="btn muted" type="submit">Filter</button>
-                    </form>
-                    <a class="btn muted" href="/admin-assistant/requests/review">Proceed to Purchase Requisition (<?= (int)($cart_count ?? 0) ?>)</a>
-                </div>
+                <!-- Top bar is now strictly for navigation between category submodules; filters moved to Items card. -->
             </div>
         </div>
         <?php $role = $_SESSION['role'] ?? ''; if ($role === 'custodian') $role = 'admin_assistant'; ?>
@@ -97,15 +85,56 @@
                 </form>
             </div>
             <?php endif; ?>
+            <?php if ($role === 'admin_assistant' && ($sel !== '')): ?>
             <div class="card">
-                <div style="font-weight:700; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
-                    <div>Items <?= $sel!==''? ('• ' . htmlspecialchars($sel, ENT_QUOTES, 'UTF-8')):'' ?></div>
-                    <?php if ($sel!==''): ?>
-                        <div style="display:flex; gap:8px;">
-                            <a class="btn muted" href="/admin-assistant/reports/inventory?category=<?= rawurlencode($sel) ?>&download=1">Download Inventory Report</a>
-                            <a class="btn muted" href="/admin-assistant/reports/consumption?category=<?= rawurlencode($sel) ?>&download=1">Download Consumption Report</a>
+                <div style="font-weight:700; margin-bottom:8px;">Add Item to <?= htmlspecialchars($sel, ENT_QUOTES, 'UTF-8') ?></div>
+                <form method="POST" action="/admin-assistant/inventory">
+                    <label for="name2">Item Name</label>
+                    <input id="name2" name="name" type="text" required>
+                    <input type="hidden" name="category" value="<?= htmlspecialchars($sel, ENT_QUOTES, 'UTF-8') ?>" />
+                    <div class="row">
+                        <div style="flex:1;">
+                            <label for="status2">Status</label>
+                            <select id="status2" name="status" required>
+                                <option value="good">Good</option>
+                                <option value="for_repair">For Repair</option>
+                                <option value="for_replacement">For Replacement</option>
+                            </select>
                         </div>
-                    <?php endif; ?>
+                        <div style="width:120px;">
+                            <label for="quantity2">Qty</label>
+                            <input id="quantity2" name="quantity" type="number" min="1" value="1" required>
+                        </div>
+                        <div style="width:120px;">
+                            <label for="unit2">Unit</label>
+                            <input id="unit2" name="unit" type="text" value="pcs">
+                        </div>
+                    </div>
+                    <div style="margin-top:10px; display:flex; gap:8px;">
+                        <button class="btn primary" type="submit">Add Item</button>
+                        <a href="/admin-assistant/inventory?category=<?= rawurlencode($sel) ?>" class="btn muted">Back</a>
+                    </div>
+                </form>
+            </div>
+            <?php endif; ?>
+            <div class="card">
+                <div style="font-weight:700; margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+                    <div>Items <?= $sel!==''? ('• ' . htmlspecialchars($sel, ENT_QUOTES, 'UTF-8')):'' ?></div>
+                    <div style="display:flex; gap:8px; align-items:center; margin-left:auto;">
+                        <form method="GET" action="/admin-assistant/inventory" style="display:flex; gap:6px; align-items:center;">
+                            <input type="hidden" name="category" value="<?= htmlspecialchars($sel, ENT_QUOTES, 'UTF-8') ?>" />
+                            <input name="q" placeholder="Search name…" value="<?= htmlspecialchars((string)($search ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
+                            <select name="status">
+                                <option value="">All</option>
+                                <option value="low" <?= (($filter_status ?? '')==='low'?'selected':'') ?>>Low stock</option>
+                                <option value="ok" <?= (($filter_status ?? '')==='ok'?'selected':'') ?>>OK</option>
+                            </select>
+                            <button class="btn muted" type="submit">Filter</button>
+                        </form>
+                        <?php if ($sel!==''): ?>
+                        <a class="btn muted" href="/admin-assistant/reports/inventory?category=<?= rawurlencode($sel) ?>&download=1">Inventory Report</a>
+                        <?php endif; ?>
+                    </div>
                 </div>
                 <form method="POST" action="/admin-assistant/inventory/cart-add">
                 <table>
@@ -139,6 +168,7 @@
                                         <input type="hidden" name="category" value="<?= htmlspecialchars((string)$selected_category, ENT_QUOTES, 'UTF-8') ?>" />
                                         <input name="new_count" type="number" min="0" value="<?= $qty ?>" style="width:110px;" />
                                         <button class="btn muted" type="submit">Save Count</button>
+                                        <a class="btn muted" href="/admin-assistant/reports/consumption?item_id=<?= (int)$it['item_id'] ?>&month=<?= date('Y-m') ?>&download=1">Consumption Report</a>
                                     </form>
                                     <form method="POST" action="/admin-assistant/inventory/update-meta" style="display:inline-flex; gap:6px; align-items:center; margin-top:6px;">
                                         <input type="hidden" name="item_id" value="<?= (int)$it['item_id'] ?>" />
@@ -167,7 +197,7 @@
                     <?php endif; ?>
                     </tbody>
                 </table>
-                <div style="margin-top:10px; display:flex; gap:8px;">
+                <div style="margin-top:10px; display:flex; gap:8px; justify-content:space-between; align-items:center;">
                     <button class="btn muted" type="submit">Add selected low‑stock items</button>
                     <a class="btn primary" href="/admin-assistant/requests/review">Proceed to Purchase Requisition (<?= (int)($cart_count ?? 0) ?>)</a>
                 </div>
