@@ -276,9 +276,12 @@ class RequestService
 		try {
 			$ok = true;
 			foreach ($rows as $r) {
-				$ok = $ok && $this->updateRequestStatus((int)$r['request_id'], $status, $performedBy, $notes);
+				// Suppress per-row requester notify; we'll send a single group notification later
+				$ok = $ok && $this->updateRequestStatus((int)$r['request_id'], $status, $performedBy, $notes, true);
 			}
 			$this->pdo->commit();
+			// Single consolidated notification to requester(s)
+			$this->notifyRequestersForGroup($prNumber, $status, $notes, $performedBy);
 			return $ok;
 		} catch (\Throwable $e) {
 			$this->pdo->rollBack();
@@ -379,7 +382,7 @@ class RequestService
 		return $result;
 	}
 
-	public function updateRequestStatus(int $requestId, string $status, int $performedBy, ?string $notes = null): bool
+	public function updateRequestStatus(int $requestId, string $status, int $performedBy, ?string $notes = null, bool $suppressRequesterNotify = false): bool
 	{
 		$current = $this->getRequestById($requestId);
 		if (!$current) {
@@ -434,6 +437,18 @@ class RequestService
 				} catch (\Throwable $ignored) {
 					// best-effort notification; ignore errors
 				}
+			}
+			// Notify the requester (Admin Assistant) of status change
+			if (!$suppressRequesterNotify) {
+				try {
+					$this->ensureMessagesTable();
+					$label = $this->statusLabel($status);
+					$pr = (string)($current['pr_number'] ?? (string)$requestId);
+					$items = $this->buildItemsSummaryForPr($pr);
+					$subject = 'PR ' . $pr . ' • ' . $label;
+					$body = 'PR ' . $pr . ' status update: ' . $label . ".\n\nItems Requested:\n" . $items . ($notes ? "\n\nNotes: " . $notes : '');
+					$this->sendMessage((int)$performedBy, (int)($current['requested_by'] ?? 0), $subject, $body);
+				} catch (\Throwable $ignored) {}
 			}
 		}
 
@@ -504,6 +519,74 @@ class RequestService
 			'payload' => $jsonPayload,
 			'performed_by' => $performedBy,
 		]);
+	}
+
+	/** Consolidated notify for all requesters of a PR group after a group status update. */
+	private function notifyRequestersForGroup(string $prNumber, string $status, ?string $notes, int $performedBy): void
+	{
+		try {
+			$this->ensureMessagesTable();
+			$st = $this->pdo->prepare("SELECT DISTINCT requested_by FROM purchase_requests WHERE pr_number = :pr");
+			$st->execute(['pr' => $prNumber]);
+			$recipients = array_map(static fn($r) => (int)$r['requested_by'], $st->fetchAll() ?: []);
+			if (!$recipients) { return; }
+			$label = $this->statusLabel($status);
+			$items = $this->buildItemsSummaryForPr($prNumber);
+			$subject = 'PR ' . $prNumber . ' • ' . $label;
+			$body = 'PR ' . $prNumber . ' status update: ' . $label . ".\n\nItems Requested:\n" . $items . ($notes ? "\n\nNotes: " . $notes : '');
+			foreach ($recipients as $to) {
+				$this->sendMessage($performedBy, $to, $subject, $body);
+			}
+		} catch (\Throwable $ignored) {}
+	}
+
+	/** Create messages table if needed (with attachment columns). */
+	private function ensureMessagesTable(): void
+	{
+		try {
+			$this->pdo->exec('CREATE TABLE IF NOT EXISTS messages (
+				id BIGSERIAL PRIMARY KEY,
+				sender_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+				recipient_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+				subject VARCHAR(255) NOT NULL,
+				body TEXT NOT NULL,
+				is_read BOOLEAN NOT NULL DEFAULT FALSE,
+				created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+				attachment_name VARCHAR(255),
+				attachment_path TEXT
+			)');
+		} catch (\Throwable $e) {}
+	}
+
+	/** Send a message (best-effort). */
+	private function sendMessage(int $senderId, int $recipientId, string $subject, string $body, ?string $attachmentName = null, ?string $attachmentPath = null): void
+	{
+		if ($recipientId <= 0) { return; }
+		try {
+			$this->ensureMessagesTable();
+			$sql = 'INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)';
+			$st = $this->pdo->prepare($sql);
+			$st->execute(['s' => $senderId ?: null, 'r' => $recipientId, 'j' => $subject, 'b' => $body, 'an' => $attachmentName, 'ap' => $attachmentPath]);
+		} catch (\Throwable $ignored) {}
+	}
+
+	/** Build items summary string for a PR group. */
+	private function buildItemsSummaryForPr(string $prNumber): string
+	{
+		try {
+			$st = $this->pdo->prepare("SELECT i.name AS item_name, pr.quantity, pr.unit FROM purchase_requests pr LEFT JOIN inventory_items i ON i.item_id = pr.item_id WHERE pr.pr_number = :pr ORDER BY pr.created_at ASC");
+			$st->execute(['pr' => $prNumber]);
+			$lines = [];
+			foreach ($st->fetchAll() as $r) { $lines[] = ((string)($r['item_name'] ?? 'Item')) . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''); }
+			return implode("\n", $lines);
+		} catch (\Throwable $e) { return ''; }
+	}
+
+	/** Map status codes to human-friendly labels used in UI. */
+	private function statusLabel(string $status): string
+	{
+		$labelMap = ['pending'=>'For Admin Approval','approved'=>'Approved','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled'];
+		return $labelMap[$status] ?? $status;
 	}
 
 	/** Ensure new columns used by grouped PRs exist. Safe to call often. */
