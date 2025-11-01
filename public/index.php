@@ -210,6 +210,11 @@ if ($method === 'GET' && $path === '/manager/requests/history') {
 	$manager->requestsHistory();
 	exit;
 }
+if ($method === 'GET' && $path === '/manager/requests/completed') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->completedRequisitions();
+	exit;
+}
 if ($method === 'POST' && $path === '/manager/requests/update-status') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','admin'], true)) { header('Location: /login'); exit; }
 	$manager->updateRequestStatus();
@@ -228,6 +233,16 @@ if ($method === 'POST' && $path === '/manager/requests/archive') {
 if ($method === 'POST' && $path === '/manager/requests/restore') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
 	$manager->restoreGroup();
+	exit;
+}
+if ($method === 'GET' && $path === '/manager/requests/canvass') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->canvass();
+	exit;
+}
+if ($method === 'POST' && $path === '/manager/requests/canvass') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->canvassSubmit();
 	exit;
 }
 if ($method === 'GET' && $path === '/manager/requests/view') {

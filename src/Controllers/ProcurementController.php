@@ -107,6 +107,86 @@ class ProcurementController extends BaseController
         $this->render('procurement/requests_history.php', [ 'groups' => $rows, 'filters' => [ 'branch' => $branchId, 'status' => $status, 'sort' => $sort, 'order' => $order ] ]);
     }
 
+    /** GET: Completed Requisitions (status=completed) */
+    public function completedRequisitions(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager', 'procurement', 'admin'], true)) { header('Location: /login'); return; }
+        $branchId = isset($_GET['branch']) && $_GET['branch'] !== '' ? (int)$_GET['branch'] : null;
+        $sort = isset($_GET['sort']) ? (string)$_GET['sort'] : 'date';
+        $order = isset($_GET['order']) ? (string)$_GET['order'] : 'desc';
+        $rows = $this->requests()->getRequestsGrouped([
+            'branch_id' => $branchId,
+            'status' => 'completed',
+            'include_archived' => false,
+            'sort' => $sort,
+            'order' => $order,
+        ]);
+        $this->render('procurement/requests_completed.php', [ 'groups' => $rows, 'filters' => [ 'branch' => $branchId, 'sort' => $sort, 'order' => $order ] ]);
+    }
+
+    /** GET: Canvassing form for an approved PR */
+    public function canvass(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager', 'procurement', 'admin'], true)) { header('Location: /login'); return; }
+        $pr = isset($_GET['pr']) ? trim((string)$_GET['pr']) : '';
+        if ($pr === '') { header('Location: /manager/requests'); return; }
+        $rows = $this->requests()->getGroupDetails($pr);
+        if (!$rows) { header('Location: /manager/requests'); return; }
+        // Load suppliers (users with role=supplier)
+        $pdo = \App\Database\Connection::resolve();
+        $suppliers = $pdo->query("SELECT user_id, full_name FROM users WHERE is_active = TRUE AND role = 'supplier' ORDER BY full_name ASC")->fetchAll();
+        $this->render('procurement/canvass_form.php', [ 'pr' => $pr, 'rows' => $rows, 'suppliers' => $suppliers ]);
+    }
+
+    /** POST: Submit canvassing selection and generate a PDF, then send to Admin for approval */
+    public function canvassSubmit(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager', 'procurement', 'admin'], true)) { header('Location: /login'); return; }
+        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        $chosen = isset($_POST['suppliers']) && is_array($_POST['suppliers']) ? array_slice(array_values(array_unique(array_map('intval', $_POST['suppliers']))), 0, 5) : [];
+        if ($pr === '' || count($chosen) < 3) { header('Location: /manager/requests/canvass?pr=' . urlencode($pr) . '&error=Pick+at+least+3+suppliers'); return; }
+        $rows = $this->requests()->getGroupDetails($pr);
+        if (!$rows) { header('Location: /manager/requests'); return; }
+        $pdo = \App\Database\Connection::resolve();
+        // Fetch supplier names
+        $inParams = implode(',', array_fill(0, count($chosen), '?'));
+        $st = $pdo->prepare('SELECT user_id, full_name FROM users WHERE user_id IN (' . $inParams . ')');
+        $st->execute($chosen);
+        $map = [];
+        foreach ($st->fetchAll() as $s) { $map[(int)$s['user_id']] = (string)$s['full_name']; }
+        // Build PDF content (simplified canvassing form)
+        $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
+        if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+        $file = $dir . DIRECTORY_SEPARATOR . 'Canvassing-PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '.pdf';
+        $items = [];
+        foreach ($rows as $r) { $items[] = ($r['item_name'] ?? 'Item') . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''); }
+        $html = '<h1 style="text-align:center;margin:0 0 6px;">Canvassing Sheet</h1>';
+        $html .= '<table width="100%" border="1" cellspacing="0" cellpadding="6">';
+        $html .= '<tr><td><strong>PR Number</strong></td><td colspan="5">' . htmlspecialchars($pr) . '</td></tr>';
+        $html .= '<tr><td><strong>Items</strong></td><td colspan="5">' . nl2br(htmlspecialchars(implode("\n", $items))) . '</td></tr>';
+        $i = 1; foreach ($chosen as $sid) { $html .= '<tr><td><strong>Supplier ' . $i . '</strong></td><td colspan="5">' . htmlspecialchars($map[$sid] ?? ('#' . $sid)) . '</td></tr>'; $i++; }
+        $html .= '</table>';
+        $mpdf = (new \Mpdf\Mpdf(['format'=>'A4','orientation'=>'L','margin_left'=>10,'margin_right'=>10,'margin_top'=>10,'margin_bottom'=>10]));
+        $mpdf->WriteHTML($html);
+        $mpdf->Output($file, 'F');
+        // Ensure message attachments columns
+        try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
+        // Send to Admin for approval
+        $subject = 'Canvassing For Approval • PR ' . $pr;
+        $body = 'Please review the attached canvassing sheet for PR ' . $pr . ' and approve to proceed with PO.';
+        $recipients = $pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('admin')")->fetchAll();
+        if ($recipients) {
+            $ins = $pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)');
+            foreach ($recipients as $row) {
+                $ins->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$row['user_id'], 'j' => $subject, 'b' => $body, 'an' => basename($file), 'ap' => $file]);
+            }
+        }
+        // Optional: mark request as in_progress
+        try { $this->requests()->updateGroupStatus($pr, 'in_progress', (int)($_SESSION['user_id'] ?? 0), 'Canvassing submitted for admin approval'); } catch (\Throwable $ignored) {}
+        header('Location: /manager/requests?canvass=1');
+    }
+
     /** POST: Update status for a PR group */
     public function updateGroupStatus(): void
     {
