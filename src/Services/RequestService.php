@@ -85,6 +85,12 @@ class RequestService
 	private function generatePrNumber(): string
 	{
 		$year = (int)date('Y');
+		return $this->generatePrNumberForYear($year);
+	}
+
+	/** Generate PR number for a specific calendar year using per-year sequence. */
+	private function generatePrNumberForYear(int $year): string
+	{
 		// Upsert year row and increment counter atomically
 		$this->pdo->beginTransaction();
 		try {
@@ -512,6 +518,26 @@ class RequestService
 			");
 			// Drop legacy unique constraint if present to allow multiple rows per PR number
 			$this->pdo->exec("ALTER TABLE purchase_requests DROP CONSTRAINT IF EXISTS purchase_requests_pr_number_key");
+			// Ensure sequences table exists for PR numbers
+			$this->pdo->exec("CREATE TABLE IF NOT EXISTS purchase_requisition_sequences (
+				calendar_year INTEGER PRIMARY KEY,
+				last_value INTEGER NOT NULL DEFAULT 0,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+			)");
+			// Backfill missing PR numbers for legacy rows (assign per-row numbers based on created year)
+			$count = (int)$this->pdo->query("SELECT COUNT(*) FROM purchase_requests WHERE pr_number IS NULL")->fetchColumn();
+			if ($count > 0) {
+				$stmt = $this->pdo->query("SELECT request_id, COALESCE(created_at, NOW()) AS created_at FROM purchase_requests WHERE pr_number IS NULL ORDER BY created_at ASC LIMIT 500");
+				$rows = $stmt ? $stmt->fetchAll() : [];
+				if ($rows) {
+					$upd = $this->pdo->prepare("UPDATE purchase_requests SET pr_number = :pr WHERE request_id = :id");
+					foreach ($rows as $r) {
+						$year = (int)date('Y', strtotime((string)$r['created_at']));
+						$prNum = $this->generatePrNumberForYear($year);
+						try { $upd->execute(['pr' => $prNum, 'id' => (int)$r['request_id']]); } catch (\Throwable $ignored) {}
+					}
+				}
+			}
 		} catch (\Throwable $e) {
 			// swallow; read paths will fail gracefully elsewhere if truly missing, but this keeps prod resilient
 		}
