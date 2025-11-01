@@ -22,7 +22,11 @@
         .nav svg{ width:18px; height:18px; fill: var(--accent); }
         .content{ padding:18px 20px; }
         .h1{ font-weight:800; font-size:22px; margin: 6px 0 12px; }
-        .cards{ display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; }
+    .cards{ display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; }
+    .grid{ display:grid; grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); gap:12px; margin-bottom:14px; }
+    .card h3{ margin:0 0 6px; font-size:14px; color:var(--muted); font-weight:600; }
+    .stats{ display:flex; gap:8px; flex-wrap:wrap; font-size:12px; color:var(--muted); }
+    .pill{ background:color-mix(in oklab, var(--accent) 12%, transparent); color:var(--text); border:1px solid color-mix(in oklab, var(--accent) 35%, var(--border)); padding:4px 8px; border-radius:999px; }
         @media (max-width: 1100px){ .cards{ grid-template-columns: repeat(2, 1fr);} }
         .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; }
         .muted{ color:var(--muted); }
@@ -86,6 +90,20 @@
 
         <?php $catStats = $categoryStats ?? []; if (!empty($catStats)): ?>
         <div class="h1" style="margin-top:16px;">By Category</div>
+        <div class="grid">
+            <?php foreach ($catStats as $row): ?>
+                <div class="card">
+                    <h3><?= htmlspecialchars((string)($row['category'] ?? 'Category'), ENT_QUOTES, 'UTF-8') ?></h3>
+                    <div class="stats">
+                        <span class="pill">Total: <?= (int)($row['total'] ?? 0) ?></span>
+                        <span class="pill">Good: <?= (int)($row['good'] ?? 0) ?></span>
+                        <span class="pill">For Repair: <?= (int)($row['for_repair'] ?? 0) ?></span>
+                        <span class="pill">For Replacement: <?= (int)($row['for_replacement'] ?? 0) ?></span>
+                        <span class="pill">Retired: <?= (int)($row['retired'] ?? 0) ?></span>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+        </div>
         <table>
             <thead>
                 <tr>
@@ -93,6 +111,7 @@
                     <th style="text-align:right;">Good</th>
                     <th style="text-align:right;">For Repair</th>
                     <th style="text-align:right;">For Replacement</th>
+                    <th style="text-align:right;">Retired</th>
                     <th style="text-align:right;">Total</th>
                 </tr>
             </thead>
@@ -103,6 +122,7 @@
                     <td style="text-align:right;"><span class="badge status-good"><?= (int)($row['good'] ?? 0) ?></span></td>
                     <td style="text-align:right;"><span class="badge status-repair"><?= (int)($row['for_repair'] ?? 0) ?></span></td>
                     <td style="text-align:right;"><span class="badge status-repl"><?= (int)($row['for_replacement'] ?? 0) ?></span></td>
+                    <td style="text-align:right;"><span class="badge"><?= (int)($row['retired'] ?? 0) ?></span></td>
                     <td style="text-align:right;"><strong><?= (int)($row['total'] ?? 0) ?></strong></td>
                 </tr>
             <?php endforeach; ?>
