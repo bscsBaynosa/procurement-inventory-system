@@ -10,6 +10,19 @@ DO $$ BEGIN
     END IF;
 END $$;
 
+-- Backward-compatible role naming: ensure 'admin_assistant' exists in user_role enum
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') AND NOT EXISTS (
+        SELECT 1
+        FROM pg_enum e
+        JOIN pg_type t ON t.oid = e.enumtypid
+        WHERE t.typname = 'user_role' AND e.enumlabel = 'admin_assistant'
+    ) THEN
+        -- Place new value after 'custodian' for readability; position is not functionally required
+        ALTER TYPE user_role ADD VALUE 'admin_assistant' AFTER 'custodian';
+    END IF;
+END $$;
+
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'inventory_status') THEN
         CREATE TYPE inventory_status AS ENUM ('good', 'for_repair', 'for_replacement', 'retired');

@@ -1,12 +1,12 @@
 # Procurement and Inventory System
 
 ## Overview
-The Procurement and Inventory System is designed to streamline the management of inventory and procurement processes across multiple branches. It provides functionalities for custodians to manage inventory items, check their status, and send purchase requests to procurement managers. Procurement managers can track requests and manage inventory needs effectively.
+The Procurement and Inventory System is designed to streamline the management of inventory and procurement processes across multiple branches. It provides functionalities for admin assistants to manage inventory items, check their status, and send purchase requests to procurement managers. Procurement managers can track requests and manage inventory needs effectively.
 
 ## Features
-- **User Roles**: Two user roles - Custodian and Procurement Manager.
-- **Inventory Management**: Custodians can manage inventory items, including adding new items, updating their status, and generating reports.
-- **Purchase Requests**: Custodians can send purchase requests for items that need repair or replacement.
+- **User Roles**: Admin Assistant and Procurement Manager (with Admin and Supplier modules available).
+- **Inventory Management**: Admin Assistants can manage inventory items, including adding new items, updating their status, and generating reports.
+- **Purchase Requests**: Admin Assistants can send purchase requests for items that need repair or replacement.
 - **Dashboard**: Each user role has a dedicated dashboard to view relevant information and pending requests.
 - **PDF Generation**: The system can generate PDF files for purchase requests and inventory reports.
 - **Branch Management**: Supports multiple branches including Manila, Sto Tomas Batangas, San Fernando City La Union, Dasmariñas City Cavite, and Quezon City.
@@ -38,8 +38,8 @@ The Procurement and Inventory System is designed to streamline the management of
 ## Usage
 - Access the application via the `public/index.php` file.
 - Log in with a provisioned account (`users` table). Passwords are stored with `password_hash()` and must be created through the `AuthService` (or any provisioning script that uses the same hashing function).
-- Custodians can manage inventory and send purchase requests.
-- Procurement Managers can review and manage purchase requests from custodians, including full status history.
+- Admin Assistants can manage inventory and send purchase requests.
+- Procurement Managers can review and manage purchase requests from admin assistants, including full status history.
 
 ## Database Notes
 - The connection layer automatically parses the Heroku `DATABASE_URL` and enforces SSL by default.

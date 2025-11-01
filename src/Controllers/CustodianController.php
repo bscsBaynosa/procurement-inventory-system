@@ -142,7 +142,7 @@ class CustodianController extends BaseController
         $unit = ($unitSel === 'others' && $unitOther !== '') ? $unitOther : $unitSel;
         $minQty = isset($_POST['minimum_quantity']) && $_POST['minimum_quantity'] !== '' ? (int)$_POST['minimum_quantity'] : 0;
         $maintQty = isset($_POST['maintaining_quantity']) && $_POST['maintaining_quantity'] !== '' ? (int)$_POST['maintaining_quantity'] : 0;
-        if ($name === '' || $category === '' || $quantity <= 0) { header('Location: /custodian/inventory?error=Invalid+data'); return; }
+    if ($name === '' || $category === '' || $quantity <= 0) { header('Location: /admin-assistant/inventory?error=Invalid+data'); return; }
         $branchId = (int)($_SESSION['branch_id'] ?? 0);
         $id = $this->inventory()->createItem([
             'branch_id' => $branchId ?: null,
@@ -154,7 +154,7 @@ class CustodianController extends BaseController
             'minimum_quantity' => $minQty,
             'maintaining_quantity' => $maintQty,
         ], (int)($_SESSION['user_id'] ?? 0));
-        header('Location: /custodian/inventory?created=1');
+    header('Location: /admin-assistant/inventory?created=1');
     }
 
     public function inventoryUpdate(): void
@@ -162,15 +162,15 @@ class CustodianController extends BaseController
     $role = $_SESSION['role'] ?? '';
     if ($role === 'custodian') { $role = 'admin_assistant'; }
     if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant', 'admin'], true)) { header('Location: /login'); return; }
-    if ($role === 'admin_assistant') { header('Location: /custodian/inventory?error=Not+allowed'); return; }
+    if ($role === 'admin_assistant') { header('Location: /admin-assistant/inventory?error=Not+allowed'); return; }
         $id = (int)($_POST['item_id'] ?? 0);
-        if ($id <= 0) { header('Location: /custodian/inventory?error=Invalid+item'); return; }
+    if ($id <= 0) { header('Location: /admin-assistant/inventory?error=Invalid+item'); return; }
         $payload = [];
         foreach (['name','category','status','quantity','unit'] as $f) {
             if (isset($_POST[$f])) { $payload[$f] = $_POST[$f]; }
         }
         $this->inventory()->updateItem($id, $payload, (int)($_SESSION['user_id'] ?? 0));
-        header('Location: /custodian/inventory?updated=1');
+    header('Location: /admin-assistant/inventory?updated=1');
     }
 
     public function inventoryDelete(): void
@@ -178,11 +178,11 @@ class CustodianController extends BaseController
     $role = $_SESSION['role'] ?? '';
     if ($role === 'custodian') { $role = 'admin_assistant'; }
     if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant', 'admin'], true)) { header('Location: /login'); return; }
-    if ($role === 'admin_assistant') { header('Location: /custodian/inventory?error=Not+allowed'); return; }
+    if ($role === 'admin_assistant') { header('Location: /admin-assistant/inventory?error=Not+allowed'); return; }
         $id = (int)($_POST['item_id'] ?? 0);
-        if ($id <= 0) { header('Location: /custodian/inventory?error=Invalid+item'); return; }
+    if ($id <= 0) { header('Location: /admin-assistant/inventory?error=Invalid+item'); return; }
         $this->inventory()->deleteItem($id);
-        header('Location: /custodian/inventory?deleted=1');
+    header('Location: /admin-assistant/inventory?deleted=1');
     }
 
     /** Update only the stock count for an item; record a consumption entry. */
@@ -806,11 +806,11 @@ class CustodianController extends BaseController
     /** Purchase Request create form */
     public function newRequest(): void
     {
-        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['custodian', 'admin'], true)) { header('Location: /login'); return; }
+    if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['admin_assistant', 'admin'], true)) { header('Location: /login'); return; }
         $branchId = $_SESSION['branch_id'] ?? null;
         $items = $this->inventory()->listInventory($branchId ? (int)$branchId : null);
         $prPreview = $this->requests()->getNextPrNumberPreview();
-        $this->render('custodian/request_create.php', [ 'items' => $items, 'pr_preview' => $prPreview ]);
+    $this->render('custodian/request_create.php', [ 'items' => $items, 'pr_preview' => $prPreview ]);
     }
 
     /** Handle Purchase Request submission */
@@ -876,7 +876,7 @@ class CustodianController extends BaseController
             ]);
             return; // PDF sent to browser
         }
-        header('Location: /custodian/requests/new?created=1');
+    header('Location: /admin-assistant/requests/new?created=1');
     }
 }
  

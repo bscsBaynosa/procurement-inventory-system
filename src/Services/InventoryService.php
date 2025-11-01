@@ -31,6 +31,7 @@ class InventoryService
 		foreach ($rows->fetchAll() as $r) {
 			$stats[$r['status']] = (int)$r['cnt'];
 			$stats['total'] += (int)$r['cnt'];
+
 		}
 		return $stats;
 	}
@@ -54,9 +55,6 @@ class InventoryService
 		$params = [];
 		$conds = [];
 		if ($branchId) { $conds[] = '(branch_id = :b OR branch_id IS NULL)'; $params['b'] = $branchId; }
-		// Keep temporary hide of Bondpaper in parity with listInventory
-		$conds[] = 'name NOT ILIKE :hide_bondpaper';
-		$params['hide_bondpaper'] = '%bondpaper%';
 		if ($conds) { $sql .= ' WHERE ' . implode(' AND ', $conds); }
 		$sql .= " GROUP BY COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') ORDER BY category ASC";
 		$stmt = $this->pdo->prepare($sql);

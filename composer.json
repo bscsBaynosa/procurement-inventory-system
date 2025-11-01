@@ -1,6 +1,6 @@
 {
     "name": "bscsbaynosa/procurement-inventory-system",
-    "description": "A procurement and inventory management system for custodians and procurement managers.",
+    "description": "A procurement and inventory management system for admin assistants and procurement managers.",
     "type": "project",
     "require": {
         "php": "^7.4 || ^8.0",

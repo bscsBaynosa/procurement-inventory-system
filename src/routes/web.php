@@ -14,7 +14,7 @@ Route::get('/', function () {
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/logout', [AuthController::class, 'logout']);
 
-// Custodian routes
+// Admin Assistant routes (legacy name: custodian paths)
 Route::middleware(['auth'])->group(function () {
     Route::get('/custodian/dashboard', [CustodianController::class, 'dashboard']);
     Route::get('/custodian/inventory', [CustodianController::class, 'index']);

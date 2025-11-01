@@ -37,7 +37,7 @@
         .righttools{ display:flex; align-items:center; gap:8px; }
         .righttools .circle{ width:40px; height:40px; border-radius:999px; background:#1118270d; border:1px solid var(--border); display:inline-flex; align-items:center; justify-content:center; position:relative; text-decoration:none; overflow:hidden; }
         .righttools .dot{ position:absolute; top:2px; right:2px; width:10px; height:10px; border-radius:999px; background:#ef4444; border:2px solid #fff; }
-        .righttools .greet{ margin-left:4px; white-space:nowrap; }
+    .righttools .greet{ margin-right:8px; white-space:nowrap; }
     </style>
 </head>
 <body>
@@ -54,8 +54,9 @@
         }
     ?>
     <div class="topbar">
-        <div class="h1" style="margin:0;">Overview<?= isset($branch_name) && $branch_name ? ' • <span class=\'muted\'>Branch: ' . htmlspecialchars((string)$branch_name, ENT_QUOTES, 'UTF-8') . '</span>' : '' ?></div>
+        <div class="h1" style="margin:0;">Overview</div>
         <div class="righttools">
+            <span class="greet">Hello, <?= htmlspecialchars((string)$first, ENT_QUOTES, 'UTF-8') ?>.</span>
             <a href="/admin/messages" title="Messages" class="circle">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg>
                 <?php if ($unread > 0): ?><span class="dot"></span><?php endif; ?>
@@ -71,9 +72,11 @@
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z"/></svg>
                 <?php endif; ?>
             </a>
-            <span class="greet">Hello, <?= htmlspecialchars((string)$first, ENT_QUOTES, 'UTF-8') ?>.</span>
         </div>
     </div>
+    <?php if (isset($branch_name) && $branch_name): ?>
+        <div class="muted" style="margin-top:-6px; margin-bottom:12px;">Branch: <?= htmlspecialchars((string)$branch_name, ENT_QUOTES, 'UTF-8') ?></div>
+    <?php endif; ?>
         <div class="cards">
             <div class="card"><div class="muted" style="font-size:12px;">Good</div><div style="font-size:28px;font-weight:800;"><?= (int)($inventoryStats['good'] ?? 0) ?></div></div>
             <div class="card"><div class="muted" style="font-size:12px;">For Repair</div><div style="font-size:28px;font-weight:800;"><?= (int)($inventoryStats['for_repair'] ?? 0) ?></div></div>

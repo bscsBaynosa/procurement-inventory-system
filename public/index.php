@@ -230,7 +230,7 @@ if ($method === 'GET' && $path === '/requests/view') {
 	exit;
 }
 
-// Custodian: Inventory
+// Admin Assistant (legacy: custodian) — Inventory
 if ($method === 'GET' && $path === '/custodian/inventory') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
 	$custodian->inventoryPage();
@@ -291,7 +291,7 @@ if ($method === 'POST' && $path === '/custodian/inventory/delete') {
 	exit;
 }
 
-// Custodian: Purchase Request
+// Admin Assistant (legacy: custodian) — Purchase Request
 if ($method === 'GET' && $path === '/custodian/requests/new') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
 	$custodian->newRequest();

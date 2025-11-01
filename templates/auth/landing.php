@@ -23,7 +23,8 @@
         }
         /* Role themes change only the accent; background remains green/black gradient */
         body[data-role="procurement_manager"] { --accent:#2563eb; --accent-600:#1e4bb5; }
-        body[data-role="custodian"] { --accent:#ea7a17; --accent-600:#c86613; }
+    body[data-role="custodian"],
+    body[data-role="admin_assistant"] { --accent:#ea7a17; --accent-600:#c86613; }
         body[data-role="admin"] { --accent:#dc2626; --accent-600:#b91c1c; }
 
     *, *::before, *::after { box-sizing: border-box; }
@@ -269,7 +270,7 @@
                 </p>
                 <p>
                     The result: fewer delays, better visibility, and time back to focus on patient care.
-                    Role‑based access keeps responsibilities tidy for Admins, Managers, and Custodians.
+                    Role‑based access keeps responsibilities tidy for Admins, Managers, and Admin Assistants.
                 </p>
                 <div class="cta" style="margin-top:10px;">
                     <a class="btn btn-outline" href="#learn">Learn more</a>
@@ -297,7 +298,7 @@
                 </div>
                 <div class="card">
                     <h3>Real‑time inventory</h3>
-                    <p>See accurate counts by branch as custodians log movements in seconds.</p>
+                    <p>See accurate counts by branch as admin assistants log movements in seconds.</p>
                 </div>
                 <div class="card">
                     <h3>Branch management</h3>

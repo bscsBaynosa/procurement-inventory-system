@@ -115,7 +115,7 @@ class RequestService
 			return sprintf('%04d%03d', $year, 1);
 		}
 	}
-	
+
 	public function generateNewPrNumber(): string
 	{
 		return $this->generatePrNumber();
@@ -288,7 +288,7 @@ class RequestService
 			return false;
 		}
 
-		$message = $notes ?: 'Follow-up submitted by custodian';
+		$message = $notes ?: 'Follow-up submitted by admin assistant';
 
 		$this->recordAudit('purchase_requests', $requestId, 'update', $performedBy, ['follow_up' => $message]);
 
