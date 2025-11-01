@@ -8,6 +8,7 @@ use PDO;
 class InventoryService
 {
 	private PDO $pdo;
+	private static ?bool $hasMaintaining = null;
 
 	public function __construct(?PDO $pdo = null)
 	{
@@ -36,7 +37,10 @@ class InventoryService
 
 	public function listInventory(?int $branchId = null): array
 	{
-		$sql = 'SELECT item_id, name, category, status, quantity, unit, minimum_quantity, maintaining_quantity FROM inventory_items';
+		// Backward compatible select: if maintaining_quantity column is missing, alias 0 as maintaining_quantity
+		$hasMaint = $this->hasMaintainingColumn();
+		$selectCols = 'item_id, name, category, status, quantity, unit, minimum_quantity' . ($hasMaint ? ', maintaining_quantity' : ', 0 AS maintaining_quantity');
+		$sql = 'SELECT ' . $selectCols . ' FROM inventory_items';
 		$params = [];
 		$wheres = [];
 		if ($branchId) {
@@ -57,7 +61,9 @@ class InventoryService
 
 	public function getItemById(int $itemId): ?array
 	{
-		$stmt = $this->pdo->prepare('SELECT item_id, branch_id, name, category, status, quantity, unit, minimum_quantity, maintaining_quantity FROM inventory_items WHERE item_id = :id');
+		$hasMaint = $this->hasMaintainingColumn();
+		$selectCols = 'item_id, branch_id, name, category, status, quantity, unit, minimum_quantity' . ($hasMaint ? ', maintaining_quantity' : ', 0 AS maintaining_quantity');
+		$stmt = $this->pdo->prepare('SELECT ' . $selectCols . ' FROM inventory_items WHERE item_id = :id');
 		$stmt->execute(['id' => $itemId]);
 		$row = $stmt->fetch();
 		return $row ?: null;
@@ -66,18 +72,33 @@ class InventoryService
 	public function createItem(array $data, int $createdBy): int
 	{
 		$status = $this->normalizeStatus($data['status'] ?? 'good');
-		$stmt = $this->pdo->prepare('INSERT INTO inventory_items (branch_id, name, category, status, quantity, unit, minimum_quantity, maintaining_quantity, created_by, updated_by) VALUES (:b,:n,:c,:s,:q,:u,:min,:maint,:by,:by) RETURNING item_id');
-		$stmt->execute([
-			'b' => $data['branch_id'] ?? null,
-			'n' => trim((string)($data['name'] ?? '')),
-			'c' => trim((string)($data['category'] ?? '')),
-			's' => $status,
-			'q' => (int)($data['quantity'] ?? 1),
-			'u' => trim((string)($data['unit'] ?? 'pcs')),
-			'min' => (int)($data['minimum_quantity'] ?? 0),
-			'maint' => (int)($data['maintaining_quantity'] ?? 0),
-			'by' => $createdBy,
-		]);
+		$hasMaint = $this->hasMaintainingColumn();
+		if ($hasMaint) {
+			$stmt = $this->pdo->prepare('INSERT INTO inventory_items (branch_id, name, category, status, quantity, unit, minimum_quantity, maintaining_quantity, created_by, updated_by) VALUES (:b,:n,:c,:s,:q,:u,:min,:maint,:by,:by) RETURNING item_id');
+			$stmt->execute([
+				'b' => $data['branch_id'] ?? null,
+				'n' => trim((string)($data['name'] ?? '')),
+				'c' => trim((string)($data['category'] ?? '')),
+				's' => $status,
+				'q' => (int)($data['quantity'] ?? 1),
+				'u' => trim((string)($data['unit'] ?? 'pcs')),
+				'min' => (int)($data['minimum_quantity'] ?? 0),
+				'maint' => (int)($data['maintaining_quantity'] ?? 0),
+				'by' => $createdBy,
+			]);
+		} else {
+			$stmt = $this->pdo->prepare('INSERT INTO inventory_items (branch_id, name, category, status, quantity, unit, minimum_quantity, created_by, updated_by) VALUES (:b,:n,:c,:s,:q,:u,:min,:by,:by) RETURNING item_id');
+			$stmt->execute([
+				'b' => $data['branch_id'] ?? null,
+				'n' => trim((string)($data['name'] ?? '')),
+				'c' => trim((string)($data['category'] ?? '')),
+				's' => $status,
+				'q' => (int)($data['quantity'] ?? 1),
+				'u' => trim((string)($data['unit'] ?? 'pcs')),
+				'min' => (int)($data['minimum_quantity'] ?? 0),
+				'by' => $createdBy,
+			]);
+		}
 		return (int)$stmt->fetchColumn();
 	}
 
@@ -85,7 +106,9 @@ class InventoryService
 	{
 		$sets = [];
 		$params = ['id' => $itemId, 'by' => $updatedBy];
-		$allowed = ['name','category','status','quantity','unit','minimum_quantity','maintaining_quantity'];
+		$hasMaint = $this->hasMaintainingColumn();
+		$allowed = ['name','category','status','quantity','unit','minimum_quantity'];
+		if ($hasMaint) { $allowed[] = 'maintaining_quantity'; }
 		foreach ($allowed as $f) {
 			if (array_key_exists($f, $data)) {
 				$val = $f === 'status' ? $this->normalizeStatus($data[$f]) : $data[$f];
@@ -140,5 +163,18 @@ class InventoryService
 		";
 		$stmt = $this->pdo->query($sql);
 		return $stmt->fetchAll();
+	}
+
+	private function hasMaintainingColumn(): bool
+	{
+		if (self::$hasMaintaining !== null) { return self::$hasMaintaining; }
+		try {
+			$sql = "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory_items' AND column_name = 'maintaining_quantity'";
+			$stmt = $this->pdo->query($sql);
+			self::$hasMaintaining = (bool)$stmt->fetchColumn();
+		} catch (\Throwable $e) {
+			self::$hasMaintaining = false;
+		}
+		return self::$hasMaintaining;
 	}
 }
