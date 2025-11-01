@@ -17,6 +17,15 @@ class RequestService
 
 	public function createPurchaseRequest(array $payload, int $userId): array
 	{
+		// Ensure archive-related columns exist (idempotent)
+		try {
+			$this->pdo->exec("ALTER TABLE purchase_requests
+				ADD COLUMN IF NOT EXISTS pr_number VARCHAR(32),
+				ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+				ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ,
+				ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL
+			");
+		} catch (\Throwable $e) { /* ignore */ }
 		// Ensure pr_number column and sequence table exist
 		try {
 			// Add column if missing (no UNIQUE to allow multi-item under same PR number)
@@ -131,7 +140,7 @@ class RequestService
 
 	public function getAllRequests(array $filters = []): array
 	{
-	 $sql = 'SELECT pr.request_id, pr.item_id, pr.branch_id, pr.request_type, pr.quantity, pr.unit, pr.status, pr.priority, pr.needed_by, pr.created_at, pr.updated_at,
+	 $sql = 'SELECT pr.request_id, pr.pr_number, pr.item_id, pr.branch_id, pr.request_type, pr.quantity, pr.unit, pr.status, pr.priority, pr.needed_by, pr.created_at, pr.updated_at, pr.is_archived,
 		 i.name AS item_name, b.name AS branch_name,
 		 ru.user_id AS requested_by_id, ru.full_name AS requested_by_name, au.full_name AS assigned_to_name
 			FROM purchase_requests pr
@@ -163,6 +172,143 @@ class RequestService
 		$stmt->execute($params);
 
 		return $stmt->fetchAll();
+	}
+
+	/**
+	 * Grouped list of purchase requests by PR Number, with basic aggregates and sorting/filtering.
+	 * filters: branch_id, status, include_archived (bool), sort ('branch'|'date'|'status'), order ('asc'|'desc')
+	 */
+	public function getRequestsGrouped(array $filters = []): array
+	{
+		// Ensure columns for grouping exist (pr_number, is_archived)
+		try { $this->pdo->exec("ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS pr_number VARCHAR(32);"); } catch (\Throwable $e) {}
+		try { $this->pdo->exec("ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE;"); } catch (\Throwable $e) {}
+
+		$includeArchived = (bool)($filters['include_archived'] ?? false);
+		$sort = (string)($filters['sort'] ?? 'date');
+		$order = strtolower((string)($filters['order'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
+
+		$sortExpr = 'min_created_at';
+		if ($sort === 'branch') { $sortExpr = 'branch_name'; }
+		if ($sort === 'status') { $sortExpr = 'status_rank'; }
+
+		$sql = "WITH grouped AS (
+			SELECT
+				pr.pr_number,
+				MIN(pr.created_at) AS min_created_at,
+				MAX(pr.branch_id) AS branch_id,
+				MAX(b.name) AS branch_name,
+				MIN(pr.requested_by) AS requested_by_id,
+				MAX(ru.full_name) AS requested_by_name,
+				BOOL_OR(pr.is_archived) AS is_archived,
+				-- Aggregate item summaries
+				STRING_AGG(CONCAT(COALESCE(i.name,''),' × ', pr.quantity, ' ', COALESCE(pr.unit,'')), '\n' ORDER BY pr.created_at) AS items_summary,
+				-- Status rollup: choose a single representative status per PR number
+				-- priority: pending > rejected > approved > in_progress > completed > cancelled
+				MAX(CASE pr.status
+					WHEN 'pending' THEN 100
+					WHEN 'rejected' THEN 90
+					WHEN 'approved' THEN 80
+					WHEN 'in_progress' THEN 70
+					WHEN 'completed' THEN 60
+					WHEN 'cancelled' THEN 50
+					ELSE 0 END) AS status_rank,
+				-- Most recent status string for display
+				(SELECT pr2.status FROM purchase_requests pr2 WHERE pr2.pr_number = pr.pr_number ORDER BY pr2.updated_at DESC LIMIT 1) AS status
+			FROM purchase_requests pr
+			LEFT JOIN inventory_items i ON i.item_id = pr.item_id
+			LEFT JOIN branches b ON b.branch_id = pr.branch_id
+			LEFT JOIN users ru ON ru.user_id = pr.requested_by
+			GROUP BY pr.pr_number
+		)
+		SELECT * FROM grouped";
+
+		$conditions = [];
+		$params = [];
+		if (!empty($filters['branch_id'])) { $conditions[] = 'branch_id = :branch_id'; $params['branch_id'] = (int)$filters['branch_id']; }
+		if (!empty($filters['status'])) { $conditions[] = 'status = :status'; $params['status'] = (string)$filters['status']; }
+		if (!$includeArchived) { $conditions[] = 'is_archived = FALSE'; }
+		if ($conditions) { $sql .= ' WHERE ' . implode(' AND ', $conditions); }
+		$sql .= ' ORDER BY ' . $sortExpr . ' ' . $order . ', pr_number ASC';
+
+		$st = $this->pdo->prepare($sql);
+		$st->execute($params);
+		$rows = $st->fetchAll();
+		return $rows ?: [];
+	}
+
+	/** Get full details for a PR group (by pr_number) including item rows. */
+	public function getGroupDetails(string $prNumber): array
+	{
+		$stmt = $this->pdo->prepare(
+			"SELECT pr.request_id, pr.pr_number, pr.item_id, i.name AS item_name, pr.quantity, pr.unit, pr.status, pr.created_at,
+				pr.branch_id, b.name AS branch_name, pr.requested_by, u.full_name AS requested_by_name
+			 FROM purchase_requests pr
+			 LEFT JOIN inventory_items i ON i.item_id = pr.item_id
+			 LEFT JOIN branches b ON b.branch_id = pr.branch_id
+			 LEFT JOIN users u ON u.user_id = pr.requested_by
+			 WHERE pr.pr_number = :pr
+			 ORDER BY pr.created_at ASC"
+		);
+		$stmt->execute(['pr' => $prNumber]);
+		$rows = $stmt->fetchAll();
+		return $rows ?: [];
+	}
+
+	/** Update status for all requests under the same PR number. */
+	public function updateGroupStatus(string $prNumber, string $status, int $performedBy, ?string $notes = null): bool
+	{
+		$allowed = ['pending','approved','rejected','in_progress','completed','cancelled'];
+		if (!in_array($status, $allowed, true)) { return false; }
+		$rows = $this->getGroupDetails($prNumber);
+		if (!$rows) { return false; }
+		$this->pdo->beginTransaction();
+		try {
+			$ok = true;
+			foreach ($rows as $r) {
+				$ok = $ok && $this->updateRequestStatus((int)$r['request_id'], $status, $performedBy, $notes);
+			}
+			$this->pdo->commit();
+			return $ok;
+		} catch (\Throwable $e) {
+			$this->pdo->rollBack();
+			return false;
+		}
+	}
+
+	/** Archive all requests under a PR number. */
+	public function archiveGroup(string $prNumber, int $performedBy, ?string $reason = null): bool
+	{
+		try {
+			$st = $this->pdo->prepare("UPDATE purchase_requests SET is_archived = TRUE, archived_at = NOW(), archived_by = :by WHERE pr_number = :pr");
+			$ok = $st->execute(['by' => $performedBy, 'pr' => $prNumber]);
+			if ($ok) {
+				// Record a single audit entry for the group leader (arbitrary pick: newest)
+				$rid = (int)$this->pdo->query("SELECT request_id FROM purchase_requests WHERE pr_number = '" . str_replace("'", "''", $prNumber) . "' ORDER BY updated_at DESC LIMIT 1")->fetchColumn();
+				if ($rid > 0) {
+					$this->recordEvent($rid, null, null, $performedBy, $reason ? ('Archived: ' . $reason) : 'Archived');
+					$this->recordAudit('purchase_requests', $rid, 'update', $performedBy, ['archived' => true, 'pr_number' => $prNumber, 'reason' => $reason]);
+				}
+			}
+			return $ok;
+		} catch (\Throwable $e) { return false; }
+	}
+
+	/** Restore archived PR group. */
+	public function restoreGroup(string $prNumber, int $performedBy): bool
+	{
+		try {
+			$st = $this->pdo->prepare("UPDATE purchase_requests SET is_archived = FALSE WHERE pr_number = :pr");
+			$ok = $st->execute(['pr' => $prNumber]);
+			if ($ok) {
+				$rid = (int)$this->pdo->query("SELECT request_id FROM purchase_requests WHERE pr_number = '" . str_replace("'", "''", $prNumber) . "' ORDER BY updated_at DESC LIMIT 1")->fetchColumn();
+				if ($rid > 0) {
+					$this->recordEvent($rid, null, null, $performedBy, 'Restored from archive');
+					$this->recordAudit('purchase_requests', $rid, 'update', $performedBy, ['archived' => false, 'pr_number' => $prNumber]);
+				}
+			}
+			return $ok;
+		} catch (\Throwable $e) { return false; }
 	}
 
 	public function getRequestById(int $requestId): ?array

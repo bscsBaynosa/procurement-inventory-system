@@ -177,9 +177,49 @@ if ($method === 'POST' && $path === '/supplier/items/delete') {
 }
 
 // Manager: Purchase Requests actions
+if ($method === 'GET' && $path === '/manager/requests') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->viewRequests();
+	exit;
+}
+if ($method === 'GET' && $path === '/manager/requests/history') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->requestsHistory();
+	exit;
+}
 if ($method === 'POST' && $path === '/manager/requests/update-status') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','admin'], true)) { header('Location: /login'); exit; }
 	$manager->updateRequestStatus();
+	exit;
+}
+if ($method === 'POST' && $path === '/manager/requests/update-group-status') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->updateGroupStatus();
+	exit;
+}
+if ($method === 'POST' && $path === '/manager/requests/archive') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->archiveGroup();
+	exit;
+}
+if ($method === 'POST' && $path === '/manager/requests/restore') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->restoreGroup();
+	exit;
+}
+if ($method === 'GET' && $path === '/manager/requests/view') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->viewGroup();
+	exit;
+}
+if ($method === 'GET' && $path === '/manager/requests/download') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->downloadGroup();
+	exit;
+}
+if ($method === 'POST' && $path === '/manager/requests/send-for-approval') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->sendForAdminApproval();
 	exit;
 }
 if ($method === 'GET' && $path === '/manager/requests/generate-po') {
