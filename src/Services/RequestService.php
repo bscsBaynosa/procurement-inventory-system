@@ -99,7 +99,6 @@ class RequestService
 	{
 		$year = (int)date('Y');
 		try {
-			// Ensure table exists and seed row for the year if missing (do not increment)
 			$this->pdo->exec("CREATE TABLE IF NOT EXISTS purchase_requisition_sequences (
 				calendar_year INTEGER PRIMARY KEY,
 				last_value INTEGER NOT NULL DEFAULT 0,
@@ -116,11 +115,7 @@ class RequestService
 			return sprintf('%04d%03d', $year, 1);
 		}
 	}
-
-	/**
-	 * Generate and reserve a new PR number for a grouped submission.
-	 * This increments the sequence once and returns the value for reuse across items.
-	 */
+	
 	public function generateNewPrNumber(): string
 	{
 		return $this->generatePrNumber();

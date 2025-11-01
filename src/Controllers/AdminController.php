@@ -138,13 +138,23 @@ class AdminController extends BaseController
                 ORDER BY m
             ")->fetchAll();
 
-            // Current user for greeting
+            // Current user for greeting and badges
             $meId = (int)($_SESSION['user_id'] ?? 0);
-            $meName = null;
+            $meName = null; $meFirst = null; $avatarPath = null; $unread = 0;
             if ($meId > 0) {
-                $st = $this->pdo->prepare('SELECT full_name FROM users WHERE user_id = :id');
+                $st = $this->pdo->prepare('SELECT full_name, first_name, avatar_path FROM users WHERE user_id = :id');
                 $st->execute(['id' => $meId]);
-                $meName = $st->fetchColumn() ?: null;
+                $row = $st->fetch();
+                if ($row) {
+                    $meName = (string)($row['full_name'] ?? '');
+                    $meFirst = (string)($row['first_name'] ?? '');
+                    $avatarPath = (string)($row['avatar_path'] ?? '');
+                }
+                try {
+                    $stU = $this->pdo->prepare('SELECT COUNT(*) FROM messages WHERE recipient_id = :me AND is_read = FALSE');
+                    $stU->execute(['me' => $meId]);
+                    $unread = (int)$stU->fetchColumn();
+                } catch (\Throwable $ignored) {}
             }
 
             $this->render('dashboard/admin.php', [
@@ -155,6 +165,9 @@ class AdminController extends BaseController
                 'series_po' => array_map(fn($r) => (int)$r['v'], $seriesPO ?: []),
                 'series_inventory' => array_map(fn($r) => (int)$r['v'], $seriesInventory ?: []),
                 'me_name' => $meName,
+                'me_first' => $meFirst ?: ($meName ? explode(' ', $meName)[0] : 'User'),
+                'unread_count' => $unread,
+                'avatar_path' => $avatarPath,
             ]);
         } catch (\Throwable $e) {
             // Friendly guidance if DB not initialized or migrations not run
@@ -633,7 +646,9 @@ class AdminController extends BaseController
     {
         $me = (int)($_SESSION['user_id'] ?? 0);
         try {
-            $stmt = $this->pdo->prepare('SELECT user_id, username, full_name, email FROM users WHERE user_id = :id');
+            // Ensure avatar column exists
+            $this->pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_path TEXT");
+            $stmt = $this->pdo->prepare('SELECT user_id, username, full_name, email, avatar_path FROM users WHERE user_id = :id');
             $stmt->execute(['id' => $me]);
             $user = $stmt->fetch();
             $this->render('dashboard/settings.php', ['user' => $user]);
@@ -684,6 +699,23 @@ class AdminController extends BaseController
             // Always update profile fields first (without password)
             $stmt = $this->pdo->prepare('UPDATE users SET first_name = :fn, last_name = :ln, full_name = :n, email = :e WHERE user_id = :id');
             $stmt->execute(['fn' => $first, 'ln' => $last, 'n' => $name, 'e' => $email !== '' ? $email : null, 'id' => $me]);
+
+            // Optional avatar upload (profile picture)
+            try { $this->pdo->exec("ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_path TEXT"); } catch (\Throwable $e) {}
+            if (!empty($_FILES['avatar']) && is_uploaded_file($_FILES['avatar']['tmp_name'])) {
+                $allowed = ['image/jpeg'=>'jpg','image/png'=>'png','image/gif'=>'gif','image/webp'=>'webp'];
+                $type = (string)($_FILES['avatar']['type'] ?? '');
+                $ext = $allowed[$type] ?? null;
+                if ($ext) {
+                    $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'profile';
+                    if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+                    $dest = $dir . DIRECTORY_SEPARATOR . 'user_' . $me . '.' . $ext;
+                    // Move the file (replace existing)
+                    @move_uploaded_file($_FILES['avatar']['tmp_name'], $dest);
+                    $upA = $this->pdo->prepare('UPDATE users SET avatar_path = :p WHERE user_id = :id');
+                    $upA->execute(['p' => $dest, 'id' => $me]);
+                }
+            }
 
             // Handle password change if requested
             $wantsChange = ($current !== '' || $new !== '' || $confirm !== '');

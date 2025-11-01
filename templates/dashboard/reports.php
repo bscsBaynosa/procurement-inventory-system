@@ -39,6 +39,12 @@
                     <option value="consumption" <?= (($filter_type ?? '')==='consumption'?'selected':'') ?>>Consumption</option>
                 </select>
                 <input name="category" placeholder="Category (optional)" value="<?= htmlspecialchars((string)($filter_category ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
+                <select name="show">
+                    <?php $showVal = $show ?? 'all'; ?>
+                    <option value="all" <?= ($showVal==='all'?'selected':'') ?>>All</option>
+                    <option value="active" <?= ($showVal==='active'?'selected':'') ?>>Active</option>
+                    <option value="archived" <?= ($showVal==='archived'?'selected':'') ?>>Archived</option>
+                </select>
                 <input name="month" placeholder="Month (YYYY-MM)" value="<?= htmlspecialchars((string)($_GET['month'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
                 <button class="btn muted" type="submit">Filter</button>
                 <a class="btn muted" href="/admin-assistant/reports">Reset</a>
@@ -48,7 +54,7 @@
             <table>
                 <thead>
                     <tr>
-                        <th>Type</th><th>Category</th><th>Prepared By</th><th>Prepared At</th><th>File</th><th>Action</th>
+                        <th>Type</th><th>Category</th><th>Prepared By</th><th>Prepared At</th><th>File</th><th>Status</th><th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -59,7 +65,21 @@
                             <td><?= htmlspecialchars((string)($r['prepared_name'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)$r['prepared_at'])), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)$r['file_name'], ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><a class="btn muted" href="/admin-assistant/reports/download?id=<?= (int)$r['id'] ?>">Download</a></td>
+                            <td><?= !empty($r['is_archived']) ? ('Archived ' . htmlspecialchars(date('Y-m-d H:i', strtotime((string)($r['archived_at'] ?? $r['prepared_at']))), ENT_QUOTES, 'UTF-8')) : 'Active' ?></td>
+                            <td>
+                                <a class="btn muted" href="/admin-assistant/reports/download?id=<?= (int)$r['id'] ?>">Download</a>
+                                <?php if (empty($r['is_archived'])): ?>
+                                <form method="POST" action="/admin-assistant/reports/archive" style="display:inline">
+                                    <input type="hidden" name="id" value="<?= (int)$r['id'] ?>" />
+                                    <button class="btn muted" type="submit">Archive</button>
+                                </form>
+                                <?php else: ?>
+                                <form method="POST" action="/admin-assistant/reports/restore" style="display:inline">
+                                    <input type="hidden" name="id" value="<?= (int)$r['id'] ?>" />
+                                    <button class="btn muted" type="submit">Restore</button>
+                                </form>
+                                <?php endif; ?>
+                            </td>
                         </tr>
                     <?php endforeach; else: ?>
                         <tr><td colspan="6" style="color:var(--muted)">No reports yet.</td></tr>

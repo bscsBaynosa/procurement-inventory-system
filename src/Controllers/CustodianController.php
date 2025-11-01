@@ -39,8 +39,35 @@ class CustodianController extends BaseController
         $branchId = $_SESSION['branch_id'] ?? null;
         $inventoryStats = $this->inventory()->getStatsByBranch($branchId ? (int)$branchId : null);
         $pendingRequests = $this->requests()->getPendingRequests($branchId ? (int)$branchId : null);
+        // Greeting, unread, branch name, avatar
+        $meId = (int)($_SESSION['user_id'] ?? 0);
+        $meFirst = null; $avatarPath = null; $unread = 0; $branchName = null;
+        try {
+            $pdo = \App\Database\Connection::resolve();
+            if ($meId > 0) {
+                $st = $pdo->prepare('SELECT first_name, full_name, avatar_path, branch_id FROM users WHERE user_id = :id');
+                $st->execute(['id' => $meId]);
+                $u = $st->fetch();
+                if ($u) { $meFirst = (string)($u['first_name'] ?? ''); $avatarPath = (string)($u['avatar_path'] ?? ''); if (!$branchId && !empty($u['branch_id'])) { $branchId = (int)$u['branch_id']; } }
+                $stU = $pdo->prepare('SELECT COUNT(*) FROM messages WHERE recipient_id = :me AND is_read = FALSE');
+                $stU->execute(['me' => $meId]);
+                $unread = (int)$stU->fetchColumn();
+            }
+            if ($branchId) {
+                $sb = $pdo->prepare('SELECT name FROM branches WHERE branch_id = :b');
+                $sb->execute(['b' => $branchId]);
+                $branchName = (string)($sb->fetchColumn() ?: '');
+            }
+        } catch (\Throwable $ignored) {}
 
-        $this->render('dashboard/custodian.php', compact('inventoryStats', 'pendingRequests'));
+        $this->render('dashboard/custodian.php', [
+            'inventoryStats' => $inventoryStats,
+            'pendingRequests' => $pendingRequests,
+            'me_first' => $meFirst,
+            'unread_count' => $unread,
+            'avatar_path' => $avatarPath,
+            'branch_name' => $branchName,
+        ]);
     }
 
     /** Inventory list & simple create form for custodian */
@@ -658,26 +685,98 @@ class CustodianController extends BaseController
         // Prepare simple category options and current month for convenience
         $categories = ['Office Supplies','Medical Equipments','Medicines','Machines','Electronics','Appliances'];
         $month = isset($_GET['month']) ? (string)$_GET['month'] : date('Y-m');
-        $this->render('dashboard/reports_module.php', ['categories' => $categories, 'month' => $month]);
+        // Load items for dependent Item select
+        $branchId = $_SESSION['branch_id'] ?? null;
+        $items = $this->inventory()->listInventory($branchId ? (int)$branchId : null);
+        // Load recent (active) reports histories per type
+        $consumptionReports = [];
+        $inventoryReports = [];
+        try {
+            $pdo = \App\Database\Connection::resolve();
+            // Ensure archive table has new lifecycle columns
+            $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE");
+            $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ");
+            $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL");
+            $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS restored_at TIMESTAMPTZ");
+            $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS restored_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL");
+            $st1 = $pdo->query("SELECT id, report_type, category, file_name, file_path, prepared_name, prepared_at FROM report_archives WHERE report_type = 'consumption' AND COALESCE(is_archived, FALSE) = FALSE ORDER BY prepared_at DESC LIMIT 20");
+            $consumptionReports = $st1 ? $st1->fetchAll(\PDO::FETCH_ASSOC) : [];
+            $st2 = $pdo->query("SELECT id, report_type, category, file_name, file_path, prepared_name, prepared_at FROM report_archives WHERE report_type = 'inventory' AND COALESCE(is_archived, FALSE) = FALSE ORDER BY prepared_at DESC LIMIT 20");
+            $inventoryReports = $st2 ? $st2->fetchAll(\PDO::FETCH_ASSOC) : [];
+        } catch (\Throwable $ignored) {}
+        $this->render('dashboard/reports_module.php', [
+            'categories' => $categories,
+            'month' => $month,
+            'items' => $items,
+            'recent_consumption' => $consumptionReports,
+            'recent_inventory' => $inventoryReports,
+        ]);
     }
 
     public function reportsList(): void
     {
         if (!$this->auth()->isAuthenticated()) { header('Location: /login'); return; }
         $type = isset($_GET['type']) ? trim((string)$_GET['type']) : '';
+        $show = isset($_GET['show']) ? trim((string)$_GET['show']) : 'archived'; // archived|active|all
         $category = isset($_GET['category']) ? trim((string)$_GET['category']) : '';
         $pdo = \App\Database\Connection::resolve();
-        $sql = 'SELECT id, report_type, category, file_name, file_path, prepared_name, prepared_at FROM report_archives';
+        // Ensure lifecycle columns
+        $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE");
+        $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ");
+        $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL");
+        $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS restored_at TIMESTAMPTZ");
+        $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS restored_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL");
+        $sql = 'SELECT id, report_type, category, file_name, file_path, prepared_name, prepared_at, COALESCE(is_archived, FALSE) AS is_archived, archived_at, restored_at FROM report_archives';
         $conds = [];
         $params = [];
         if ($type !== '' && in_array($type, ['inventory','consumption'], true)) { $conds[] = 'report_type = :t'; $params['t'] = $type; }
         if ($category !== '') { $conds[] = 'category ILIKE :c'; $params['c'] = $category; }
+        if ($show === 'archived') { $conds[] = 'COALESCE(is_archived, FALSE) = TRUE'; }
+        elseif ($show === 'active') { $conds[] = 'COALESCE(is_archived, FALSE) = FALSE'; }
         if ($conds) { $sql .= ' WHERE ' . implode(' AND ', $conds); }
         $sql .= ' ORDER BY prepared_at DESC LIMIT 500';
         $st = $pdo->prepare($sql);
         $st->execute($params);
         $list = $st->fetchAll(\PDO::FETCH_ASSOC);
-        $this->render('dashboard/reports.php', ['reports' => $list, 'filter_type' => $type, 'filter_category' => $category]);
+        $this->render('dashboard/reports.php', ['reports' => $list, 'filter_type' => $type, 'filter_category' => $category, 'show' => $show]);
+    }
+
+    /** Mark a report as archived (hidden from active lists) */
+    public function archiveReport(): void
+    {
+        if (!$this->auth()->isAuthenticated()) { header('Location: /login'); return; }
+        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        if ($id <= 0) { header('Location: /admin-assistant/reports?error=Invalid+ID'); return; }
+        try {
+            $pdo = \App\Database\Connection::resolve();
+            $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE");
+            $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ");
+            $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL");
+            $st = $pdo->prepare('UPDATE report_archives SET is_archived = TRUE, archived_at = NOW(), archived_by = :by WHERE id = :id');
+            $st->execute(['id' => $id, 'by' => (int)($_SESSION['user_id'] ?? 0)]);
+            header('Location: /admin-assistant/reports?archived=1');
+        } catch (\Throwable $e) {
+            header('Location: /admin-assistant/reports?error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
+    /** Restore an archived report back to active list */
+    public function restoreReport(): void
+    {
+        if (!$this->auth()->isAuthenticated()) { header('Location: /login'); return; }
+        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        if ($id <= 0) { header('Location: /admin-assistant/reports/archives?error=Invalid+ID'); return; }
+        try {
+            $pdo = \App\Database\Connection::resolve();
+            $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE");
+            $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS restored_at TIMESTAMPTZ");
+            $pdo->exec("ALTER TABLE report_archives ADD COLUMN IF NOT EXISTS restored_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL");
+            $st = $pdo->prepare('UPDATE report_archives SET is_archived = FALSE, restored_at = NOW(), restored_by = :by WHERE id = :id');
+            $st->execute(['id' => $id, 'by' => (int)($_SESSION['user_id'] ?? 0)]);
+            header('Location: /admin-assistant/reports/archives?restored=1');
+        } catch (\Throwable $e) {
+            header('Location: /admin-assistant/reports/archives?error=' . rawurlencode($e->getMessage()));
+        }
     }
 
     public function downloadReport(): void

@@ -2,6 +2,9 @@
 if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
 $cats = $categories ?? ['Office Supplies','Medical Equipments','Medicines','Machines','Electronics','Appliances'];
 $month = $month ?? date('Y-m');
+$items = $items ?? [];
+$recentConsumption = $recent_consumption ?? [];
+$recentInventory = $recent_inventory ?? [];
 ?>
 <!doctype html>
 <html lang="en">
@@ -46,16 +49,18 @@ $month = $month ?? date('Y-m');
       <form method="GET" action="/admin-assistant/reports/consumption" class="row">
         <div style="min-width:220px">
           <label>Category (optional if Item selected)</label>
-          <select name="category">
+          <select name="category" id="cons-cat">
             <option value="">All</option>
             <?php foreach ($cats as $c): ?>
               <option value="<?= htmlspecialchars($c, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($c, ENT_QUOTES, 'UTF-8') ?></option>
             <?php endforeach; ?>
           </select>
         </div>
-        <div style="min-width:220px">
-          <label>Item ID (optional)</label>
-          <input name="item_id" type="number" placeholder="e.g., 123" />
+        <div style="min-width:320px">
+          <label>Item (optional)</label>
+          <select name="item_id" id="cons-item">
+            <option value="">All Items</option>
+          </select>
         </div>
         <div>
           <label>Month</label>
@@ -66,6 +71,39 @@ $month = $month ?? date('Y-m');
         </div>
       </form>
       <p style="color:var(--muted);font-size:13px;margin-top:8px">Tip: Leave Item ID empty to include all items in the selected category; set it to generate a single-item consumption report.</p>
+      <div style="margin-top:12px">
+        <div style="font-weight:700;margin:8px 0">Recent Consumption Reports</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border)">Category</th>
+              <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border)">Prepared By</th>
+              <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border)">Prepared At</th>
+              <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border)">File</th>
+              <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border)">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php if ($recentConsumption): foreach ($recentConsumption as $r): ?>
+              <tr>
+                <td style="padding:8px;border-bottom:1px solid var(--border)"><?= htmlspecialchars((string)($r['category'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
+                <td style="padding:8px;border-bottom:1px solid var(--border)"><?= htmlspecialchars((string)($r['prepared_name'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
+                <td style="padding:8px;border-bottom:1px solid var(--border)"><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)$r['prepared_at'])), ENT_QUOTES, 'UTF-8') ?></td>
+                <td style="padding:8px;border-bottom:1px solid var(--border)"><?= htmlspecialchars((string)$r['file_name'], ENT_QUOTES, 'UTF-8') ?></td>
+                <td style="padding:8px;border-bottom:1px solid var(--border)">
+                  <a class="btn muted" href="/admin-assistant/reports/download?id=<?= (int)$r['id'] ?>">Download</a>
+                  <form method="POST" action="/admin-assistant/reports/archive" style="display:inline">
+                    <input type="hidden" name="id" value="<?= (int)$r['id'] ?>" />
+                    <button class="btn muted" type="submit">Archive</button>
+                  </form>
+                </td>
+              </tr>
+            <?php endforeach; else: ?>
+              <tr><td colspan="5" style="padding:8px;color:var(--muted)">No reports yet.</td></tr>
+            <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <section id="tab-inventory" class="card" style="display:none">
@@ -73,7 +111,7 @@ $month = $month ?? date('Y-m');
       <form method="GET" action="/admin-assistant/reports/inventory" class="row">
         <div style="min-width:220px">
           <label>Category</label>
-          <select name="category">
+          <select name="category" id="inv-cat">
             <?php foreach ($cats as $c): ?>
               <option value="<?= htmlspecialchars($c, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($c, ENT_QUOTES, 'UTF-8') ?></option>
             <?php endforeach; ?>
@@ -88,6 +126,39 @@ $month = $month ?? date('Y-m');
         </div>
       </form>
       <p style="color:var(--muted);font-size:13px;margin-top:8px">Inventory Report summarizes the entire category; the Snapshot shows current stocks.</p>
+      <div style="margin-top:12px">
+        <div style="font-weight:700;margin:8px 0">Recent Inventory Reports</div>
+        <table style="width:100%;border-collapse:collapse">
+          <thead>
+            <tr>
+              <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border)">Category</th>
+              <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border)">Prepared By</th>
+              <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border)">Prepared At</th>
+              <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border)">File</th>
+              <th style="text-align:left;padding:8px;border-bottom:1px solid var(--border)">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            <?php if ($recentInventory): foreach ($recentInventory as $r): ?>
+              <tr>
+                <td style="padding:8px;border-bottom:1px solid var(--border)"><?= htmlspecialchars((string)($r['category'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
+                <td style="padding:8px;border-bottom:1px solid var(--border)"><?= htmlspecialchars((string)($r['prepared_name'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
+                <td style="padding:8px;border-bottom:1px solid var(--border)"><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)$r['prepared_at'])), ENT_QUOTES, 'UTF-8') ?></td>
+                <td style="padding:8px;border-bottom:1px solid var(--border)"><?= htmlspecialchars((string)$r['file_name'], ENT_QUOTES, 'UTF-8') ?></td>
+                <td style="padding:8px;border-bottom:1px solid var(--border)">
+                  <a class="btn muted" href="/admin-assistant/reports/download?id=<?= (int)$r['id'] ?>">Download</a>
+                  <form method="POST" action="/admin-assistant/reports/archive" style="display:inline">
+                    <input type="hidden" name="id" value="<?= (int)$r['id'] ?>" />
+                    <button class="btn muted" type="submit">Archive</button>
+                  </form>
+                </td>
+              </tr>
+            <?php endforeach; else: ?>
+              <tr><td colspan="5" style="padding:8px;color:var(--muted)">No reports yet.</td></tr>
+            <?php endif; ?>
+          </tbody>
+        </table>
+      </div>
     </section>
   </main>
 </div>
@@ -99,6 +170,28 @@ function showTab(ev, id){ ev.preventDefault();
   links.forEach(a=>a.classList.remove('active'));
   if(id==='consumption') links[0].classList.add('active'); else links[1].classList.add('active');
 }
+// Dependent Item list for Consumption
+(function(){
+  const items = <?php echo json_encode(array_map(function($it){ return [
+    'id'=>(int)($it['item_id']??0),
+    'name'=>(string)($it['name']??''),
+    'category'=>(string)($it['category']??'')
+  ]; }, $items), JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES); ?>;
+  const catSel = document.getElementById('cons-cat');
+  const itemSel = document.getElementById('cons-item');
+  function render(){
+    const cat = catSel.value || '';
+    const filtered = items.filter(it => !cat || it.category.toLowerCase()===cat.toLowerCase());
+    // Preserve current selection
+    const current = itemSel.value;
+    itemSel.innerHTML = '';
+    const optAll = document.createElement('option'); optAll.value=''; optAll.textContent='All Items'; itemSel.appendChild(optAll);
+    filtered.forEach(it => { const o=document.createElement('option'); o.value=String(it.id); o.textContent=`${it.name} (ID ${it.id})`; itemSel.appendChild(o); });
+    // Try to restore selection
+    if ([...itemSel.options].some(o=>o.value===current)) { itemSel.value = current; }
+  }
+  if (catSel && itemSel) { catSel.addEventListener('change', render); render(); }
+})();
 </script>
 </body>
 </html>

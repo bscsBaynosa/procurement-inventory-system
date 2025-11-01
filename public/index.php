@@ -351,12 +351,25 @@ if ($method === 'GET' && $path === '/admin-assistant/reports') {
 // Archived reports list
 if ($method === 'GET' && $path === '/admin-assistant/reports/archives') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	// Force archived filter by default when visiting this route
+	if (!isset($_GET['show'])) { $_GET['show'] = 'archived'; }
 	$custodian->reportsList();
 	exit;
 }
 if ($method === 'GET' && $path === '/admin-assistant/reports/download') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
 	$custodian->downloadReport();
+	exit;
+}
+// Archive/Restore actions
+if ($method === 'POST' && $path === '/admin-assistant/reports/archive') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->archiveReport();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin-assistant/reports/restore') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->restoreReport();
 	exit;
 }
 
