@@ -61,10 +61,17 @@ class CustodianController extends BaseController
         // Filter in-memory for now to avoid many queries
         $filtered = [];
         foreach ($items as $it) {
+            // Temporary removal: hide any Bondpaper items
+            if (stripos((string)$it['name'], 'bondpaper') !== false) { continue; }
             if ($selectedCategory !== '' && strcasecmp((string)$it['category'], $selectedCategory) !== 0) { continue; }
             if ($search !== '' && stripos((string)$it['name'], $search) === false) { continue; }
             if ($filterStatus !== '') {
-                $isLow = ((int)($it['quantity'] ?? 0)) <= ((int)($it['minimum_quantity'] ?? 0));
+                $qty = (int)($it['quantity'] ?? 0);
+                $min = (int)($it['minimum_quantity'] ?? 0);
+                $maint = (int)($it['maintaining_quantity'] ?? 0);
+                $halfMaint = $maint > 0 ? (int)floor($maint * 0.5) : 0;
+                $threshold = max($min, $halfMaint);
+                $isLow = ($threshold > 0) ? ($qty <= $threshold) : false;
                 if ($filterStatus === 'low' && !$isLow) { continue; }
                 if ($filterStatus === 'ok' && $isLow) { continue; }
             }
@@ -101,7 +108,11 @@ class CustodianController extends BaseController
         $category = trim((string)($_POST['category'] ?? ''));
         $status = (string)($_POST['status'] ?? 'good');
         $quantity = (int)($_POST['quantity'] ?? 1);
-        $unit = trim((string)($_POST['unit'] ?? 'pcs'));
+        $unitSel = trim((string)($_POST['unit'] ?? 'pcs'));
+        $unitOther = trim((string)($_POST['unit_other'] ?? ''));
+        $unit = ($unitSel === 'others' && $unitOther !== '') ? $unitOther : $unitSel;
+        $minQty = isset($_POST['minimum_quantity']) && $_POST['minimum_quantity'] !== '' ? (int)$_POST['minimum_quantity'] : 0;
+        $maintQty = isset($_POST['maintaining_quantity']) && $_POST['maintaining_quantity'] !== '' ? (int)$_POST['maintaining_quantity'] : 0;
         if ($name === '' || $category === '' || $quantity <= 0) { header('Location: /custodian/inventory?error=Invalid+data'); return; }
         $branchId = (int)($_SESSION['branch_id'] ?? 0);
         $id = $this->inventory()->createItem([
@@ -111,6 +122,8 @@ class CustodianController extends BaseController
             'status' => $status,
             'quantity' => $quantity,
             'unit' => $unit,
+            'minimum_quantity' => $minQty,
+            'maintaining_quantity' => $maintQty,
         ], (int)($_SESSION['user_id'] ?? 0));
         header('Location: /custodian/inventory?created=1');
     }
@@ -262,9 +275,14 @@ class CustodianController extends BaseController
         $category = isset($_POST['category']) ? trim((string)$_POST['category']) : '';
         if ($itemId <= 0) { header('Location: /admin-assistant/inventory'); return; }
         $payload = [];
-        if (isset($_POST['unit'])) { $payload['unit'] = (string)$_POST['unit']; }
+        if (isset($_POST['unit'])) {
+            $unitSel = (string)$_POST['unit'];
+            $unitOther = isset($_POST['unit_other']) ? trim((string)$_POST['unit_other']) : '';
+            $payload['unit'] = ($unitSel === 'others' && $unitOther !== '') ? $unitOther : $unitSel;
+        }
         if (isset($_POST['status'])) { $payload['status'] = (string)$_POST['status']; }
         if (isset($_POST['minimum_quantity']) && $_POST['minimum_quantity'] !== '') { $payload['minimum_quantity'] = (int)$_POST['minimum_quantity']; }
+        if (isset($_POST['maintaining_quantity']) && $_POST['maintaining_quantity'] !== '') { $payload['maintaining_quantity'] = (int)$_POST['maintaining_quantity']; }
         if ($payload) { $this->inventory()->updateItem($itemId, $payload, (int)($_SESSION['user_id'] ?? 0)); }
         $redir = '/admin-assistant/inventory' . ($category !== '' ? ('?category=' . rawurlencode($category)) : '');
         header('Location: ' . $redir . '&meta_updated=1');

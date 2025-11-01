@@ -36,14 +36,19 @@ class InventoryService
 
 	public function listInventory(?int $branchId = null): array
 	{
-		$sql = 'SELECT item_id, name, category, status, quantity, unit, minimum_quantity FROM inventory_items';
+		$sql = 'SELECT item_id, name, category, status, quantity, unit, minimum_quantity, maintaining_quantity FROM inventory_items';
 		$params = [];
+		$wheres = [];
 		if ($branchId) {
 			// Include branch-specific items and global items (branch_id IS NULL) so common
 			// office supplies appear as choices for PR across branches.
-			$sql .= ' WHERE (branch_id = :b OR branch_id IS NULL)';
+			$wheres[] = '(branch_id = :b OR branch_id IS NULL)';
 			$params['b'] = $branchId;
 		}
+		// Temporary removal: hide any Bondpaper items from all listings
+		$wheres[] = 'name NOT ILIKE :hide_bondpaper';
+		$params['hide_bondpaper'] = '%bondpaper%';
+		if ($wheres) { $sql .= ' WHERE ' . implode(' AND ', $wheres); }
 		$sql .= ' ORDER BY name ASC';
 		$stmt = $this->pdo->prepare($sql);
 		$stmt->execute($params);
@@ -52,7 +57,7 @@ class InventoryService
 
 	public function getItemById(int $itemId): ?array
 	{
-		$stmt = $this->pdo->prepare('SELECT item_id, branch_id, name, category, status, quantity, unit FROM inventory_items WHERE item_id = :id');
+		$stmt = $this->pdo->prepare('SELECT item_id, branch_id, name, category, status, quantity, unit, minimum_quantity, maintaining_quantity FROM inventory_items WHERE item_id = :id');
 		$stmt->execute(['id' => $itemId]);
 		$row = $stmt->fetch();
 		return $row ?: null;
@@ -61,7 +66,7 @@ class InventoryService
 	public function createItem(array $data, int $createdBy): int
 	{
 		$status = $this->normalizeStatus($data['status'] ?? 'good');
-		$stmt = $this->pdo->prepare('INSERT INTO inventory_items (branch_id, name, category, status, quantity, unit, created_by, updated_by) VALUES (:b,:n,:c,:s,:q,:u,:by,:by) RETURNING item_id');
+		$stmt = $this->pdo->prepare('INSERT INTO inventory_items (branch_id, name, category, status, quantity, unit, minimum_quantity, maintaining_quantity, created_by, updated_by) VALUES (:b,:n,:c,:s,:q,:u,:min,:maint,:by,:by) RETURNING item_id');
 		$stmt->execute([
 			'b' => $data['branch_id'] ?? null,
 			'n' => trim((string)($data['name'] ?? '')),
@@ -69,6 +74,8 @@ class InventoryService
 			's' => $status,
 			'q' => (int)($data['quantity'] ?? 1),
 			'u' => trim((string)($data['unit'] ?? 'pcs')),
+			'min' => (int)($data['minimum_quantity'] ?? 0),
+			'maint' => (int)($data['maintaining_quantity'] ?? 0),
 			'by' => $createdBy,
 		]);
 		return (int)$stmt->fetchColumn();
@@ -78,12 +85,12 @@ class InventoryService
 	{
 		$sets = [];
 		$params = ['id' => $itemId, 'by' => $updatedBy];
-		$allowed = ['name','category','status','quantity','unit','minimum_quantity'];
+		$allowed = ['name','category','status','quantity','unit','minimum_quantity','maintaining_quantity'];
 		foreach ($allowed as $f) {
 			if (array_key_exists($f, $data)) {
 				$val = $f === 'status' ? $this->normalizeStatus($data[$f]) : $data[$f];
 				$sets[] = "$f = :$f";
-				if ($f === 'quantity' || $f === 'minimum_quantity') {
+				if ($f === 'quantity' || $f === 'minimum_quantity' || $f === 'maintaining_quantity') {
 					$params[$f] = (int)$val;
 				} else {
 					$params[$f] = trim((string)$val);

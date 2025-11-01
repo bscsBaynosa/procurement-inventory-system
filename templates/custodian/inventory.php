@@ -73,9 +73,34 @@
                             <label for="quantity">Qty</label>
                             <input id="quantity" name="quantity" type="number" min="1" value="1" required>
                         </div>
-                        <div style="width:120px;">
+                        <div style="width:220px;">
                             <label for="unit">Unit</label>
-                            <input id="unit" name="unit" type="text" value="pcs">
+                            <div style="display:flex; gap:6px;">
+                                <select id="unit" name="unit" data-unit-select="true" data-target="unit_other" style="flex:1;">
+                                    <option value="pcs">pcs</option>
+                                    <option value="rim">rim</option>
+                                    <option value="box">box</option>
+                                    <option value="pack">pack</option>
+                                    <option value="ml">ml</option>
+                                    <option value="liter">liter</option>
+                                    <option value="gallon">gallon</option>
+                                    <option value="bottle">bottle</option>
+                                    <option value="set">set</option>
+                                    <option value="roll">roll</option>
+                                    <option value="others">others…</option>
+                                </select>
+                                <input id="unit_other" name="unit_other" type="text" placeholder="specify" style="width:120px; display:none;" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div style="width:180px;">
+                            <label for="minimum_quantity">Minimum Qty</label>
+                            <input id="minimum_quantity" name="minimum_quantity" type="number" min="0" value="0" placeholder="e.g., 5">
+                        </div>
+                        <div style="width:200px;">
+                            <label for="maintaining_quantity">Maintaining Count</label>
+                            <input id="maintaining_quantity" name="maintaining_quantity" type="number" min="0" value="0" placeholder="e.g., 15 (standard)">
                         </div>
                     </div>
                     <div style="margin-top:10px; display:flex; gap:8px;">
@@ -105,9 +130,34 @@
                             <label for="quantity2">Qty</label>
                             <input id="quantity2" name="quantity" type="number" min="1" value="1" required>
                         </div>
-                        <div style="width:120px;">
+                        <div style="width:220px;">
                             <label for="unit2">Unit</label>
-                            <input id="unit2" name="unit" type="text" value="pcs">
+                            <div style="display:flex; gap:6px;">
+                                <select id="unit2" name="unit" data-unit-select="true" data-target="unit2_other" style="flex:1;">
+                                    <option value="pcs">pcs</option>
+                                    <option value="rim">rim</option>
+                                    <option value="box">box</option>
+                                    <option value="pack">pack</option>
+                                    <option value="ml">ml</option>
+                                    <option value="liter">liter</option>
+                                    <option value="gallon">gallon</option>
+                                    <option value="bottle">bottle</option>
+                                    <option value="set">set</option>
+                                    <option value="roll">roll</option>
+                                    <option value="others">others…</option>
+                                </select>
+                                <input id="unit2_other" name="unit_other" type="text" placeholder="specify" style="width:120px; display:none;" />
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div style="width:180px;">
+                            <label for="minimum_quantity2">Minimum Qty</label>
+                            <input id="minimum_quantity2" name="minimum_quantity" type="number" min="0" value="0" placeholder="e.g., 5">
+                        </div>
+                        <div style="width:200px;">
+                            <label for="maintaining_quantity2">Maintaining Count</label>
+                            <input id="maintaining_quantity2" name="maintaining_quantity" type="number" min="0" value="0" placeholder="e.g., 15 (standard)">
                         </div>
                     </div>
                     <div style="margin-top:10px; display:flex; gap:8px;">
@@ -145,7 +195,10 @@
                     <?php if (!empty($items)): foreach ($items as $it): 
                         $qty = (int)($it['quantity'] ?? 0);
                         $min = isset($it['minimum_quantity']) ? (int)$it['minimum_quantity'] : 0;
-                        $isLow = $qty <= $min && $min > 0; ?>
+                        $maint = isset($it['maintaining_quantity']) ? (int)$it['maintaining_quantity'] : 0;
+                        $halfMaint = $maint > 0 ? (int)floor($maint * 0.5) : 0;
+                        $threshold = max($min, $halfMaint);
+                        $isLow = ($threshold > 0) ? ($qty <= $threshold) : false; ?>
                         <tr>
                             <td><?php if ($isLow): ?><input type="checkbox" name="item_ids[]" value="<?= (int)$it['item_id'] ?>" /><?php endif; ?></td>
                             <td><?= htmlspecialchars((string)$it['name'], ENT_QUOTES, 'UTF-8') ?></td>
@@ -154,8 +207,8 @@
                                 <span style="display:inline-flex;align-items:center;gap:8px;">
                                     <span style="width:10px;height:10px;border-radius:999px;background:<?= $isLow?'#ef4444':'#22c55e' ?>;border:1px solid var(--border);"></span>
                                     <?= $qty ?> <?= htmlspecialchars((string)($it['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
-                                    <?php if ($min>0): ?>
-                                        <span class="muted" style="font-size:12px;">(min <?= $min ?>)</span>
+                                    <?php if ($min>0 || $maint>0): ?>
+                                        <span class="muted" style="font-size:12px;">(min <?= (int)$min ?><?= $maint>0? (' | maintain ' . (int)$maint):'' ?><?= $threshold>0? (' | low if ≤ ' . (int)$threshold):'' ?>)</span>
                                     <?php endif; ?>
                                 </span>
                             </td>
@@ -170,11 +223,22 @@
                                         <button class="btn muted" type="submit">Save Count</button>
                                         <a class="btn muted" href="/admin-assistant/reports/consumption?item_id=<?= (int)$it['item_id'] ?>&month=<?= date('Y-m') ?>&download=1">Consumption Report</a>
                                     </form>
-                                    <form method="POST" action="/admin-assistant/inventory/update-meta" style="display:inline-flex; gap:6px; align-items:center; margin-top:6px;">
+                                    <form method="POST" action="/admin-assistant/inventory/update-meta" style="display:inline-flex; gap:6px; align-items:center; margin-top:6px; flex-wrap:wrap;">
                                         <input type="hidden" name="item_id" value="<?= (int)$it['item_id'] ?>" />
                                         <input type="hidden" name="category" value="<?= htmlspecialchars((string)$selected_category, ENT_QUOTES, 'UTF-8') ?>" />
                                         <input name="minimum_quantity" type="number" min="0" value="<?= (int)$min ?>" title="Minimum quantity" placeholder="Min" style="width:95px;" />
-                                        <input name="unit" type="text" value="<?= htmlspecialchars((string)($it['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" title="Unit" placeholder="Unit" style="width:95px;" />
+                                        <input name="maintaining_quantity" type="number" min="0" value="<?= (int)$maint ?>" title="Maintaining count" placeholder="Maintain" style="width:110px;" />
+                                        <div style="display:inline-flex; gap:6px; align-items:center;">
+                                            <?php $uval = (string)($it['unit'] ?? 'pcs'); $known=['pcs','rim','box','pack','ml','liter','gallon','bottle','set','roll']; $isKnown=in_array($uval,$known,true); ?>
+                                            <select name="unit" data-unit-select="true" data-target="unit_other_row_<?= (int)$it['item_id'] ?>" style="height:36px;">
+                                                <option value="<?= htmlspecialchars($uval, ENT_QUOTES, 'UTF-8') ?>" <?= $isKnown? '':'selected' ?>><?= htmlspecialchars($uval, ENT_QUOTES, 'UTF-8') ?></option>
+                                                <?php foreach ($known as $opt): ?>
+                                                    <option value="<?= $opt ?>" <?= $uval===$opt? 'selected':'' ?>><?= $opt ?></option>
+                                                <?php endforeach; ?>
+                                                <option value="others">others…</option>
+                                            </select>
+                                            <input id="unit_other_row_<?= (int)$it['item_id'] ?>" name="unit_other" type="text" placeholder="specify" style="width:120px; display:<?= $isKnown? 'none':'inline-block' ?>;" value="<?= $isKnown? '':htmlspecialchars($uval, ENT_QUOTES, 'UTF-8') ?>" />
+                                        </div>
                                         <select name="status" title="Status" style="height:36px;">
                                             <?php $st = (string)($it['status'] ?? 'good'); ?>
                                             <option value="good" <?= $st==='good'?'selected':'' ?>>Good</option>
@@ -206,5 +270,6 @@
         </div>
     </main>
 </div>
+<script src="/js/main.js"></script>
 </body>
 </html>
