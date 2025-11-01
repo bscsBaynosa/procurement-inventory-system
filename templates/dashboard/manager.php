@@ -60,7 +60,13 @@
             </div>
         <?php endif; ?>
 
-        <div class="h1" style="margin-top:12px;">Purchase Requests</div>
+        <div class="h1" style="margin-top:12px; display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <span>Purchase Requests</span>
+            <span style="display:flex; gap:8px;">
+                <a class="btn" href="/manager/requests">Open Grouped View</a>
+                <a class="btn" href="/manager/requests/history">History</a>
+            </span>
+        </div>
         <table>
             <thead>
                 <tr>
