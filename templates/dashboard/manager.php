@@ -70,47 +70,45 @@
         <table>
             <thead>
                 <tr>
-                    <th>ID</th>
+                    <th class="nowrap">PR ID</th>
                     <th>Branch</th>
-                    <th>Item</th>
+                    <th>Items Requested</th>
+                    <th class="nowrap">Submission date</th>
+                    <th class="nowrap">Submitted By</th>
                     <th>Status</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
-                <?php if (!empty($requests)): ?>
-                    <?php foreach ($requests as $request): ?>
+                <?php if (!empty($groups)): ?>
+                    <?php foreach ($groups as $g): ?>
+                        <?php 
+                            $status = (string)($g['status'] ?? 'pending');
+                            $labelMap = ['pending'=>'For Admin Approval','approved'=>'Approved','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled'];
+                            $statusLabel = $labelMap[$status] ?? $status;
+                        ?>
                         <tr>
-                            <td><?= htmlspecialchars((string)$request['request_id'], ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= htmlspecialchars((string)($request['branch_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= htmlspecialchars((string)($request['item_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= htmlspecialchars((string)$request['status'], ENT_QUOTES, 'UTF-8') ?></td>
+                            <td class="mono"><?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= htmlspecialchars((string)($g['branch_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><pre style="margin:0;white-space:pre-wrap;line-height:1.3;max-height:3.2em;overflow:hidden;"><?= htmlspecialchars((string)($g['items_summary'] ?? ''), ENT_QUOTES, 'UTF-8') ?></pre></td>
+                            <td class="nowrap"><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)($g['min_created_at'] ?? 'now'))), ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= htmlspecialchars((string)($g['requested_by_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><span class="badge"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></span></td>
                             <td>
                                 <div class="actions">
-                                    <form action="/manager/requests/update-status" method="POST" style="display:inline-flex; gap:6px; align-items:center;">
-                                        <input type="hidden" name="request_id" value="<?= htmlspecialchars((string)$request['request_id'], ENT_QUOTES, 'UTF-8') ?>" />
+                                    <form action="/manager/requests/update-group-status" method="POST" style="display:inline-flex; gap:6px; align-items:center;">
+                                        <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
                                         <select class="inline" name="status">
-                                            <?php $statuses = [
-                                                'pending' => 'Pending',
-                                                'approved' => 'Approved',
-                                                'rejected' => 'Rejected',
-                                                'in_progress' => 'In Progress',
-                                                'completed' => 'Completed',
-                                                'cancelled' => 'Cancelled',
-                                            ];
-                                            foreach ($statuses as $val => $label): ?>
-                                                <option value="<?= $val ?>" <?= ($request['status'] === $val ? 'selected' : '') ?>><?= $label ?></option>
+                                            <?php foreach ($labelMap as $val => $lab): ?>
+                                                <option value="<?= $val ?>" <?= ($status===$val?'selected':'') ?>><?= $lab ?></option>
                                             <?php endforeach; ?>
                                         </select>
                                         <button class="btn primary" type="submit">Update</button>
                                     </form>
-                                    <?php if (($request['status'] ?? '') === 'approved' || ($request['status'] ?? '') === 'in_progress'): ?>
-                                        <a class="btn" href="/procurement/po/create?request_id=<?= urlencode((string)$request['request_id']) ?>">Create/Download PO</a>
-                                    <?php else: ?>
-                                        <span class="btn" style="opacity:0.6; cursor:not-allowed;" title="PO available once approved">Create/Download PO</span>
-                                    <?php endif; ?>
-                                    <?php if (!empty($request['requested_by_id'])): ?>
-                                        <a class="btn" href="/admin/messages?to=<?= urlencode((string)$request['requested_by_id']) ?>&subject=<?= urlencode('Regarding Request #' . (string)$request['request_id'] . ' - ' . (string)$request['status']) ?>">Message</a>
+                                    <a class="btn" href="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>">View</a>
+                                    <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>">Download PDF</a>
+                                    <?php if (!empty($g['requested_by_id'])): ?>
+                                        <a class="btn" href="/admin/messages?to=<?= urlencode((string)$g['requested_by_id']) ?>&subject=<?= urlencode('Regarding PR ' . (string)$g['pr_number'] . ' - ' . $statusLabel) ?>">Message</a>
                                     <?php endif; ?>
                                 </div>
                             </td>
@@ -118,7 +116,7 @@
                     <?php endforeach; ?>
                 <?php else: ?>
                     <tr>
-                        <td colspan="5" class="muted">No purchase requests found.</td>
+                        <td colspan="7" class="muted">No purchase requests found.</td>
                     </tr>
                 <?php endif; ?>
             </tbody>

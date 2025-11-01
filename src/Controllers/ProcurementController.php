@@ -48,11 +48,15 @@ class ProcurementController extends BaseController
             header('Location: /procurement/po');
             return;
         }
-        $requests = $this->requests()->getAllRequests([
+        // Grouped view data for dashboard preview table
+        $groups = $this->requests()->getRequestsGrouped([
             'branch_id' => $branchId ? (int)$branchId : null,
+            'include_archived' => false,
+            'sort' => 'date',
+            'order' => 'desc',
         ]);
         $branchStats = $this->inventory()->getStatsPerBranch();
-        $this->render('dashboard/manager.php', compact('requests', 'branchStats'));
+        $this->render('dashboard/manager.php', ['groups' => $groups, 'branchStats' => $branchStats]);
     }
 
     /**
