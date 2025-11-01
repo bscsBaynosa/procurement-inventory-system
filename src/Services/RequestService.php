@@ -15,6 +15,8 @@ class RequestService
 		$this->pdo = $pdo ?? Connection::resolve();
 		// Best-effort: ensure new columns exist so read paths don't fail on older schemas
 		$this->ensurePrColumns();
+		// Ensure enum values used by canvassing gate exist (safe to call often)
+		$this->ensureRequestStatusEnum();
 	}
 
 	public function createPurchaseRequest(array $payload, int $userId): array
@@ -150,6 +152,7 @@ class RequestService
 	{
 		// Ensure columns exist before selecting them
 		$this->ensurePrColumns();
+		$this->ensureRequestStatusEnum();
 	 $sql = 'SELECT pr.request_id, pr.pr_number, pr.item_id, pr.branch_id, pr.request_type, pr.quantity, pr.unit, pr.status, pr.priority, pr.needed_by, pr.created_at, pr.updated_at, pr.is_archived,
 		 i.name AS item_name, b.name AS branch_name,
 		 ru.user_id AS requested_by_id, ru.full_name AS requested_by_name, au.full_name AS assigned_to_name
@@ -273,6 +276,7 @@ class RequestService
 	{
 		$allowed = ['pending','approved','rejected','in_progress','completed','cancelled','canvassing_submitted','canvassing_approved','canvassing_rejected'];
 		if (!in_array($status, $allowed, true)) { return false; }
+		$this->ensureRequestStatusEnum();
 		$rows = $this->getGroupDetails($prNumber);
 		if (!$rows) { return false; }
 		$this->pdo->beginTransaction();
@@ -387,6 +391,7 @@ class RequestService
 
 	public function updateRequestStatus(int $requestId, string $status, int $performedBy, ?string $notes = null, bool $suppressRequesterNotify = false): bool
 	{
+		$this->ensureRequestStatusEnum();
 		$current = $this->getRequestById($requestId);
 		if (!$current) {
 			return false;
@@ -640,6 +645,60 @@ class RequestService
 			}
 		} catch (\Throwable $e) {
 			// swallow; read paths will fail gracefully elsewhere if truly missing, but this keeps prod resilient
+		}
+	}
+
+	/** Ensure canvassing-related enum values exist in request_status (idempotent best-effort). */
+	private function ensureRequestStatusEnum(): void
+	{
+		try {
+			// Fast path using DO block with IF checks and AFTER placement when supported
+			$this->pdo->exec(<<<SQL
+DO $$ BEGIN
+	IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'request_status') THEN
+		IF NOT EXISTS (
+			SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+			WHERE t.typname = 'request_status' AND e.enumlabel = 'canvassing_submitted'
+		) THEN
+			BEGIN
+				ALTER TYPE request_status ADD VALUE 'canvassing_submitted' AFTER 'approved';
+			EXCEPTION WHEN others THEN
+				ALTER TYPE request_status ADD VALUE 'canvassing_submitted';
+			END;
+		END IF;
+		IF NOT EXISTS (
+			SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+			WHERE t.typname = 'request_status' AND e.enumlabel = 'canvassing_approved'
+		) THEN
+			BEGIN
+				ALTER TYPE request_status ADD VALUE 'canvassing_approved' AFTER 'canvassing_submitted';
+			EXCEPTION WHEN others THEN
+				ALTER TYPE request_status ADD VALUE 'canvassing_approved';
+			END;
+		END IF;
+		IF NOT EXISTS (
+			SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+			WHERE t.typname = 'request_status' AND e.enumlabel = 'canvassing_rejected'
+		) THEN
+			BEGIN
+				ALTER TYPE request_status ADD VALUE 'canvassing_rejected' AFTER 'canvassing_approved';
+			EXCEPTION WHEN others THEN
+				ALTER TYPE request_status ADD VALUE 'canvassing_rejected';
+			END;
+		END IF;
+	END IF;
+END $$;
+SQL);
+		} catch (\Throwable $e) {
+			// Fallback for environments where DO/AFTER may not be available
+			try {
+				$labels = $this->pdo->query("SELECT e.enumlabel FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid WHERE t.typname = 'request_status'")?->fetchAll(\PDO::FETCH_COLUMN) ?: [];
+				foreach (['canvassing_submitted','canvassing_approved','canvassing_rejected'] as $v) {
+					if (!in_array($v, $labels, true)) {
+						$this->pdo->exec("ALTER TYPE request_status ADD VALUE '" . $v . "'");
+					}
+				}
+			} catch (\Throwable $ignored) {}
 		}
 	}
 }

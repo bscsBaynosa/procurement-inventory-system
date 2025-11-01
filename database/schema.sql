@@ -35,6 +35,46 @@ DO $$ BEGIN
     END IF;
 END $$;
 
+-- Ensure canvassing-related statuses exist in request_status enum (idempotent)
+DO $$ BEGIN
+    IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'request_status') THEN
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_enum e
+            JOIN pg_type t ON t.oid = e.enumtypid
+            WHERE t.typname = 'request_status' AND e.enumlabel = 'canvassing_submitted'
+        ) THEN
+            -- Position is cosmetic; add after 'approved' if supported
+            BEGIN
+                ALTER TYPE request_status ADD VALUE 'canvassing_submitted' AFTER 'approved';
+            EXCEPTION WHEN others THEN
+                ALTER TYPE request_status ADD VALUE 'canvassing_submitted';
+            END;
+        END IF;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_enum e
+            JOIN pg_type t ON t.oid = e.enumtypid
+            WHERE t.typname = 'request_status' AND e.enumlabel = 'canvassing_approved'
+        ) THEN
+            BEGIN
+                ALTER TYPE request_status ADD VALUE 'canvassing_approved' AFTER 'canvassing_submitted';
+            EXCEPTION WHEN others THEN
+                ALTER TYPE request_status ADD VALUE 'canvassing_approved';
+            END;
+        END IF;
+        IF NOT EXISTS (
+            SELECT 1 FROM pg_enum e
+            JOIN pg_type t ON t.oid = e.enumtypid
+            WHERE t.typname = 'request_status' AND e.enumlabel = 'canvassing_rejected'
+        ) THEN
+            BEGIN
+                ALTER TYPE request_status ADD VALUE 'canvassing_rejected' AFTER 'canvassing_approved';
+            EXCEPTION WHEN others THEN
+                ALTER TYPE request_status ADD VALUE 'canvassing_rejected';
+            END;
+        END IF;
+    END IF;
+END $$;
+
 DO $$ BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'request_type') THEN
         CREATE TYPE request_type AS ENUM ('job_order', 'purchase_order', 'equipment_request');
