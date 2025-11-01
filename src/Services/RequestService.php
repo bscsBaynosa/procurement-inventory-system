@@ -13,6 +13,8 @@ class RequestService
 	public function __construct(?PDO $pdo = null)
 	{
 		$this->pdo = $pdo ?? Connection::resolve();
+		// Best-effort: ensure new columns exist so read paths don't fail on older schemas
+		$this->ensurePrColumns();
 	}
 
 	public function createPurchaseRequest(array $payload, int $userId): array
@@ -140,6 +142,8 @@ class RequestService
 
 	public function getAllRequests(array $filters = []): array
 	{
+		// Ensure columns exist before selecting them
+		$this->ensurePrColumns();
 	 $sql = 'SELECT pr.request_id, pr.pr_number, pr.item_id, pr.branch_id, pr.request_type, pr.quantity, pr.unit, pr.status, pr.priority, pr.needed_by, pr.created_at, pr.updated_at, pr.is_archived,
 		 i.name AS item_name, b.name AS branch_name,
 		 ru.user_id AS requested_by_id, ru.full_name AS requested_by_name, au.full_name AS assigned_to_name
@@ -181,8 +185,7 @@ class RequestService
 	public function getRequestsGrouped(array $filters = []): array
 	{
 		// Ensure columns for grouping exist (pr_number, is_archived)
-		try { $this->pdo->exec("ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS pr_number VARCHAR(32);"); } catch (\Throwable $e) {}
-		try { $this->pdo->exec("ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE;"); } catch (\Throwable $e) {}
+		$this->ensurePrColumns();
 
 		$includeArchived = (bool)($filters['include_archived'] ?? false);
 		$sort = (string)($filters['sort'] ?? 'date');
@@ -240,6 +243,7 @@ class RequestService
 	/** Get full details for a PR group (by pr_number) including item rows. */
 	public function getGroupDetails(string $prNumber): array
 	{
+		$this->ensurePrColumns();
 		$stmt = $this->pdo->prepare(
 			"SELECT pr.request_id, pr.pr_number, pr.item_id, i.name AS item_name, pr.quantity, pr.unit, pr.status, pr.created_at,
 				pr.branch_id, b.name AS branch_name, pr.requested_by, u.full_name AS requested_by_name
@@ -279,6 +283,7 @@ class RequestService
 	/** Archive all requests under a PR number. */
 	public function archiveGroup(string $prNumber, int $performedBy, ?string $reason = null): bool
 	{
+		$this->ensurePrColumns();
 		try {
 			$st = $this->pdo->prepare("UPDATE purchase_requests SET is_archived = TRUE, archived_at = NOW(), archived_by = :by WHERE pr_number = :pr");
 			$ok = $st->execute(['by' => $performedBy, 'pr' => $prNumber]);
@@ -297,6 +302,7 @@ class RequestService
 	/** Restore archived PR group. */
 	public function restoreGroup(string $prNumber, int $performedBy): bool
 	{
+		$this->ensurePrColumns();
 		try {
 			$st = $this->pdo->prepare("UPDATE purchase_requests SET is_archived = FALSE WHERE pr_number = :pr");
 			$ok = $st->execute(['pr' => $prNumber]);
@@ -313,6 +319,7 @@ class RequestService
 
 	public function getRequestById(int $requestId): ?array
 	{
+			$this->ensurePrColumns();
 			$stmt = $this->pdo->prepare(
 				'SELECT request_id, item_id, branch_id, requested_by, assigned_to, request_type, quantity, unit, justification, status, priority, needed_by, created_at, updated_at, pr_number FROM purchase_requests WHERE request_id = :request_id LIMIT 1'
 			);
@@ -491,6 +498,23 @@ class RequestService
 			'payload' => $jsonPayload,
 			'performed_by' => $performedBy,
 		]);
+	}
+
+	/** Ensure new columns used by grouped PRs exist. Safe to call often. */
+	private function ensurePrColumns(): void
+	{
+		try {
+			$this->pdo->exec("ALTER TABLE purchase_requests
+				ADD COLUMN IF NOT EXISTS pr_number VARCHAR(32),
+				ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE,
+				ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ,
+				ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL
+			");
+			// Drop legacy unique constraint if present to allow multiple rows per PR number
+			$this->pdo->exec("ALTER TABLE purchase_requests DROP CONSTRAINT IF EXISTS purchase_requests_pr_number_key");
+		} catch (\Throwable $e) {
+			// swallow; read paths will fail gracefully elsewhere if truly missing, but this keeps prod resilient
+		}
 	}
 }
 
