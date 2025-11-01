@@ -300,6 +300,11 @@ if ($method === 'GET' && $path === '/inbox/view') {
 	$admin->viewNotification();
 	exit;
 }
+if ($method === 'GET' && $path === '/inbox/download') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$admin->downloadMessageAttachment();
+	exit;
+}
 
 // Unified Request details view
 if ($method === 'GET' && $path === '/requests/view') {
@@ -532,6 +537,35 @@ if ($method === 'POST' && $path === '/admin/canvassing/approve') {
 if ($method === 'POST' && $path === '/admin/canvassing/reject') {
 	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
 	$admin->rejectCanvassing();
+	exit;
+}
+
+// Admin: PR approval actions (pre-canvassing)
+if ($method === 'POST' && $path === '/admin/pr/approve') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
+	$admin->approvePR();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/pr/reject') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
+	$admin->rejectPR();
+	exit;
+}
+
+// Admin: Grouped PRs view and status updates
+if ($method === 'GET' && $path === '/admin/requests') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
+	$admin->viewRequestsAdmin();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/requests/update-group-status') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
+	$admin->adminUpdateGroupStatus();
+	exit;
+}
+if ($method === 'GET' && $path === '/admin/requests/history') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
+	$admin->viewRequestsHistoryAdmin();
 	exit;
 }
 

@@ -662,6 +662,78 @@ class AdminController extends BaseController
         }
     }
 
+    /** Approve a PR (pre-canvassing) for a PR number from an admin action. */
+    public function approvePR(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        $msgId = isset($_POST['message_id']) ? (int)$_POST['message_id'] : 0;
+        if ($pr === '') { header('Location: /inbox'); return; }
+        try {
+            $this->requests()->updateGroupStatus($pr, 'approved', (int)($_SESSION['user_id'] ?? 0), 'PR approved by Admin');
+            if ($msgId > 0) {
+                $st = $this->pdo->prepare('UPDATE messages SET is_read = TRUE WHERE id = :id AND recipient_id = :me');
+                $st->execute(['id' => $msgId, 'me' => (int)($_SESSION['user_id'] ?? 0)]);
+            }
+            header('Location: /inbox');
+        } catch (\Throwable $e) {
+            header('Location: /inbox?error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
+    /** Reject a PR (pre-canvassing) for a PR number from an admin action. */
+    public function rejectPR(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        $notes = isset($_POST['notes']) ? trim((string)$_POST['notes']) : '';
+        $msgId = isset($_POST['message_id']) ? (int)$_POST['message_id'] : 0;
+        if ($pr === '') { header('Location: /inbox'); return; }
+        try {
+            $this->requests()->updateGroupStatus($pr, 'rejected', (int)($_SESSION['user_id'] ?? 0), $notes !== '' ? ('PR rejected: ' . $notes) : 'PR rejected by Admin');
+            if ($msgId > 0) {
+                $st = $this->pdo->prepare('UPDATE messages SET is_read = TRUE WHERE id = :id AND recipient_id = :me');
+                $st->execute(['id' => $msgId, 'me' => (int)($_SESSION['user_id'] ?? 0)]);
+            }
+            header('Location: /inbox');
+        } catch (\Throwable $e) {
+            header('Location: /inbox?error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
+    /** Admin: Grouped PRs view */
+    public function viewRequestsAdmin(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+        $branchId = isset($_GET['branch']) && $_GET['branch'] !== '' ? (int)$_GET['branch'] : null;
+        $status = isset($_GET['status']) && $_GET['status'] !== '' ? (string)$_GET['status'] : null;
+        $sort = isset($_GET['sort']) ? (string)$_GET['sort'] : 'date';
+        $order = isset($_GET['order']) ? (string)$_GET['order'] : 'desc';
+        $rows = $this->requests()->getRequestsGrouped([
+            'branch_id' => $branchId,
+            'status' => $status,
+            'include_archived' => false,
+            'sort' => $sort,
+            'order' => $order,
+        ]);
+        $this->render('admin/requests_list.php', [ 'groups' => $rows, 'filters' => [ 'branch' => $branchId, 'status' => $status, 'sort' => $sort, 'order' => $order ] ]);
+    }
+
+    /** Admin: Update group status */
+    public function adminUpdateGroupStatus(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        $status = isset($_POST['status']) ? trim((string)$_POST['status']) : '';
+        if ($pr === '' || $status === '') { header('Location: /admin/requests'); return; }
+        $this->requests()->updateGroupStatus($pr, $status, (int)($_SESSION['user_id'] ?? 0), $_POST['notes'] ?? null);
+        header('Location: /admin/requests');
+    }
+
     /** Delete a message after password confirmation. */
     public function deleteMessage(): void
     {
@@ -681,6 +753,43 @@ class AdminController extends BaseController
             header('Location: ' . $ref);
         } catch (\Throwable $e) {
             header('Location: /notifications?error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
+    /** Securely stream a message attachment to the current user. */
+    public function downloadMessageAttachment(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+        if ($me <= 0 || $id <= 0) { http_response_code(403); echo 'Forbidden'; return; }
+        try {
+            // Prefer attachment stored on messages table (attachment_name/path)
+            $st = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id AND recipient_id = :me');
+            $st->execute(['id' => $id, 'me' => $me]);
+            $row = $st->fetch();
+            $name = (string)($row['attachment_name'] ?? 'attachment');
+            $path = (string)($row['attachment_path'] ?? '');
+            if (!$row || $path === '' || !is_file($path)) {
+                // Fallback: messages_attachments table
+                try {
+                    $st2 = $this->pdo->prepare('SELECT a.file_name, a.file_path FROM messages_attachments a JOIN messages m ON m.id = a.message_id WHERE a.message_id = :id AND m.recipient_id = :me ORDER BY a.uploaded_at DESC LIMIT 1');
+                    $st2->execute(['id' => $id, 'me' => $me]);
+                    $r2 = $st2->fetch();
+                    $name = (string)($r2['file_name'] ?? $name);
+                    $path = (string)($r2['file_path'] ?? $path);
+                } catch (\Throwable $ignored) {}
+            }
+            if ($path === '' || !is_file($path)) { http_response_code(404); echo 'File not found'; return; }
+            $size = @filesize($path) ?: null;
+            header('Content-Type: application/octet-stream');
+            header('Content-Disposition: attachment; filename="' . rawurlencode($name) . '"');
+            if ($size !== null) { header('Content-Length: ' . (string)$size); }
+            @readfile($path);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            header('Content-Type: text/plain');
+            echo 'Download error: ' . $e->getMessage();
         }
     }
 
@@ -719,6 +828,26 @@ class AdminController extends BaseController
             header('Content-Type: text/plain');
             echo 'Error loading request: ' . $e->getMessage();
         }
+    }
+
+    /** Admin: Archived/History view (grouped by PR number with is_archived=TRUE). */
+    public function viewRequestsHistoryAdmin(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+        $branchId = isset($_GET['branch']) && $_GET['branch'] !== '' ? (int)$_GET['branch'] : null;
+        $status = isset($_GET['status']) && $_GET['status'] !== '' ? (string)$_GET['status'] : null;
+        $sort = isset($_GET['sort']) ? (string)$_GET['sort'] : 'date';
+        $order = isset($_GET['order']) ? (string)$_GET['order'] : 'desc';
+        $rows = $this->requests()->getRequestsGrouped([
+            'branch_id' => $branchId,
+            'status' => $status,
+            'include_archived' => true,
+            'sort' => $sort,
+            'order' => $order,
+        ]);
+        $rows = array_values(array_filter($rows, static fn($r) => !empty($r['is_archived'])));
+        $this->render('admin/requests_history.php', [ 'groups' => $rows, 'filters' => [ 'branch' => $branchId, 'status' => $status, 'sort' => $sort, 'order' => $order ] ]);
     }
 
     public function saveSettings(): void

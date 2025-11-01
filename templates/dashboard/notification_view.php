@@ -43,7 +43,7 @@
             <div style="white-space:pre-wrap;"><?= nl2br(htmlspecialchars((string)$message['body'], ENT_QUOTES, 'UTF-8')) ?></div>
             <?php if (!empty($message['attachment_name']) && !empty($message['attachment_path'])): ?>
                 <div style="margin-top:10px;">
-                    <a class="btn" href="/inbox/download?id=<?= (int)$message['id'] ?>" onclick="window.location.href='<?= htmlspecialchars((string)$message['attachment_path'], ENT_QUOTES, 'UTF-8') ?>'; return false;">Download Attachment: <?= htmlspecialchars((string)$message['attachment_name'], ENT_QUOTES, 'UTF-8') ?></a>
+                    <a class="btn" href="/inbox/download?id=<?= (int)$message['id'] ?>">Download Attachment: <?= htmlspecialchars((string)$message['attachment_name'], ENT_QUOTES, 'UTF-8') ?></a>
                 </div>
             <?php endif; ?>
             <?php
@@ -76,6 +76,25 @@
                             <button class="btn primary" type="submit">Approve Canvassing</button>
                         </form>
                         <form method="POST" action="/admin/canvassing/reject" onsubmit="return confirm('Reject canvassing for PR <?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>?');" style="display:flex; gap:8px; align-items:center;">
+                            <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>" />
+                            <input type="hidden" name="message_id" value="<?= (int)$message['id'] ?>" />
+                            <input type="text" name="notes" placeholder="Reason (optional)" style="min-width:240px;" />
+                            <button class="btn danger" type="submit">Reject</button>
+                        </form>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <?php if (($_SESSION['role'] ?? null) === 'admin' && stripos((string)$message['subject'], 'For Admin Approval') !== false && !empty($prNumber)): ?>
+                <div class="card" style="margin-top:14px;">
+                    <h3 style="margin-top:0;">Purchase Request Approval</h3>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                        <form method="POST" action="/admin/pr/approve" onsubmit="return confirm('Approve PR <?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>?');">
+                            <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>" />
+                            <input type="hidden" name="message_id" value="<?= (int)$message['id'] ?>" />
+                            <button class="btn primary" type="submit">Approve PR</button>
+                        </form>
+                        <form method="POST" action="/admin/pr/reject" onsubmit="return confirm('Reject PR <?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>?');" style="display:flex; gap:8px; align-items:center;">
                             <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>" />
                             <input type="hidden" name="message_id" value="<?= (int)$message['id'] ?>" />
                             <input type="text" name="notes" placeholder="Reason (optional)" style="min-width:240px;" />

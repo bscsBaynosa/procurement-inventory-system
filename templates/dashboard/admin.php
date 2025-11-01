@@ -67,8 +67,9 @@
             }
         ?>
         <div class="topbar">
-            <div class="greet">Hello, <?= htmlspecialchars((string)$first, ENT_QUOTES, 'UTF-8') ?>.</div>
+            <div class="h1" style="margin:0;">Overview</div>
             <div class="righttools">
+                <div class="greet" style="margin-right:8px;">Hello, <?= htmlspecialchars((string)$first, ENT_QUOTES, 'UTF-8') ?>.</div>
                 <a href="/admin/messages" title="Messages" style="width:36px;height:36px;border-radius:999px;background:#1118270d;border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;position:relative;text-decoration:none;color:var(--text);">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg>
                     <?php if ($unread > 0): ?><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:999px;background:#ef4444;border:2px solid var(--card);"></span><?php endif; ?>
@@ -87,7 +88,6 @@
             </div>
         </div>
 
-        <div class="h1">Overview</div>
         <div class="cards">
             <div class="card"><div style="font-size:12px;color:var(--muted)">Users</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['users_total'] ?? 0) ?></div></div>
             <div class="card"><div style="font-size:12px;color:var(--muted)">Active</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['users_active'] ?? 0) ?></div></div>
@@ -99,6 +99,11 @@
             <div class="card"><div style="font-size:12px;color:var(--muted)">Branches</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['branches'] ?? 0) ?></div></div>
             <div class="card"><div style="font-size:12px;color:var(--muted)">Pending Requests</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['requests']['pending'] ?? 0) ?></div></div>
             <div class="card"><div style="font-size:12px;color:var(--muted)">Inventory Items</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['inventory']['total'] ?? 0) ?></div></div>
+        </div>
+
+        <div style="display:flex; gap:8px; margin:10px 0 4px;">
+            <a href="/admin/requests" style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);text-decoration:none;color:var(--text);background:color-mix(in oklab, var(--accent) 8%, transparent);">Purchase Requests</a>
+            <a href="/admin/requests/history" style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid var(--border);text-decoration:none;color:var(--text);">History</a>
         </div>
 
             <div class="h1" style="margin-top:16px;">Trends</div>
