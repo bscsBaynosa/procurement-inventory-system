@@ -92,8 +92,6 @@ class InventoryService
 			$params['b'] = $branchId;
 		}
 		// Temporary removal: hide any Bondpaper items from all listings
-		$wheres[] = 'name NOT ILIKE :hide_bondpaper';
-		$params['hide_bondpaper'] = '%bondpaper%';
 		// Exclude deprecated 'Paper' category entirely from any listings
 		$wheres[] = '(category IS NULL OR category NOT ILIKE :no_paper)';
 		$params['no_paper'] = 'paper%';

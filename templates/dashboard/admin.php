@@ -69,15 +69,15 @@
         <div class="topbar">
             <div class="greet">Hello, <?= htmlspecialchars((string)$first, ENT_QUOTES, 'UTF-8') ?>.</div>
             <div class="righttools">
-                <a href="/admin/messages" title="Messages" style="width:36px;height:36px;border-radius:999px;background:#1118270d;border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;position:relative;text-decoration:none;">
+                <a href="/admin/messages" title="Messages" style="width:36px;height:36px;border-radius:999px;background:#1118270d;border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;position:relative;text-decoration:none;color:var(--text);">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg>
-                    <?php if ($unread > 0): ?><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:999px;background:#ef4444;border:2px solid #fff;"></span><?php endif; ?>
+                    <?php if ($unread > 0): ?><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:999px;background:#ef4444;border:2px solid var(--card);"></span><?php endif; ?>
                 </a>
-                <a href="/notifications" title="Notifications" style="width:36px;height:36px;border-radius:999px;background:#1118270d;border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;position:relative;text-decoration:none;">
+                <a href="/notifications" title="Notifications" style="width:36px;height:36px;border-radius:999px;background:#1118270d;border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;position:relative;text-decoration:none;color:var(--text);">
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 22a2 2 0 0 0 2-2H10a2 2 0 0 0 2 2zm6-6v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1l-2-2z"/></svg>
-                    <?php if ($unread > 0): ?><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:999px;background:#ef4444;border:2px solid #fff;"></span><?php endif; ?>
+                    <?php if ($unread > 0): ?><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:999px;background:#ef4444;border:2px solid var(--card);"></span><?php endif; ?>
                 </a>
-                <a href="/settings" title="Settings" style="width:36px;height:36px;border-radius:999px;background:#1118270d;border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;overflow:hidden;text-decoration:none;">
+                <a href="/settings" title="Settings" style="width:36px;height:36px;border-radius:999px;background:#1118270d;border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;overflow:hidden;text-decoration:none;color:var(--text);">
                     <?php if ($avatarData !== ''): ?>
                         <img src="<?= htmlspecialchars($avatarData, ENT_QUOTES, 'UTF-8') ?>" alt="avatar" style="width:100%;height:100%;object-fit:cover;" />
                     <?php else: ?>

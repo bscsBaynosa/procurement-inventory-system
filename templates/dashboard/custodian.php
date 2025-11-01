@@ -39,8 +39,9 @@
         .status-repl{ background:#fef2f2; color:#991b1b; border-color:#fecaca; }
         .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
         .righttools{ display:flex; align-items:center; gap:8px; }
-        .righttools .circle{ width:40px; height:40px; border-radius:999px; background:#1118270d; border:1px solid var(--border); display:inline-flex; align-items:center; justify-content:center; position:relative; text-decoration:none; overflow:hidden; }
-        .righttools .dot{ position:absolute; top:2px; right:2px; width:10px; height:10px; border-radius:999px; background:#ef4444; border:2px solid #fff; }
+    .righttools .circle{ width:40px; height:40px; border-radius:999px; background:#1118270d; border:1px solid var(--border); display:inline-flex; align-items:center; justify-content:center; position:relative; text-decoration:none; overflow:hidden; color:var(--text); }
+    .righttools .circle:hover{ background: color-mix(in oklab, var(--accent) 12%, transparent); border-color: color-mix(in oklab, var(--accent) 35%, var(--border)); }
+    .righttools .dot{ position:absolute; top:2px; right:2px; width:10px; height:10px; border-radius:999px; background:#ef4444; border:2px solid var(--card); }
     .righttools .greet{ margin-right:8px; white-space:nowrap; }
     </style>
 </head>

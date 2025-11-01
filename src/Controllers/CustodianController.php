@@ -90,8 +90,6 @@ class CustodianController extends BaseController
         // Filter in-memory for now to avoid many queries
         $filtered = [];
         foreach ($items as $it) {
-            // Temporary removal: hide any Bondpaper items
-            if (stripos((string)$it['name'], 'bondpaper') !== false) { continue; }
             if ($selectedCategory !== '' && strcasecmp((string)$it['category'], $selectedCategory) !== 0) { continue; }
             if ($search !== '' && stripos((string)$it['name'], $search) === false) { continue; }
             if ($filterStatus !== '') {
