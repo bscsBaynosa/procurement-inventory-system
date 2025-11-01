@@ -150,6 +150,19 @@ CREATE TABLE IF NOT EXISTS inventory_movements (
 CREATE INDEX IF NOT EXISTS idx_movements_item_id ON inventory_movements(item_id);
 CREATE INDEX IF NOT EXISTS idx_movements_performed_at ON inventory_movements(performed_at DESC);
 
+-- Consumption reports (stock count changes log)
+CREATE TABLE IF NOT EXISTS consumption_reports (
+    id BIGSERIAL PRIMARY KEY,
+    item_id BIGINT NOT NULL REFERENCES inventory_items(item_id) ON DELETE CASCADE,
+    previous_count INTEGER NOT NULL,
+    current_count INTEGER NOT NULL,
+    delta INTEGER NOT NULL,
+    changed_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+    changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_consumption_item ON consumption_reports(item_id);
+CREATE INDEX IF NOT EXISTS idx_consumption_changed_at ON consumption_reports(changed_at DESC);
+
 -- ----- Procurement Requests -------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS purchase_requests (
@@ -269,4 +282,22 @@ CREATE TABLE IF NOT EXISTS messages (
     is_read BOOLEAN NOT NULL DEFAULT FALSE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+COMMIT;
+
+-- Archived Reports (persist generated PDFs with metadata)
+BEGIN;
+CREATE TABLE IF NOT EXISTS report_archives (
+    id BIGSERIAL PRIMARY KEY,
+    report_type VARCHAR(32) NOT NULL CHECK (report_type IN ('inventory','consumption')),
+    category VARCHAR(100),
+    branch_id BIGINT REFERENCES branches(branch_id) ON DELETE SET NULL,
+    prepared_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+    prepared_name VARCHAR(255),
+    prepared_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    file_name VARCHAR(255) NOT NULL,
+    file_path TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_report_archives_type ON report_archives(report_type);
+CREATE INDEX IF NOT EXISTS idx_report_archives_created ON report_archives(created_at DESC);
 COMMIT;

@@ -58,6 +58,7 @@ try {
         <?php elseif ($role === 'admin_assistant'): ?>
             <a href="/admin-assistant/inventory" class="<?= nav_active_many(['/admin-assistant/inventory','/custodian/inventory'], $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm4 0h14v-2H7v2zM3 17h2v-2H3v2zm4 0h14v-2H7v2zM3 9h2V7H3v2zm4 0h14V7H7v2z"/></svg> Inventory</a>
             <a href="/admin-assistant/requests/new" class="<?= nav_active_many(['/admin-assistant/requests','/custodian/requests'], $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 3h18v14H6l-3 3V3z"/></svg> Purchase Request</a>
+            <a href="/admin-assistant/reports" class="<?= nav_active('/admin-assistant/reports', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Reports</a>
         <?php elseif ($role === 'procurement'): ?>
             <a href="/procurement/po" class="<?= nav_active('/procurement/po', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Purchase Orders</a>
             <!-- Manager uses /dashboard for requests listing in current router -->

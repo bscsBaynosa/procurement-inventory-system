@@ -257,6 +257,24 @@ if ($method === 'POST' && $path === '/admin-assistant/inventory/delete') {
 	$custodian->inventoryDelete();
 	exit;
 }
+// Stock-only updates for Admin Assistant (records consumption)
+if ($method === 'POST' && $path === '/admin-assistant/inventory/update-stock') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->updateStock();
+	exit;
+}
+// Meta updates for Admin Assistant (unit, status, minimum_quantity)
+if ($method === 'POST' && $path === '/admin-assistant/inventory/update-meta') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->updateMeta();
+	exit;
+}
+// Add selected low-stock items to PR cart
+if ($method === 'POST' && $path === '/admin-assistant/inventory/cart-add') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->addToCart();
+	exit;
+}
 if ($method === 'POST' && $path === '/custodian/inventory') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
 	$custodian->inventoryCreate();
@@ -294,6 +312,45 @@ if ($method === 'GET' && $path === '/admin-assistant/requests/new') {
 if ($method === 'POST' && $path === '/admin-assistant/requests') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
 	$custodian->createRequest();
+	exit;
+}
+// Review and submit multi-item PRs from cart
+if ($method === 'GET' && $path === '/admin-assistant/requests/review') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->reviewCart();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin-assistant/requests/submit') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->submitCart();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin-assistant/requests/cart-remove') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->cartRemove();
+	exit;
+}
+
+// Inventory & Consumption report downloads
+if ($method === 'GET' && $path === '/admin-assistant/reports/inventory') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->inventoryReport();
+	exit;
+}
+if ($method === 'GET' && $path === '/admin-assistant/reports/consumption') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->consumptionReport();
+	exit;
+}
+// Reports listing & downloads
+if ($method === 'GET' && $path === '/admin-assistant/reports') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->reportsList();
+	exit;
+}
+if ($method === 'GET' && $path === '/admin-assistant/reports/download') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->downloadReport();
 	exit;
 }
 

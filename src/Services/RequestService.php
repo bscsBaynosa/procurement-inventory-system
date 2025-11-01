@@ -17,13 +17,30 @@ class RequestService
 
 	public function createPurchaseRequest(array $payload, int $userId): array
 	{
+		// Ensure pr_number column and sequence table exist
+		try {
+			$this->pdo->exec("ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS pr_number VARCHAR(32) UNIQUE");
+		} catch (\Throwable $e) { /* ignore */ }
+		try {
+			$this->pdo->exec("CREATE TABLE IF NOT EXISTS purchase_requisition_sequences (
+				calendar_year INTEGER PRIMARY KEY,
+				last_value INTEGER NOT NULL DEFAULT 0,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+			)");
+		} catch (\Throwable $e) { /* ignore */ }
+
+		$prNumber = $this->generatePrNumber();
+
 		$stmt = $this->pdo->prepare(
-			'INSERT INTO purchase_requests (item_id, branch_id, requested_by, request_type, quantity, unit, justification, status, priority, needed_by, created_by, updated_by)
-			 VALUES (:item_id, :branch_id, :requested_by, :request_type, :quantity, :unit, :justification, :status, :priority, :needed_by, :created_by, :updated_by)
-			 RETURNING request_id, status'
+			'INSERT INTO purchase_requests (item_id, branch_id, requested_by, request_type, quantity, unit, justification, status, priority, needed_by, created_by, updated_by, pr_number)
+			 VALUES (:item_id, :branch_id, :requested_by, :request_type, :quantity, :unit, :justification, :status, :priority, :needed_by, :created_by, :updated_by, :pr_number)
+			 RETURNING request_id, status, pr_number'
 		);
 
 		$status = $payload['status'] ?? 'pending';
+
+		// Encrypt justification if configured
+		$encJustification = \App\Services\CryptoService::encrypt($payload['justification'] ?? null, 'pr:' . $prNumber);
 
 		$stmt->execute([
 			'item_id' => $payload['item_id'] ?? null,
@@ -32,12 +49,13 @@ class RequestService
 			'request_type' => $payload['request_type'] ?? 'purchase_order',
 			'quantity' => $payload['quantity'] ?? 1,
 			'unit' => $payload['unit'] ?? 'pcs',
-			'justification' => $payload['justification'] ?? null,
+			'justification' => $encJustification,
 			'status' => $status,
 			'priority' => $payload['priority'] ?? 3,
 			'needed_by' => $payload['needed_by'] ?? null,
 			'created_by' => $userId,
 			'updated_by' => $userId,
+			'pr_number' => $prNumber,
 		]);
 
 		$request = $stmt->fetch();
@@ -46,6 +64,25 @@ class RequestService
 		$this->recordAudit('purchase_requests', (int)$request['request_id'], 'create', $userId, $payload);
 
 		return $request;
+	}
+
+	private function generatePrNumber(): string
+	{
+		$year = (int)date('Y');
+		// Upsert year row and increment counter atomically
+		$this->pdo->beginTransaction();
+		try {
+			$this->pdo->prepare('INSERT INTO purchase_requisition_sequences (calendar_year, last_value) VALUES (:y, 0) ON CONFLICT (calendar_year) DO NOTHING')
+				->execute(['y' => $year]);
+			$st = $this->pdo->prepare('UPDATE purchase_requisition_sequences SET last_value = last_value + 1, updated_at = NOW() WHERE calendar_year = :y RETURNING last_value');
+			$st->execute(['y' => $year]);
+			$next = (int)$st->fetchColumn();
+			$this->pdo->commit();
+		} catch (\Throwable $e) {
+			$this->pdo->rollBack();
+			$next = 1; // fallback
+		}
+		return sprintf('%04d%04d', $year, $next);
 	}
 
 	public function getPendingRequests(?int $branchId = null): array
@@ -94,13 +131,16 @@ class RequestService
 
 	public function getRequestById(int $requestId): ?array
 	{
-		$stmt = $this->pdo->prepare(
-			'SELECT request_id, item_id, branch_id, requested_by, assigned_to, request_type, quantity, unit, justification, status, priority, needed_by, created_at, updated_at FROM purchase_requests WHERE request_id = :request_id LIMIT 1'
-		);
+			$stmt = $this->pdo->prepare(
+				'SELECT request_id, item_id, branch_id, requested_by, assigned_to, request_type, quantity, unit, justification, status, priority, needed_by, created_at, updated_at, pr_number FROM purchase_requests WHERE request_id = :request_id LIMIT 1'
+			);
 		$stmt->execute(['request_id' => $requestId]);
 
 		$row = $stmt->fetch();
 
+		if ($row) {
+			$row['justification'] = \App\Services\CryptoService::maybeDecrypt($row['justification'] ?? null, 'pr:' . (string)($row['pr_number'] ?? ''));
+		}
 		return $row ?: null;
 	}
 
@@ -112,8 +152,14 @@ class RequestService
 
 		foreach ($allowed as $field) {
 			if (array_key_exists($field, $payload)) {
-				$columns[] = "$field = :$field";
-				$params[$field] = $payload[$field];
+				if ($field === 'justification') {
+					$enc = \App\Services\CryptoService::encrypt($payload[$field], 'pr:' . (string)$requestId);
+					$columns[] = "$field = :$field";
+					$params[$field] = $enc;
+				} else {
+					$columns[] = "$field = :$field";
+					$params[$field] = $payload[$field];
+				}
 			}
 		}
 

@@ -36,7 +36,7 @@ class InventoryService
 
 	public function listInventory(?int $branchId = null): array
 	{
-		$sql = 'SELECT item_id, name, category, status, quantity, unit FROM inventory_items';
+		$sql = 'SELECT item_id, name, category, status, quantity, unit, minimum_quantity FROM inventory_items';
 		$params = [];
 		if ($branchId) {
 			// Include branch-specific items and global items (branch_id IS NULL) so common
@@ -78,12 +78,16 @@ class InventoryService
 	{
 		$sets = [];
 		$params = ['id' => $itemId, 'by' => $updatedBy];
-		$allowed = ['name','category','status','quantity','unit'];
+		$allowed = ['name','category','status','quantity','unit','minimum_quantity'];
 		foreach ($allowed as $f) {
 			if (array_key_exists($f, $data)) {
 				$val = $f === 'status' ? $this->normalizeStatus($data[$f]) : $data[$f];
 				$sets[] = "$f = :$f";
-				$params[$f] = $f === 'quantity' ? (int)$val : trim((string)$val);
+				if ($f === 'quantity' || $f === 'minimum_quantity') {
+					$params[$f] = (int)$val;
+				} else {
+					$params[$f] = trim((string)$val);
+				}
 			}
 		}
 		if (!$sets) { return false; }

@@ -470,6 +470,10 @@ class AdminController extends BaseController
                 FROM messages m JOIN users u ON u.user_id = m.sender_id WHERE m.recipient_id = :me ORDER BY m.created_at DESC LIMIT 50');
             $stmt->execute(['me' => $me]);
             $inbox = $stmt->fetchAll();
+            // Decrypt message bodies, if encrypted
+            foreach ($inbox as &$row) {
+                $row['body'] = \App\Services\CryptoService::maybeDecrypt((string)$row['body']);
+            }
             $users = $this->pdo->query("SELECT user_id, full_name, role FROM users WHERE is_active = TRUE ORDER BY role, full_name")->fetchAll();
             $prefillTo = isset($_GET['to']) ? (int)$_GET['to'] : 0;
             $prefillSubject = isset($_GET['subject']) ? (string)$_GET['subject'] : '';
@@ -510,7 +514,8 @@ class AdminController extends BaseController
         if ($to <= 0 || $subject === '' || $body === '') { header('Location: /admin/messages'); return; }
         try {
             $stmt = $this->pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
-            $stmt->execute(['s' => $me, 'r' => $to, 'j' => $subject, 'b' => $body]);
+            $encBody = \App\Services\CryptoService::encrypt($body, 'msg:' . (string)$me . '->' . (string)$to);
+            $stmt->execute(['s' => $me, 'r' => $to, 'j' => $subject, 'b' => $encBody]);
             $msgId = (int)$this->pdo->lastInsertId('messages_id_seq');
             // Handle optional attachment upload
             if (!empty($_FILES['attachment']) && is_uploaded_file($_FILES['attachment']['tmp_name'])) {
@@ -571,6 +576,7 @@ class AdminController extends BaseController
                 ORDER BY m.created_at DESC');
             $stmt->execute(['me' => $me]);
             $list = $stmt->fetchAll();
+            foreach ($list as &$row) { $row['body'] = \App\Services\CryptoService::maybeDecrypt((string)$row['body']); }
             $this->render('dashboard/inbox.php', ['inbox' => $list]);
         } catch (\Throwable $e) {
             http_response_code(500);
@@ -591,6 +597,7 @@ class AdminController extends BaseController
                 FROM messages m JOIN users u ON u.user_id = m.sender_id WHERE m.id = :id AND m.recipient_id = :me');
             $st->execute(['id' => $id, 'me' => $me]);
             $msg = $st->fetch();
+            if ($msg) { $msg['body'] = \App\Services\CryptoService::maybeDecrypt((string)$msg['body']); }
             if (!$msg) { header('Location: /notifications'); return; }
             $this->render('dashboard/notification_view.php', ['message' => $msg]);
         } catch (\Throwable $e) {
