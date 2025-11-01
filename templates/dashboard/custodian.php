@@ -33,6 +33,11 @@
         .status-good{ background:#ecfdf5; color:#166534; border-color:#a7f3d0; }
         .status-repair{ background:#fffbeb; color:#92400e; border-color:#fde68a; }
         .status-repl{ background:#fef2f2; color:#991b1b; border-color:#fecaca; }
+        .topbar{ display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; }
+        .righttools{ display:flex; align-items:center; gap:8px; }
+        .righttools .circle{ width:40px; height:40px; border-radius:999px; background:#1118270d; border:1px solid var(--border); display:inline-flex; align-items:center; justify-content:center; position:relative; text-decoration:none; overflow:hidden; }
+        .righttools .dot{ position:absolute; top:2px; right:2px; width:10px; height:10px; border-radius:999px; background:#ef4444; border:2px solid #fff; }
+        .righttools .greet{ margin-left:4px; white-space:nowrap; }
     </style>
 </head>
 <body>
@@ -48,25 +53,25 @@
             if ($bin !== false) { $avatarData = 'data:image/*;base64,' . base64_encode($bin); }
         }
     ?>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <div class="topbar">
         <div class="h1" style="margin:0;">Overview<?= isset($branch_name) && $branch_name ? ' • <span class=\'muted\'>Branch: ' . htmlspecialchars((string)$branch_name, ENT_QUOTES, 'UTF-8') . '</span>' : '' ?></div>
         <div class="righttools">
-            <a href="/admin/messages" title="Messages" style="width:36px;height:36px;border-radius:999px;background:#1118270d;border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;position:relative;text-decoration:none;">
+            <a href="/admin/messages" title="Messages" class="circle">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg>
-                <?php if ($unread > 0): ?><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:999px;background:#ef4444;border:2px solid #fff;"></span><?php endif; ?>
+                <?php if ($unread > 0): ?><span class="dot"></span><?php endif; ?>
             </a>
-            <a href="/notifications" title="Notifications" style="width:36px;height:36px;border-radius:999px;background:#1118270d;border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;position:relative;text-decoration:none;">
+            <a href="/notifications" title="Notifications" class="circle">
                 <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 22a2 2 0 0 0 2-2H10a2 2 0 0 0 2 2zm6-6v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1l-2-2z"/></svg>
-                <?php if ($unread > 0): ?><span style="position:absolute;top:2px;right:2px;width:10px;height:10px;border-radius:999px;background:#ef4444;border:2px solid #fff;"></span><?php endif; ?>
+                <?php if ($unread > 0): ?><span class="dot"></span><?php endif; ?>
             </a>
-            <a href="/settings" title="Settings" style="width:36px;height:36px;border-radius:999px;background:#1118270d;border:1px solid var(--border);display:inline-flex;align-items:center;justify-content:center;overflow:hidden;text-decoration:none;">
+            <a href="/settings" title="Settings" class="circle">
                 <?php if ($avatarData !== ''): ?>
                     <img src="<?= htmlspecialchars($avatarData, ENT_QUOTES, 'UTF-8') ?>" alt="avatar" style="width:100%;height:100%;object-fit:cover;" />
                 <?php else: ?>
                     <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M12 12c2.76 0 5-2.24 5-5s-2.24-5-5-5-5 2.24-5 5 2.24 5 5 5zm0 2c-3.33 0-10 1.67-10 5v3h20v-3c0-3.33-6.67-5-10-5z"/></svg>
                 <?php endif; ?>
             </a>
-            <div class="greet" style="margin-left:8px;">Hello, <?= htmlspecialchars((string)$first, ENT_QUOTES, 'UTF-8') ?>.</div>
+            <span class="greet">Hello, <?= htmlspecialchars((string)$first, ENT_QUOTES, 'UTF-8') ?>.</span>
         </div>
     </div>
         <div class="cards">
@@ -75,6 +80,32 @@
             <div class="card"><div class="muted" style="font-size:12px;">For Replacement</div><div style="font-size:28px;font-weight:800;"><?= (int)($inventoryStats['for_replacement'] ?? 0) ?></div></div>
             <div class="card"><div class="muted" style="font-size:12px;">Total Items</div><div style="font-size:28px;font-weight:800;"><?= (int)($inventoryStats['total'] ?? 0) ?></div></div>
         </div>
+
+        <?php $catStats = $categoryStats ?? []; if (!empty($catStats)): ?>
+        <div class="h1" style="margin-top:16px;">By Category</div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th style="text-align:right;">Good</th>
+                    <th style="text-align:right;">For Repair</th>
+                    <th style="text-align:right;">For Replacement</th>
+                    <th style="text-align:right;">Total</th>
+                </tr>
+            </thead>
+            <tbody>
+            <?php foreach ($catStats as $row): ?>
+                <tr>
+                    <td><?= htmlspecialchars((string)($row['category'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
+                    <td style="text-align:right;"><span class="badge status-good"><?= (int)($row['good'] ?? 0) ?></span></td>
+                    <td style="text-align:right;"><span class="badge status-repair"><?= (int)($row['for_repair'] ?? 0) ?></span></td>
+                    <td style="text-align:right;"><span class="badge status-repl"><?= (int)($row['for_replacement'] ?? 0) ?></span></td>
+                    <td style="text-align:right;"><strong><?= (int)($row['total'] ?? 0) ?></strong></td>
+                </tr>
+            <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php endif; ?>
 
         <div class="h1" style="margin-top:16px;">Pending Requests</div>
         <table>

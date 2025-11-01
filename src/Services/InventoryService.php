@@ -35,6 +35,35 @@ class InventoryService
 		return $stats;
 	}
 
+	/**
+	 * Return per-category inventory counts (optionally filtered by branch).
+	 * Each row: [category, total, good, for_repair, for_replacement, retired]
+	 */
+	public function getStatsByCategory(?int $branchId = null): array
+	{
+		$sql = "
+			SELECT
+				COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') AS category,
+				COUNT(*) AS total,
+				SUM(CASE WHEN status = 'good' THEN 1 ELSE 0 END) AS good,
+				SUM(CASE WHEN status = 'for_repair' THEN 1 ELSE 0 END) AS for_repair,
+				SUM(CASE WHEN status = 'for_replacement' THEN 1 ELSE 0 END) AS for_replacement,
+				SUM(CASE WHEN status = 'retired' THEN 1 ELSE 0 END) AS retired
+			FROM inventory_items
+		";
+		$params = [];
+		$conds = [];
+		if ($branchId) { $conds[] = '(branch_id = :b OR branch_id IS NULL)'; $params['b'] = $branchId; }
+		// Keep temporary hide of Bondpaper in parity with listInventory
+		$conds[] = 'name NOT ILIKE :hide_bondpaper';
+		$params['hide_bondpaper'] = '%bondpaper%';
+		if ($conds) { $sql .= ' WHERE ' . implode(' AND ', $conds); }
+		$sql .= " GROUP BY COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') ORDER BY category ASC";
+		$stmt = $this->pdo->prepare($sql);
+		$stmt->execute($params);
+		return $stmt->fetchAll(PDO::FETCH_ASSOC);
+	}
+
 	public function listInventory(?int $branchId = null): array
 	{
 		// Backward compatible select: if maintaining_quantity column is missing, alias 0 as maintaining_quantity
