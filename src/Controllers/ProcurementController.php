@@ -136,7 +136,33 @@ class ProcurementController extends BaseController
         // Load suppliers (users with role=supplier)
         $pdo = \App\Database\Connection::resolve();
         $suppliers = $pdo->query("SELECT user_id, full_name FROM users WHERE is_active = TRUE AND role = 'supplier' ORDER BY full_name ASC")->fetchAll();
-        $this->render('procurement/canvass_form.php', [ 'pr' => $pr, 'rows' => $rows, 'suppliers' => $suppliers ]);
+        // Optional: price matrix from supplier_items matched by item name (case-insensitive)
+        $prices = [];
+        try {
+            // Collect distinct, non-empty item names
+            $names = [];
+            foreach ($rows as $r) { $n = strtolower(trim((string)($r['item_name'] ?? ''))); if ($n !== '') { $names[$n] = true; } }
+            $names = array_keys($names);
+            if ($suppliers && $names) {
+                $inSup = implode(',', array_fill(0, count($suppliers), '?'));
+                $inNames = implode(',', array_fill(0, count($names), '?'));
+                $params = [];
+                foreach ($suppliers as $s) { $params[] = (int)$s['user_id']; }
+                foreach ($names as $nm) { $params[] = $nm; }
+                $sql = 'SELECT supplier_id, LOWER(name) AS lname, price, unit FROM supplier_items WHERE supplier_id IN (' . $inSup . ') AND LOWER(name) IN (' . $inNames . ')';
+                $st = $pdo->prepare($sql);
+                $st->execute($params);
+                foreach ($st->fetchAll() as $row) {
+                    $sid = (int)$row['supplier_id'];
+                    $lname = (string)$row['lname'];
+                    $price = (float)($row['price'] ?? 0);
+                    if (!isset($prices[$sid])) { $prices[$sid] = []; }
+                    // If multiple matches, keep the lowest price
+                    if (!isset($prices[$sid][$lname]) || $price < $prices[$sid][$lname]) { $prices[$sid][$lname] = $price; }
+                }
+            }
+        } catch (\Throwable $ignored) { /* supplier_items may not exist yet; ignore */ }
+        $this->render('procurement/canvass_form.php', [ 'pr' => $pr, 'rows' => $rows, 'suppliers' => $suppliers, 'prices' => $prices ]);
     }
 
     /** POST: Submit canvassing selection and generate a PDF, then send to Admin for approval */

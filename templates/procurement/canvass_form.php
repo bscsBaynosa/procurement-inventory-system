@@ -23,6 +23,11 @@
         .grid{ display:grid; grid-template-columns: repeat(auto-fill,minmax(240px,1fr)); gap:10px; }
         ul{ margin:4px 0 0 18px; }
         pre{ margin:0; white-space:pre-wrap; }
+        table{ width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+        th, td{ padding:10px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
+        th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); position:sticky; top:0; }
+        .dim{ opacity:0.45; }
+        .best{ background:color-mix(in oklab, var(--accent) 12%, transparent); border-left:3px solid var(--accent); }
     </style>
 </head>
 <body>
@@ -39,22 +44,110 @@
             <pre><?php foreach ($rows as $r) { echo htmlspecialchars(($r['item_name'] ?? 'Item') . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? '')) . "\n"; } ?></pre>
         </div>
 
-        <form action="/manager/requests/canvass" method="POST" class="card">
+        <form action="/manager/requests/canvass" method="POST" class="card" id="canvassForm">
             <input type="hidden" name="pr_number" value="<?= htmlspecialchars($pr, ENT_QUOTES, 'UTF-8') ?>" />
             <p>Select 3–5 suppliers to include in the canvassing sheet.</p>
             <div class="grid">
                 <?php foreach ($suppliers as $s): ?>
                     <label style="display:flex; align-items:center; gap:8px; border:1px solid var(--border); border-radius:10px; padding:8px;">
-                        <input type="checkbox" name="suppliers[]" value="<?= (int)$s['user_id'] ?>" />
+                        <input type="checkbox" name="suppliers[]" value="<?= (int)$s['user_id'] ?>" class="supplier-choice" data-supplier-id="<?= (int)$s['user_id'] ?>" />
                         <span><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></span>
                     </label>
                 <?php endforeach; ?>
+            </div>
+
+            <?php
+                // Build a supplier id -> name map for headers
+                $supMap = [];
+                foreach ($suppliers as $s) { $supMap[(int)$s['user_id']] = (string)$s['full_name']; }
+                // Item key normalize (lower)
+                $itemsForGrid = [];
+                foreach ($rows as $r) {
+                    $nm = strtolower(trim((string)($r['item_name'] ?? '')));
+                    $itemsForGrid[] = [ 'label' => ($r['item_name'] ?? 'Item') . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''), 'key' => $nm ];
+                }
+            ?>
+
+            <div style="margin-top:14px;">
+                <strong>Supplier Quotes Snapshot</strong>
+                <div class="muted" style="font-size:12px;margin:6px 0 10px;">Cheapest price per item is highlighted automatically among the selected suppliers.</div>
+                <div style="overflow:auto;">
+                    <table id="priceMatrix">
+                        <thead>
+                            <tr>
+                                <th style="min-width:260px;">Item</th>
+                                <?php foreach ($supMap as $sid => $name): ?>
+                                    <th data-supplier-id="<?= (int)$sid ?>"><?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?></th>
+                                <?php endforeach; ?>
+                            </tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($itemsForGrid as $it): $k = (string)$it['key']; ?>
+                            <tr data-item-key="<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>">
+                                <td><?= htmlspecialchars((string)$it['label'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <?php foreach ($supMap as $sid => $name): $p = isset($prices[$sid][$k]) ? (float)$prices[$sid][$k] : null; ?>
+                                    <td data-supplier-id="<?= (int)$sid ?>" data-price="<?= $p !== null ? number_format($p, 2, '.', '') : '' ?>">
+                                        <?= $p !== null ? ('₱ ' . number_format($p, 2)) : '—' ?>
+                                    </td>
+                                <?php endforeach; ?>
+                            </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
             </div>
             <div style="margin-top:12px; display:flex; gap:8px;">
                 <button class="btn primary" type="submit">Generate and Send for Admin Approval</button>
                 <a class="btn" href="/manager/requests">Cancel</a>
             </div>
         </form>
+        <script>
+            (function(){
+                function recalc() {
+                    const selected = new Set(Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.getAttribute('data-supplier-id')));
+                    const table = document.getElementById('priceMatrix');
+                    if (!table) return;
+                    // Dim unselected supplier columns
+                    const headers = table.querySelectorAll('thead th[data-supplier-id]');
+                    headers.forEach(th => {
+                        const sid = th.getAttribute('data-supplier-id');
+                        if (selected.size === 0 || !selected.has(sid)) th.classList.add('dim'); else th.classList.remove('dim');
+                    });
+                    const rows = table.querySelectorAll('tbody tr');
+                    rows.forEach(tr => {
+                        // Clear previous best/dim
+                        tr.querySelectorAll('td[data-supplier-id]').forEach(td => { td.classList.remove('best'); td.classList.remove('dim'); });
+                        // Gather prices only for selected suppliers
+                        let min = Infinity;
+                        const tds = Array.from(tr.querySelectorAll('td[data-supplier-id]'));
+                        tds.forEach(td => {
+                            const sid = td.getAttribute('data-supplier-id');
+                            const priceStr = td.getAttribute('data-price');
+                            const price = priceStr === '' ? NaN : parseFloat(priceStr);
+                            if (selected.size > 0 && !selected.has(sid)) { td.classList.add('dim'); }
+                            if (selected.size > 0 && selected.has(sid) && !isNaN(price)) { if (price < min) min = price; }
+                        });
+                        if (min !== Infinity) {
+                            tds.forEach(td => {
+                                const sid = td.getAttribute('data-supplier-id');
+                                const priceStr = td.getAttribute('data-price');
+                                const price = priceStr === '' ? NaN : parseFloat(priceStr);
+                                if (selected.has(sid) && !isNaN(price) && Math.abs(price - min) < 1e-9) { td.classList.add('best'); }
+                            });
+                        }
+                    });
+                }
+                document.querySelectorAll('.supplier-choice').forEach(cb => cb.addEventListener('change', recalc));
+                recalc();
+                document.getElementById('canvassForm').addEventListener('submit', function(e){
+                    const checked = document.querySelectorAll('.supplier-choice:checked').length;
+                    if (checked < 3 || checked > 5) {
+                        e.preventDefault();
+                        alert('Please select 3–5 suppliers.');
+                    }
+                });
+            })();
+        </script>
     </main>
 </div>
 </body>
