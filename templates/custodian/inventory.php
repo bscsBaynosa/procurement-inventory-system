@@ -24,12 +24,17 @@
         input[type="text"], input[type="number"], select, textarea{ width:100%; box-sizing:border-box; padding:10px 12px; border:1px solid var(--border); border-radius:10px; font-family:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; }
         .row{ display:flex; gap:10px; }
         table{ width:100%; border-collapse: collapse; background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
-        th, td{ padding:12px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
+    th, td{ padding:14px 12px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
         th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
         .actions form{ display:inline; }
         .btn{ font-family:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; font-weight:700; font-size:14px; line-height:1; height:40px; padding:0 14px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center; transition:all .15s ease; cursor:pointer; }
         .btn.primary{ background:var(--accent); color:#fff; border:0; }
         .btn.muted{ background:transparent; color:var(--muted); border:1px solid var(--border); }
+    /* Actions column layout */
+    .row-actions{ display:flex; flex-direction:column; gap:10px; align-items:flex-start; }
+    .row-actions .line{ display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .row-actions input[type="number"]{ width:110px; }
+    .row-actions select{ height:36px; }
     </style>
 </head>
 <body>
@@ -214,44 +219,44 @@
                             <td><?= htmlspecialchars((string)($it['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                             <td class="actions">
                                 <?php if (($selected_category ?? '') !== ''): ?>
-                                    <form method="POST" action="/admin-assistant/inventory/update-stock" style="display:inline-flex; gap:6px; align-items:center;">
-                                        <input type="hidden" name="item_id" value="<?= (int)$it['item_id'] ?>" />
-                                        <input type="hidden" name="category" value="<?= htmlspecialchars((string)$selected_category, ENT_QUOTES, 'UTF-8') ?>" />
-                                        <input name="new_count" type="number" min="0" value="<?= $qty ?>" style="width:110px;" />
-                                        <button class="btn muted" type="submit">Save Count</button>
-                                        <a class="btn muted" href="/admin-assistant/reports/consumption?item_id=<?= (int)$it['item_id'] ?>&month=<?= date('Y-m') ?>&download=1">Consumption Report</a>
-                                    </form>
-                                    <form method="POST" action="/admin-assistant/inventory/update-meta" style="display:inline-flex; gap:6px; align-items:center; margin-top:6px; flex-wrap:wrap;">
-                                        <input type="hidden" name="item_id" value="<?= (int)$it['item_id'] ?>" />
-                                        <input type="hidden" name="category" value="<?= htmlspecialchars((string)$selected_category, ENT_QUOTES, 'UTF-8') ?>" />
-                                        <input name="minimum_quantity" type="number" min="0" value="<?= (int)$min ?>" title="Minimum quantity" placeholder="Min" style="width:95px;" />
-                                        <input name="maintaining_quantity" type="number" min="0" value="<?= (int)$maint ?>" title="Maintaining count" placeholder="Maintain" style="width:110px;" />
-                                        <div style="display:inline-flex; gap:6px; align-items:center;">
-                                            <?php $uval = (string)($it['unit'] ?? 'pcs'); $known=['pcs','rim','box','pack','ml','liter','gallon','bottle','set','roll']; $isKnown=in_array($uval,$known,true); ?>
-                                            <select name="unit" data-unit-select="true" data-target="unit_other_row_<?= (int)$it['item_id'] ?>" style="height:36px;">
-                                                <option value="<?= htmlspecialchars($uval, ENT_QUOTES, 'UTF-8') ?>" <?= $isKnown? '':'selected' ?>><?= htmlspecialchars($uval, ENT_QUOTES, 'UTF-8') ?></option>
-                                                <?php foreach ($known as $opt): ?>
-                                                    <option value="<?= $opt ?>" <?= $uval===$opt? 'selected':'' ?>><?= $opt ?></option>
-                                                <?php endforeach; ?>
-                                                <option value="others">others…</option>
+                                    <div class="row-actions">
+                                        <form class="line" method="POST" action="/admin-assistant/inventory/update-stock">
+                                            <input type="hidden" name="item_id" value="<?= (int)$it['item_id'] ?>" />
+                                            <input type="hidden" name="category" value="<?= htmlspecialchars((string)$selected_category, ENT_QUOTES, 'UTF-8') ?>" />
+                                            <input name="new_count" type="number" min="0" value="<?= $qty ?>" />
+                                            <button class="btn muted" type="submit">Save Count</button>
+                                            <a class="btn muted" href="/admin-assistant/reports/consumption?item_id=<?= (int)$it['item_id'] ?>&month=<?= date('Y-m') ?>&download=1">Consumption Report</a>
+                                        </form>
+                                        <form class="line" method="POST" action="/admin-assistant/inventory/update-meta">
+                                            <input type="hidden" name="item_id" value="<?= (int)$it['item_id'] ?>" />
+                                            <input type="hidden" name="category" value="<?= htmlspecialchars((string)$selected_category, ENT_QUOTES, 'UTF-8') ?>" />
+                                            <input name="minimum_quantity" type="number" min="0" value="<?= (int)$min ?>" title="Minimum quantity" placeholder="Min" style="width:95px;" />
+                                            <input name="maintaining_quantity" type="number" min="0" value="<?= (int)$maint ?>" title="Maintaining count" placeholder="Maintain" style="width:110px;" />
+                                            <div style="display:inline-flex; gap:6px; align-items:center;">
+                                                <?php $uval = (string)($it['unit'] ?? 'pcs'); $known=['pcs','rim','box','pack','ml','liter','gallon','bottle','set','roll']; $isKnown=in_array($uval,$known,true); ?>
+                                                <select name="unit" data-unit-select="true" data-target="unit_other_row_<?= (int)$it['item_id'] ?>">
+                                                    <option value="<?= htmlspecialchars($uval, ENT_QUOTES, 'UTF-8') ?>" <?= $isKnown? '':'selected' ?>><?= htmlspecialchars($uval, ENT_QUOTES, 'UTF-8') ?></option>
+                                                    <?php foreach ($known as $opt): ?>
+                                                        <option value="<?= $opt ?>" <?= $uval===$opt? 'selected':'' ?>><?= $opt ?></option>
+                                                    <?php endforeach; ?>
+                                                    <option value="others">others…</option>
+                                                </select>
+                                                <input id="unit_other_row_<?= (int)$it['item_id'] ?>" name="unit_other" type="text" placeholder="specify" style="width:120px; display:<?= $isKnown? 'none':'inline-block' ?>;" value="<?= $isKnown? '':htmlspecialchars($uval, ENT_QUOTES, 'UTF-8') ?>" />
+                                            </div>
+                                            <select name="status" title="Status">
+                                                <?php $st = (string)($it['status'] ?? 'good'); ?>
+                                                <option value="good" <?= $st==='good'?'selected':'' ?>>Good</option>
+                                                <option value="for_repair" <?= $st==='for_repair'?'selected':'' ?>>For Repair</option>
+                                                <option value="for_replacement" <?= $st==='for_replacement'?'selected':'' ?>>For Replacement</option>
+                                                <option value="retired" <?= $st==='retired'?'selected':'' ?>>Retired</option>
                                             </select>
-                                            <input id="unit_other_row_<?= (int)$it['item_id'] ?>" name="unit_other" type="text" placeholder="specify" style="width:120px; display:<?= $isKnown? 'none':'inline-block' ?>;" value="<?= $isKnown? '':htmlspecialchars($uval, ENT_QUOTES, 'UTF-8') ?>" />
-                                        </div>
-                                        <select name="status" title="Status" style="height:36px;">
-                                            <?php $st = (string)($it['status'] ?? 'good'); ?>
-                                            <option value="good" <?= $st==='good'?'selected':'' ?>>Good</option>
-                                            <option value="for_repair" <?= $st==='for_repair'?'selected':'' ?>>For Repair</option>
-                                            <option value="for_replacement" <?= $st==='for_replacement'?'selected':'' ?>>For Replacement</option>
-                                            <option value="retired" <?= $st==='retired'?'selected':'' ?>>Retired</option>
-                                        </select>
-                                        <button class="btn muted" type="submit">Save Meta</button>
-                                    </form>
-                                    <?php if ($isLow): ?>
-                                        <div style="margin-top:6px;">
+                                            <button class="btn muted" type="submit">Save Meta</button>
+                                        </form>
+                                        <?php if ($isLow): ?>
                                             <button class="btn primary" type="button" data-add-to-pr data-item-id="<?= (int)$it['item_id'] ?>">Add to Purchase Requisition</button>
-                                            <span class="muted" style="font-size:12px; margin-left:6px;">Low stock</span>
-                                        </div>
-                                    <?php endif; ?>
+                                            <span class="muted" style="font-size:12px;">Low stock</span>
+                                        <?php endif; ?>
+                                    </div>
                                 <?php else: ?>
                                     <span class="muted">Select a category to edit stocks</span>
                                 <?php endif; ?>
