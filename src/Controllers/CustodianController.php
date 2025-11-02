@@ -81,7 +81,9 @@ class CustodianController extends BaseController
             header('Location: /login'); return;
         }
         $branchId = $_SESSION['branch_id'] ?? null;
-        $items = $this->inventory()->listInventory($branchId ? (int)$branchId : null);
+    $items = $this->inventory()->listInventory($branchId ? (int)$branchId : null);
+    // Items with active PRs for this branch (to disable add-to-PR)
+    $activePrItems = $this->requests()->getActiveRequestItemIdsForBranch($branchId ? (int)$branchId : null);
         $categories = ['Office Supplies','Medical Equipments','Medicines','Machines','Electronics','Appliances'];
         $selectedCategory = isset($_GET['category']) ? trim((string)$_GET['category']) : '';
         $search = isset($_GET['q']) ? trim((string)$_GET['q']) : '';
@@ -123,6 +125,7 @@ class CustodianController extends BaseController
             'search' => $search,
             'filter_status' => $filterStatus,
             'cart_count' => $cartCount,
+            'active_pr_items' => $activePrItems,
         ]);
     }
 
@@ -320,19 +323,30 @@ class CustodianController extends BaseController
     {
         if (!$this->auth()->isAuthenticated()) { header('Location: /login'); return; }
         $ids = isset($_POST['item_ids']) ? (array)$_POST['item_ids'] : [];
+        $branchId = (int)($_SESSION['branch_id'] ?? 0);
         if (!isset($_SESSION['pr_cart']) || !is_array($_SESSION['pr_cart'])) { $_SESSION['pr_cart'] = []; }
+        $blocked = [];
         foreach ($ids as $id) {
-            $iid = (int)$id; if ($iid > 0) { $_SESSION['pr_cart'][$iid] = ['quantity' => 1]; }
+            $iid = (int)$id;
+            if ($iid > 0) {
+                // Block if an active PR already exists for this item in this branch
+                if ($this->requests()->hasActiveRequestForItemBranch($iid, $branchId)) {
+                    $blocked[] = $iid; continue;
+                }
+                $_SESSION['pr_cart'][$iid] = ['quantity' => 1];
+            }
         }
         $count = is_array($_SESSION['pr_cart']) ? count($_SESSION['pr_cart']) : 0;
         // If this is an AJAX request, return JSON with the updated count
         $isAjax = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string)$_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
         if ($isAjax || (isset($_SERVER['HTTP_ACCEPT']) && strpos((string)$_SERVER['HTTP_ACCEPT'], 'application/json') !== false)) {
             header('Content-Type: application/json');
-            echo json_encode(['ok' => true, 'count' => $count]);
+            $ok = count($blocked) === 0;
+            echo json_encode(['ok' => $ok, 'count' => $count, 'blocked' => $blocked]);
             return;
         }
         $ref = $_SERVER['HTTP_REFERER'] ?? '/admin-assistant/inventory';
+        if ($blocked) { $ref .= (strpos($ref,'?')===false? '?':'&') . 'error=active_pr_exists'; }
         header('Location: ' . $ref);
     }
 
@@ -381,13 +395,16 @@ class CustodianController extends BaseController
         $groupPrNumber = $this->requests()->generateNewPrNumber();
         $justification = (string)($_POST['justification'] ?? 'Low stock auto-selected');
         $neededBy = $_POST['needed_by'] ?? null;
-        $created = 0;
+        $created = 0; $skipped = 0; $itemLines = [];
+        $byName = (string)($_SESSION['full_name'] ?? ('User #' . $userId));
         foreach ($items as $row) {
             $iid = (int)($row['item_id'] ?? 0);
             $qty = max(1, (int)($row['quantity'] ?? 0));
             $unit = isset($row['unit']) ? (string)$row['unit'] : 'pcs';
             if ($iid > 0 && $qty > 0) {
-                $this->requests()->createPurchaseRequest([
+                // Skip if an active PR already exists for this item in this branch
+                if ($this->requests()->hasActiveRequestForItemBranch($iid, $branchId)) { $skipped++; continue; }
+                $req = $this->requests()->createPurchaseRequest([
                     'item_id' => $iid,
                     'branch_id' => $branchId ?: null,
                     'requested_by' => $userId,
@@ -401,12 +418,87 @@ class CustodianController extends BaseController
                     'pr_number' => $groupPrNumber,
                 ], $userId);
                 $created++;
+                // Build line for PDF (resolve item name/unit best-effort)
+                try {
+                    $pdo = \App\Database\Connection::resolve();
+                    $st = $pdo->prepare('SELECT name, unit, quantity FROM inventory_items WHERE item_id = :id');
+                    $st->execute(['id' => $iid]);
+                    $it = $st->fetch(\PDO::FETCH_ASSOC) ?: ['name' => 'Item #' . $iid, 'unit' => $unit, 'quantity' => null];
+                    $itemLines[] = [
+                        'description' => (string)($it['name'] ?? ('Item #' . $iid)),
+                        'unit' => (string)($row['unit'] ?? ($it['unit'] ?? 'pcs')),
+                        'qty' => $qty,
+                        'stock_on_hand' => isset($it['quantity']) ? (int)$it['quantity'] : null,
+                        // 'usage_per_month' can be computed later; leave blank for now
+                    ];
+                } catch (\Throwable $ignored) {
+                    $itemLines[] = ['description' => 'Item #' . $iid, 'unit' => $unit, 'qty' => $qty];
+                }
             }
         }
         if ($created > 0) {
             // Clear cart only if something was created
             $_SESSION['pr_cart'] = [];
-            header('Location: /admin-assistant/requests/new?created=' . (int)$created);
+            // Generate PR PDF and email Procurement a message with attachment
+            try {
+                $branchName = 'All';
+                if ($branchId) {
+                    $pdo = \App\Database\Connection::resolve();
+                    $sb = $pdo->prepare('SELECT name FROM branches WHERE branch_id = :b');
+                    $sb->execute(['b' => $branchId]);
+                    $bn = $sb->fetchColumn(); if ($bn) { $branchName = (string)$bn; }
+                }
+                $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
+                if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+                $fileBase = 'pr_' . $groupPrNumber . '_' . date('Ymd_His') . '.pdf';
+                $abs = $dir . DIRECTORY_SEPARATOR . $fileBase;
+                $pdf = new \App\Services\PDFService();
+                $pdf->generatePurchaseRequisitionToFile([
+                    'pr_number' => $groupPrNumber,
+                    'branch_name' => $branchName,
+                    'requested_by' => $byName,
+                    'prepared_at' => date('Y-m-d H:i'),
+                    'justification' => $justification,
+                    'needed_by' => $neededBy ?? '',
+                ], $itemLines, $abs);
+                // Notify procurement users with the PDF attached
+                try {
+                    $pdo = \App\Database\Connection::resolve();
+                    $recips = $pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('procurement_manager','procurement')")->fetchAll();
+                    if ($recips) {
+                        $subject = 'Purchase Request of ' . $branchName . ' • PR ' . $groupPrNumber;
+                        $body = "A new Purchase Request has been submitted.\n\nPR: " . $groupPrNumber . "\nBranch: " . $branchName;
+                        foreach ($recips as $r) {
+                            $this->requests()->sendMessage($userId, (int)$r['user_id'], $subject, $body, basename($fileBase), $abs);
+                        }
+                    }
+                    // Send a copy to the Admin Assistant (self) for records
+                    try {
+                        $copySubject = 'Copy: Purchase Request of ' . $branchName . ' • PR ' . $groupPrNumber;
+                        $copyBody = "Your PR has been submitted.\n\nPR: " . $groupPrNumber . "\nBranch: " . $branchName;
+                        $this->requests()->sendMessage($userId, $userId, $copySubject, $copyBody, basename($fileBase), $abs);
+                    } catch (\Throwable $ignoredSelf) {}
+                } catch (\Throwable $ignored) {}
+            } catch (\Throwable $ignored) {}
+
+            // Redirect to compose with subject (and default recipient if available)
+            $toParam = '';
+            try {
+                $pdo = \App\Database\Connection::resolve();
+                $row = $pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('procurement_manager','procurement') ORDER BY (role='procurement_manager') DESC, full_name ASC LIMIT 1")?->fetch();
+                if ($row && !empty($row['user_id'])) { $toParam = '&to=' . (int)$row['user_id']; }
+            } catch (\Throwable $ignored) {}
+            $bn = 'Branch';
+            try {
+                if ($branchId) {
+                    $pdo = \App\Database\Connection::resolve();
+                    $sb = $pdo->prepare('SELECT name FROM branches WHERE branch_id = :b');
+                    $sb->execute(['b' => $branchId]);
+                    $bn = (string)($sb->fetchColumn() ?: 'Branch');
+                }
+            } catch (\Throwable $ignored) {}
+            $subject = 'Purchase Request of ' . $bn;
+            header('Location: /admin/messages?subject=' . rawurlencode($subject) . $toParam . '&created=' . (int)$created . ($skipped > 0 ? ('&skipped=' . (int)$skipped) : ''));
         } else {
             header('Location: /admin-assistant/requests/review?error=cart_empty');
         }
@@ -842,7 +934,13 @@ class CustodianController extends BaseController
             'priority' => isset($_POST['priority']) ? (int)$_POST['priority'] : 3,
             'needed_by' => $_POST['needed_by'] ?? null,
         ];
-    $req = $this->requests()->createPurchaseRequest($payload, $userId);
+        // Prevent duplicate active PR for the same item in this branch
+        $itemIdCheck = (int)($payload['item_id'] ?? 0);
+        if ($itemIdCheck > 0 && $this->requests()->hasActiveRequestForItemBranch($itemIdCheck, $branchId)) {
+            header('Location: /admin-assistant/requests/new?error=duplicate_for_item');
+            return;
+        }
+        $req = $this->requests()->createPurchaseRequest($payload, $userId);
         // Optional: notify all procurement managers by message
         try {
             $pdo = \App\Database\Connection::resolve();

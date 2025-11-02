@@ -197,13 +197,16 @@
                     <tr><th>Name</th><th>Category</th><th>Stocks</th><th>Status</th><th>Unit</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
+                    <?php $activeSet = []; if (!empty($active_pr_items)) { foreach ($active_pr_items as $aid) { $activeSet[(int)$aid] = true; } }
                     <?php if (!empty($items)): foreach ($items as $it): 
                         $qty = (int)($it['quantity'] ?? 0);
                         $min = isset($it['minimum_quantity']) ? (int)$it['minimum_quantity'] : 0;
                         $maint = isset($it['maintaining_quantity']) ? (int)$it['maintaining_quantity'] : 0;
                         $halfMaint = $maint > 0 ? (int)floor($maint * 0.5) : 0;
                         $threshold = max($min, $halfMaint);
-                        $isLow = ($threshold > 0) ? ($qty <= $threshold) : false; ?>
+                        $isLow = ($threshold > 0) ? ($qty <= $threshold) : false;
+                        $iid = (int)($it['item_id'] ?? 0);
+                        $hasActivePr = $iid>0 && !empty($activeSet[$iid]); ?>
                         <tr>
                             <td><?= htmlspecialchars((string)$it['name'], ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)($it['category'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
@@ -254,14 +257,18 @@
                                             <button class="btn muted" type="submit">Save Meta</button>
                                         </form>
                                         <?php if ($isLow): ?>
-                                            <button class="btn primary" type="button" data-add-to-pr data-item-id="<?= (int)$it['item_id'] ?>">Add to Purchase Requisition</button>
-                                            <span class="muted" style="font-size:12px;">Low stock</span>
+                                            <button class="btn primary" type="button" data-add-to-pr data-item-id="<?= (int)$it['item_id'] ?>" <?= $hasActivePr? 'disabled':'' ?> title="<?= $hasActivePr? 'This item already has a PR in process':'' ?>">
+                                                <?= $hasActivePr? 'PR in process':'Add to Purchase Requisition' ?>
+                                            </button>
+                                            <span class="muted" style="font-size:12px;">Low stock<?= $hasActivePr? ' • awaiting PR':'' ?></span>
                                         <?php endif; ?>
                                     </div>
                                 <?php else: ?>
                                     <?php if ($isLow): ?>
-                                        <button class="btn primary" type="button" data-add-to-pr data-item-id="<?= (int)$it['item_id'] ?>">Add to Purchase Requisition</button>
-                                        <span class="muted" style="font-size:12px;">Low stock</span>
+                                        <button class="btn primary" type="button" data-add-to-pr data-item-id="<?= (int)$it['item_id'] ?>" <?= $hasActivePr? 'disabled':'' ?> title="<?= $hasActivePr? 'This item already has a PR in process':'' ?>">
+                                            <?= $hasActivePr? 'PR in process':'Add to Purchase Requisition' ?>
+                                        </button>
+                                        <span class="muted" style="font-size:12px;">Low stock<?= $hasActivePr? ' • awaiting PR':'' ?></span>
                                     <?php else: ?>
                                         <span class="muted">—</span>
                                     <?php endif; ?>
@@ -301,6 +308,8 @@
             if (data && data.ok){
                 updateCount(data.count);
                 if (btn){ btn.textContent = 'Added'; btn.disabled = true; }
+            } else if (data && Array.isArray(data.blocked) && data.blocked.length){
+                if (btn){ btn.textContent = 'PR in process'; btn.disabled = true; }
             }
         } catch(e){ console.error('Add to PR failed', e); }
     }

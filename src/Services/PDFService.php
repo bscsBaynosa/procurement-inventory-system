@@ -125,6 +125,108 @@ class PDFService
 	}
 
 	/**
+	 * Generate a consolidated Purchase Request (PR) PDF file for a PR number with item lines.
+	 * @param array $meta Keys: pr_number, branch_name, requested_by, prepared_at, justification?, needed_by?
+	 * @param array $items Each: [description, unit, qty]
+	 * @param string $filePath Destination absolute path
+	 */
+	public function generatePurchaseRequisitionToFile(array $meta, array $items, string $filePath): void
+	{
+		// Layout adapted to client's PR form; canvassed columns intentionally omitted for Admin Assistant workflow.
+		$mpdf = new Mpdf(['format' => 'A4', 'orientation' => 'P', 'margin_left' => 8, 'margin_right' => 8, 'margin_top' => 8, 'margin_bottom' => 10]);
+		$pr = htmlspecialchars((string)($meta['pr_number'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$branch = htmlspecialchars((string)($meta['branch_name'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$reqBy = htmlspecialchars((string)($meta['requested_by'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$prepAt = htmlspecialchars((string)($meta['prepared_at'] ?? date('Y-m-d H:i')), ENT_QUOTES, 'UTF-8');
+		$justRaw = (string)($meta['justification'] ?? '');
+		$just = nl2br(htmlspecialchars($justRaw, ENT_QUOTES, 'UTF-8'));
+		$need = htmlspecialchars((string)($meta['needed_by'] ?? ''), ENT_QUOTES, 'UTF-8');
+
+		// Header block
+		$header = '<div style="text-align:center;font-weight:800;font-size:16px;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
+			. '<div style="text-align:center;font-size:11px;margin:2px 0 6px;">PURCHASE REQUISITION</div>'
+			. '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="font-size:11px;">'
+			. '<tr>'
+			. '<td style="width:60%;"><strong>PURCHASE REQUISITION NO.</strong>: <span style="font-weight:800;">' . $pr . '</span></td>'
+			. '<td style="width:20%;"><strong>Effective Date</strong>: &nbsp;</td>'
+			. '<td style="width:20%;"><strong>Rev No.</strong>: &nbsp;</td>'
+			. '</tr>'
+			. '</table>';
+
+		// Request meta (top of form)
+		$metaTop = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;font-size:11px;">'
+			. '<tr>'
+			. '<td style="width:60%;"><strong>Requesting Section</strong>: ' . $branch . '</td>'
+			. '<td style="width:20%;"><strong>Date Needed</strong>: ' . ($need !== '' ? $need : '&nbsp;') . '</td>'
+			. '<td style="width:20%;"><strong>Date Received</strong>: &nbsp;</td>'
+			. '</tr>'
+			. '<tr>'
+			. '<td colspan="3"><strong>Reason for Purchase / Use of Article</strong>:<br>' . ($just !== '' ? $just : '&nbsp;') . '</td>'
+			. '</tr>'
+			. '</table>';
+
+		// Main table (omit canvassed columns)
+		$rows = '';
+		foreach ($items as $i) {
+			$desc = htmlspecialchars((string)($i['description'] ?? ''), ENT_QUOTES, 'UTF-8');
+			$unit = htmlspecialchars((string)($i['unit'] ?? ''), ENT_QUOTES, 'UTF-8');
+			$qty = (int)($i['qty'] ?? 0);
+			$stock = isset($i['stock_on_hand']) ? (string)(int)$i['stock_on_hand'] : '&nbsp;';
+			$usage = isset($i['usage_per_month']) ? (string)(int)$i['usage_per_month'] : '&nbsp;';
+			$rows .= '<tr>'
+				. '<td style="text-align:center;width:10%;">' . $stock . '</td>'
+				. '<td style="text-align:center;width:12%;">' . $usage . '</td>'
+				. '<td style="text-align:center;width:12%;">' . $qty . '</td>'
+				. '<td style="text-align:center;width:10%;">' . $unit . '</td>'
+				. '<td>' . $desc . '</td>'
+				. '</tr>';
+		}
+		$table = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;font-size:11px;">'
+			. '<thead>'
+			. '<tr>'
+			. '<th colspan="4" style="text-align:center;width:44%;">QUANTITY</th>'
+			. '<th style="text-align:center;">SPECIFICATION</th>'
+			. '</tr>'
+			. '<tr>'
+			. '<th style="text-align:center;width:10%;">Stock on Hand</th>'
+			. '<th style="text-align:center;width:12%;">Usage per Month</th>'
+			. '<th style="text-align:center;width:12%;">Qty. Needed</th>'
+			. '<th style="text-align:center;width:10%;">Unit</th>'
+			. '<th style="text-align:center;">DESCRIPTION</th>'
+			. '</tr>'
+			. '</thead>'
+			. '<tbody>' . $rows . '</tbody>'
+			. '</table>';
+
+		// Signature area
+		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="10" style="margin-top:8px;font-size:11px;">'
+			. '<tr>'
+			. '<td style="width:40%;vertical-align:bottom;">'
+			. '<div style="height:48px;"></div>'
+			. '<div style="border-top:1px solid #999;text-align:center;padding-top:6px;">Requested by / Admin Assistant / Custodian<br>' . $reqBy . '</div>'
+			. '</td>'
+			. '<td style="width:30%;vertical-align:bottom;">'
+			. '<div style="height:48px;"></div>'
+			. '<div style="border-top:1px solid #999;text-align:center;padding-top:6px;">Noted by</div>'
+			. '</td>'
+			. '<td style="width:30%;vertical-align:bottom;">'
+			. '<div style="height:48px;"></div>'
+			. '<div style="border-top:1px solid #999;text-align:center;padding-top:6px;">Approved for Purchase</div>'
+			. '</td>'
+			. '</tr>'
+			. '<tr>'
+			. '<td style="text-align:center;"><strong>Date:</strong> ' . $prepAt . '</td>'
+			. '<td style="text-align:center;"><strong>Date:</strong> &nbsp;</td>'
+			. '<td style="text-align:center;"><strong>Date:</strong> &nbsp;</td>'
+			. '</tr>'
+			. '</table>';
+
+		$html = $header . $metaTop . $table . $sign;
+		$mpdf->WriteHTML($html);
+		$mpdf->Output($filePath, 'F');
+	}
+
+	/**
 	 * Generate a Purchase Order PDF file closely matching the provided form.
 	 * @param array $po Associative data: po_number, date, vendor_name, vendor_address, vendor_tin, reference, terms, center, items[], notes, deliver_to, look_for, prepared_by, reviewed_by (optional), approved_by
 	 *                  Each item: [description, unit, qty, unit_price, total]

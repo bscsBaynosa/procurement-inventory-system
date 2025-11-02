@@ -43,6 +43,14 @@
     <?php require __DIR__ . '/../layouts/_sidebar.php'; ?>
     <main class="content">
         <h2 style="margin:0 0 12px 0;">Messages</h2>
+        <?php if (isset($_GET['created'])): $c = (int)$_GET['created']; $s = isset($_GET['skipped']) ? (int)$_GET['skipped'] : 0; ?>
+            <div class="card" style="border-color:#86efac; background:color-mix(in oklab, var(--card) 90%, #86efac); margin-bottom:12px;">
+                <strong><?= $c ?></strong> purchase request<?= $c===1?'':'s' ?> submitted successfully.
+                <?php if ($s > 0): ?>
+                    <span style="color:#065f46; margin-left:8px;">Note: <?= $s ?> item<?= $s===1?' was':'s were' ?> skipped because a PR is already in process.</span>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
         <div class="grid">
             <div class="card" style="overflow:auto;">
                 <table>

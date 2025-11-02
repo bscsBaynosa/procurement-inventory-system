@@ -191,6 +191,47 @@ class RequestService
 	}
 
 	/**
+	 * Check if there's an existing active (not-archived) PR for the same item and branch
+	 * in a status that implies it's still in progress (prevents duplicates).
+	 */
+	public function hasActiveRequestForItemBranch(int $itemId, int $branchId): bool
+	{
+		try {
+			$this->ensurePrColumns();
+			$sql = "SELECT 1 FROM purchase_requests\n\t\t\t\tWHERE item_id = :iid AND COALESCE(is_archived, FALSE) = FALSE\n\t\t\t\t  AND (branch_id = :bid OR (:bid IS NULL AND branch_id IS NULL))\n\t\t\t\t  AND status IN ('pending','approved','canvassing_submitted','canvassing_approved','in_progress')\n\t\t\t\tLIMIT 1";
+			$st = $this->pdo->prepare($sql);
+			$bid = $branchId > 0 ? $branchId : null;
+			$st->execute(['iid' => $itemId, 'bid' => $bid]);
+			return (bool)$st->fetchColumn();
+		} catch (\Throwable $e) {
+			return false;
+		}
+	}
+
+	/**
+	 * Return DISTINCT item_ids that currently have an active (not-archived) PR in-progress for a branch.
+	 * Active statuses: pending, approved, canvassing_submitted, canvassing_approved, in_progress
+	 */
+	public function getActiveRequestItemIdsForBranch(?int $branchId = null): array
+	{
+		try {
+			$this->ensurePrColumns();
+			$sql = "SELECT DISTINCT item_id FROM purchase_requests\n\t\t\t\tWHERE COALESCE(is_archived, FALSE) = FALSE\n\t\t\t\t  AND status IN ('pending','approved','canvassing_submitted','canvassing_approved','in_progress')\n\t\t\t\t  AND item_id IS NOT NULL";
+			$params = [];
+			if ($branchId !== null) {
+				$sql .= " AND (branch_id = :bid OR (:bid IS NULL AND branch_id IS NULL))";
+				$params['bid'] = $branchId > 0 ? $branchId : null;
+			}
+			$st = $this->pdo->prepare($sql);
+			$st->execute($params);
+			$ids = array_map(static fn($r) => (int)$r['item_id'], $st->fetchAll() ?: []);
+			return $ids;
+		} catch (\Throwable $e) {
+			return [];
+		}
+	}
+
+	/**
 	 * Grouped list of purchase requests by PR Number, with basic aggregates and sorting/filtering.
 	 * filters: branch_id, status, include_archived (bool), sort ('branch'|'date'|'status'), order ('asc'|'desc')
 	 */
@@ -586,7 +627,7 @@ class RequestService
 	}
 
 	/** Send a message (best-effort). */
-	private function sendMessage(int $senderId, int $recipientId, string $subject, string $body, ?string $attachmentName = null, ?string $attachmentPath = null): void
+	public function sendMessage(int $senderId, int $recipientId, string $subject, string $body, ?string $attachmentName = null, ?string $attachmentPath = null): void
 	{
 		if ($recipientId <= 0) { return; }
 		try {
