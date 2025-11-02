@@ -294,6 +294,110 @@ class PDFService
 		$mpdf->Output($fname, $output);
 	}
 
+	/**
+	 * Generate an RFP (Request For Payment) PDF file based on the client's reference.
+	 * @param array $rfp keys: pr_number?, po_number?, pay_to, center, date_requested, date_needed, nature, particulars[[desc,amount]], total, requested_by
+	 * @param string $filePath Destination absolute path
+	 */
+	public function generateRFPToFile(array $rfp, string $filePath): void
+	{
+		$mpdf = new Mpdf(['format' => 'A4', 'orientation' => 'P', 'margin_left' => 10, 'margin_right' => 10, 'margin_top' => 10, 'margin_bottom' => 10]);
+		$payTo = htmlspecialchars((string)($rfp['pay_to'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$center = htmlspecialchars((string)($rfp['center'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$dateReq = htmlspecialchars((string)($rfp['date_requested'] ?? date('Y-m-d')), ENT_QUOTES, 'UTF-8');
+		$dateNeed = htmlspecialchars((string)($rfp['date_needed'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$nature = (string)($rfp['nature'] ?? 'payment_to_supplier');
+		$pr = htmlspecialchars((string)($rfp['pr_number'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$po = htmlspecialchars((string)($rfp['po_number'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$requestedBy = htmlspecialchars((string)($rfp['requested_by'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$parts = (array)($rfp['particulars'] ?? []);
+		$total = (float)($rfp['total'] ?? 0);
+		$totFmt = number_format($total, 2);
+		$amountWords = $this->numberToWordsPhp((int)round($total)) . ' PESOS';
+
+		$check = function(string $key) use ($nature): string { return $nature === $key ? 'X' : '&nbsp;'; };
+
+		$header = '<div style="text-align:center;font-weight:800;font-size:16px;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
+			. '<div style="text-align:center;font-size:10px;margin-bottom:4px;">ACCOUNT (' . $center . ')</div>'
+			. '<div style="text-align:center;font-weight:800;">REQUEST FOR PAYMENT</div>';
+		$meta = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
+			. '<tr>'
+			. '<td style="width:65%;vertical-align:top;">'
+			. '<div><strong>Pay to:</strong> ' . $payTo . '</div>'
+			. '<div style="margin-top:6px;"><strong>Nature of Request:</strong> '
+			. ' ( ) Cash Advance &nbsp; (' . $check('payment_to_supplier') . ') Payment to Supplier &nbsp; (' . $check('pcf_replenishment') . ') PCF Replenishment'
+			. '</div>'
+			. '<div style="margin-top:4px;"> ( ) JEHCP Reimbursement &nbsp; ( ) Others, please specify: _____________________________</div>'
+			. '<div style="margin-top:6px;font-size:10px;"><em>NOTE: Please attach all documents to support the request.</em></div>'
+			. '</td>'
+			. '<td style="vertical-align:top;">'
+			. '<table width="100%" border="0" cellspacing="0" cellpadding="4" style="font-size:11px;">'
+			. '<tr><td style="width:55%;">No:</td><td style="text-align:right;">&nbsp;</td></tr>'
+			. '<tr><td>Date Requested:</td><td style="text-align:right;">' . $dateReq . '</td></tr>'
+			. '<tr><td>Date Needed:</td><td style="text-align:right;">' . $dateNeed . '</td></tr>'
+			. '</table>'
+			. '</td>'
+			. '</tr>'
+			. '</table>';
+
+		$rows = '';
+		foreach ($parts as $p) {
+			$desc = htmlspecialchars((string)($p['desc'] ?? ''), ENT_QUOTES, 'UTF-8');
+			$amt = number_format((float)($p['amount'] ?? 0), 2);
+			$rows .= '<tr><td>' . $desc . '</td><td style="text-align:right;">' . $amt . '</td></tr>';
+		}
+		$table = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
+			. '<thead><tr><th>PARTICULARS</th><th style="width:30%;">AMOUNT</th></tr></thead>'
+			. '<tbody>' . $rows . '</tbody>'
+			. '<tfoot><tr><td style="text-align:right;font-weight:700;">TOTAL</td><td style="text-align:right;font-weight:700;">Php ' . $totFmt . '</td></tr></tfoot>'
+			. '</table>';
+
+		$amounts = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
+			. '<tr><td><strong>Amount in words:</strong><br>' . htmlspecialchars($amountWords, ENT_QUOTES, 'UTF-8') . '</td>'
+			. '<td style="width:40%;"><strong>Amount in figures:</strong><br>Php ' . $totFmt . '</td></tr>'
+			. '</table>';
+
+		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="10" style="margin-top:6px;">'
+			. '<tr>'
+			. '<td style="width:33%;vertical-align:bottom;"><div style="height:38px;"></div><div style="border-top:1px solid #999;text-align:center;padding-top:6px;">Requested by:<br>' . $requestedBy . '</div></td>'
+			. '<td style="width:33%;vertical-align:bottom;"><div style="height:38px;"></div><div style="border-top:1px solid #999;text-align:center;padding-top:6px;">Checked by:</div></td>'
+			. '<td style="width:34%;vertical-align:bottom;"><div style="height:38px;"></div><div style="border-top:1px solid #999;text-align:center;padding-top:6px;">Approved by:</div></td>'
+			. '</tr>'
+			. '</table>';
+
+		$html = $header . $meta . $table . $amounts . $sign;
+		$mpdf->WriteHTML($html);
+		$mpdf->Output($filePath, 'F');
+	}
+
+	// Minimal number-to-words for pesos (integer part only)
+	private function numberToWordsPhp(int $num): string
+	{
+		$ones = ['', 'ONE','TWO','THREE','FOUR','FIVE','SIX','SEVEN','EIGHT','NINE','TEN','ELEVEN','TWELVE','THIRTEEN','FOURTEEN','FIFTEEN','SIXTEEN','SEVENTEEN','EIGHTEEN','NINETEEN'];
+		$tens = ['', '', 'TWENTY','THIRTY','FORTY','FIFTY','SIXTY','SEVENTY','EIGHTY','NINETY'];
+		$scale = ['',' THOUSAND',' MILLION',' BILLION'];
+		if ($num === 0) return 'ZERO';
+		$words = '';
+		$i = 0;
+		while ($num > 0 && $i < count($scale)) {
+			$chunk = $num % 1000;
+			if ($chunk) {
+				$chunkWords = '';
+				$h = intdiv($chunk, 100);
+				$r = $chunk % 100;
+				if ($h) { $chunkWords .= $ones[$h] . ' HUNDRED'; if ($r) $chunkWords .= ' '; }
+				if ($r) {
+					if ($r < 20) { $chunkWords .= $ones[$r]; }
+					else { $chunkWords .= $tens[intdiv($r,10)]; if ($r%10) $chunkWords .= '-' . $ones[$r%10]; }
+				}
+				$words = trim($chunkWords) . $scale[$i] . ($words ? ' ' . $words : '');
+			}
+			$num = intdiv($num, 1000);
+			$i++;
+		}
+		return $words;
+	}
+
 
 	/**
 	 * Generate a Canvassing form PDF (landscape) with supplier columns and items grid, and save to a file.

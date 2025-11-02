@@ -329,6 +329,18 @@ if ($method === 'GET' && $path === '/procurement/po/view') {
 	exit;
 }
 
+// Procurement: RFP (Request For Payment)
+if ($method === 'GET' && $path === '/procurement/rfp/create') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->rfpCreate();
+	exit;
+}
+if ($method === 'POST' && $path === '/procurement/rfp/create') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->rfpSubmit();
+	exit;
+}
+
 // Admin: PO approval/rejection
 if ($method === 'POST' && $path === '/admin/po/approve') {
 	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') { header('Location: /login'); exit; }
@@ -338,6 +350,18 @@ if ($method === 'POST' && $path === '/admin/po/approve') {
 if ($method === 'POST' && $path === '/admin/po/reject') {
 	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') { header('Location: /login'); exit; }
 	$admin->rejectPO();
+	exit;
+}
+
+// Admin: RFP approval/rejection
+if ($method === 'POST' && $path === '/admin/rfp/approve') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? '') !== 'admin')) { header('Location: /login'); exit; }
+	$admin->approveRFP();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/rfp/reject') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? '') !== 'admin')) { header('Location: /login'); exit; }
+	$admin->rejectRFP();
 	exit;
 }
 

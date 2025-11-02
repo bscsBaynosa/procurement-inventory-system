@@ -39,6 +39,7 @@
                 <?php if (!empty($po['pdf_path'])): ?>
                     <a class="btn primary" href="/po/download?id=<?= (int)$po['id'] ?>">Download PDF</a>
                 <?php endif; ?>
+                <a class="btn" href="/procurement/rfp/create?po=<?= (int)$po['id'] ?>">Generate RFP</a>
             </div>
         </div>
 

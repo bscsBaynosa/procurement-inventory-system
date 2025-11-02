@@ -238,6 +238,94 @@ class ProcurementController extends BaseController
         $this->render('procurement/po_view.php', ['po' => $h, 'items' => $lines]);
     }
 
+    /** GET: Create RFP form (optionally prefilled from a PO id) */
+    public function rfpCreate(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
+        $poId = isset($_GET['po']) ? (int)$_GET['po'] : 0;
+        $pr = isset($_GET['pr']) ? trim((string)$_GET['pr']) : '';
+        $prefill = [
+            'pr_number' => $pr,
+            'po_id' => $poId,
+            'po_number' => null,
+            'pay_to' => '',
+            'center' => '',
+            'date_requested' => date('Y-m-d'),
+            'date_needed' => '',
+            'nature' => 'payment_to_supplier',
+            'particulars' => [ ['desc' => '', 'amount' => ''] ],
+            'total' => 0.00,
+        ];
+        if ($poId > 0) {
+            $pdo = \App\Database\Connection::resolve();
+            $st = $pdo->prepare('SELECT po_number, pr_number, vendor_name, total, supplier_id FROM purchase_orders WHERE id = :id');
+            $st->execute(['id' => $poId]);
+            if ($row = $st->fetch()) {
+                $prefill['po_number'] = (string)$row['po_number'];
+                $prefill['pr_number'] = $prefill['pr_number'] ?: (string)($row['pr_number'] ?? '');
+                $prefill['pay_to'] = (string)($row['vendor_name'] ?? '');
+                $prefill['total'] = (float)($row['total'] ?? 0);
+                $prefill['particulars'] = [[ 'desc' => 'Payment for PO ' . (string)$row['po_number'], 'amount' => (string)$prefill['total'] ]];
+            }
+        }
+        $this->render('procurement/rfp_create.php', ['rfp' => $prefill]);
+    }
+
+    /** POST: Submit RFP, generate PDF, send to Admin via message */
+    public function rfpSubmit(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
+        $pr = trim((string)($_POST['pr_number'] ?? ''));
+        $poId = (int)($_POST['po_id'] ?? 0);
+        $poNumber = trim((string)($_POST['po_number'] ?? ''));
+        $payTo = trim((string)($_POST['pay_to'] ?? ''));
+        $center = trim((string)($_POST['center'] ?? ''));
+        $dateRequested = trim((string)($_POST['date_requested'] ?? date('Y-m-d')));
+        $dateNeeded = trim((string)($_POST['date_needed'] ?? ''));
+        $nature = trim((string)($_POST['nature'] ?? 'payment_to_supplier'));
+        $descArr = $_POST['particular_desc'] ?? [];
+        $amtArr = $_POST['particular_amount'] ?? [];
+        $rows = [];
+        $total = 0.0;
+        $n = min(count($descArr), count($amtArr));
+        for ($i=0; $i<$n; $i++) {
+            $d = trim((string)$descArr[$i]); if ($d === '') continue;
+            $a = (float)str_replace([','], [''], (string)$amtArr[$i]);
+            $rows[] = ['desc' => $d, 'amount' => $a];
+            $total += $a;
+        }
+        if ($payTo === '' || empty($rows)) { header('Location: /procurement/rfp/create?error=Missing+fields'); return; }
+        // Generate PDF to storage
+        $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
+        if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+        $slug = $poNumber !== '' ? ('PO-' . preg_replace('/[^A-Za-z0-9_-]/','_', $poNumber)) : ($pr !== '' ? ('PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr)) : date('Ymd-His'));
+        $file = $dir . DIRECTORY_SEPARATOR . 'RFP-' . $slug . '.pdf';
+        $this->pdf()->generateRFPToFile([
+            'pr_number' => $pr,
+            'po_number' => $poNumber,
+            'pay_to' => $payTo,
+            'center' => $center,
+            'date_requested' => $dateRequested,
+            'date_needed' => $dateNeeded,
+            'nature' => $nature,
+            'particulars' => $rows,
+            'total' => $total,
+            'requested_by' => (string)($_SESSION['full_name'] ?? ''),
+        ], $file);
+        // Send to Admin for approval
+        $pdo = \App\Database\Connection::resolve();
+        try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
+        $subject = 'RFP For Approval' . ($pr !== '' ? (' • PR ' . $pr) : '') . ($poNumber !== '' ? (' • PO ' . $poNumber) : '');
+        $body = 'Please review and approve the attached Request For Payment.';
+        $recipients = $pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('admin')")->fetchAll();
+        if ($recipients) {
+            $ins = $pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)');
+            foreach ($recipients as $row) { $ins->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$row['user_id'], 'j' => $subject, 'b' => $body, 'an' => basename($file), 'ap' => $file]); }
+        }
+        header('Location: /procurement/pos?rfp=1');
+    }
+
     /**
      * GET: Purchase Requests list for Procurement (grouped by PR Number) with sorting and filters.
      */

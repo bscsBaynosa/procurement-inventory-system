@@ -126,6 +126,31 @@
                 </div>
             <?php endif; ?>
 
+            <?php if (($_SESSION['role'] ?? null) === 'admin' && stripos((string)$message['subject'], 'RFP For Approval') !== false): ?>
+                <div class="card" style="margin-top:14px;">
+                    <h3 style="margin-top:0;">Request For Payment Approval</h3>
+                    <div class="muted" style="font-size:12px;margin:4px 0 8px;">
+                        <?= !empty($prNumber) ? ('PR ' . htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8')) : 'RFP' ?>
+                        <?= !empty($poNumber) ? (' • PO ' . htmlspecialchars((string)$poNumber, ENT_QUOTES, 'UTF-8')) : '' ?>
+                    </div>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                        <form method="POST" action="/admin/rfp/approve" onsubmit="return confirm('Approve this RFP?');">
+                            <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)($prNumber ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
+                            <input type="hidden" name="po_number" value="<?= htmlspecialchars((string)($poNumber ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
+                            <input type="hidden" name="message_id" value="<?= (int)$message['id'] ?>" />
+                            <button class="btn primary" type="submit">Approve RFP</button>
+                        </form>
+                        <form method="POST" action="/admin/rfp/reject" onsubmit="return confirm('Reject this RFP?');" style="display:flex; gap:8px; align-items:center;">
+                            <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)($prNumber ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
+                            <input type="hidden" name="po_number" value="<?= htmlspecialchars((string)($poNumber ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
+                            <input type="hidden" name="message_id" value="<?= (int)$message['id'] ?>" />
+                            <input type="text" name="reason" placeholder="Reason (optional)" style="min-width:240px;" />
+                            <button class="btn danger" type="submit">Reject</button>
+                        </form>
+                    </div>
+                </div>
+            <?php endif; ?>
+
             <?php if (($_SESSION['role'] ?? null) === 'admin_assistant' && stripos((string)$message['subject'], 'Revision Proposed') !== false && !empty($prNumber)): ?>
                 <div class="card" style="margin-top:14px;">
                     <h3 style="margin-top:0;">Revision Proposed</h3>

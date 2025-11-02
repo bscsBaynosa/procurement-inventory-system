@@ -251,6 +251,107 @@ class AdminController extends BaseController
     }
 
     /**
+     * POST: Approve a submitted Request For Payment (RFP) and notify Procurement.
+     */
+    public function approveRFP(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? '') !== 'admin') { header('Location: /login'); return; }
+        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        $poNumber = isset($_POST['po_number']) ? trim((string)$_POST['po_number']) : '';
+        $msgId = isset($_POST['message_id']) ? (int)$_POST['message_id'] : 0;
+        // Notify procurement team
+        try {
+            // If original message has an attachment, forward it along with the approval notice
+            $attName = null; $attPath = null;
+            if ($msgId > 0) {
+                try {
+                    $stM = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id');
+                    $stM->execute(['id' => $msgId]);
+                    $m = $stM->fetch();
+                    if ($m) { $attName = (string)($m['attachment_name'] ?? ''); $attPath = (string)($m['attachment_path'] ?? ''); }
+                } catch (\Throwable $ignored) {}
+            }
+            // Ensure messages has attachment columns
+            try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
+            try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
+
+            $recips = $this->pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('procurement_manager','procurement')")->fetchAll();
+            if ($recips) {
+                $hasAtt = ($attName !== null && $attName !== '' && $attPath !== null && $attPath !== '');
+                $sql = $hasAtt
+                    ? 'INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)'
+                    : 'INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)';
+                $ins = $this->pdo->prepare($sql);
+                $subject = 'RFP Approved' . ($pr !== '' ? (' • PR ' . $pr) : '') . ($poNumber !== '' ? (' • PO ' . $poNumber) : '');
+                $body = 'Admin approved the Request For Payment.';
+                foreach ($recips as $r) {
+                    $params = ['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$r['user_id'], 'j' => $subject, 'b' => $body];
+                    if ($hasAtt) { $params['an'] = basename($attName); $params['ap'] = $attPath; }
+                    $ins->execute($params);
+                }
+            }
+            if ($msgId > 0) {
+                $st = $this->pdo->prepare('UPDATE messages SET is_read = TRUE WHERE id = :id AND recipient_id = :me');
+                $st->execute(['id' => $msgId, 'me' => (int)($_SESSION['user_id'] ?? 0)]);
+            }
+            header('Location: /inbox?rfp_approved=1');
+        } catch (\Throwable $e) {
+            header('Location: /inbox?error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
+    /**
+     * POST: Reject a submitted Request For Payment (RFP) and notify Procurement.
+     */
+    public function rejectRFP(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? '') !== 'admin') { header('Location: /login'); return; }
+        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        $poNumber = isset($_POST['po_number']) ? trim((string)$_POST['po_number']) : '';
+        $reason = isset($_POST['reason']) ? trim((string)$_POST['reason']) : '';
+        $msgId = isset($_POST['message_id']) ? (int)$_POST['message_id'] : 0;
+        try {
+            // Fetch original attachment, if any, to include in rejection notice
+            $attName = null; $attPath = null;
+            if ($msgId > 0) {
+                try {
+                    $stM = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id');
+                    $stM->execute(['id' => $msgId]);
+                    $m = $stM->fetch();
+                    if ($m) { $attName = (string)($m['attachment_name'] ?? ''); $attPath = (string)($m['attachment_path'] ?? ''); }
+                } catch (\Throwable $ignored) {}
+            }
+            try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
+            try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
+
+            $recips = $this->pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('procurement_manager','procurement')")->fetchAll();
+            if ($recips) {
+                $hasAtt = ($attName !== null && $attName !== '' && $attPath !== null && $attPath !== '');
+                $sql = $hasAtt
+                    ? 'INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)'
+                    : 'INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)';
+                $ins = $this->pdo->prepare($sql);
+                $subject = 'RFP Rejected' . ($pr !== '' ? (' • PR ' . $pr) : '') . ($poNumber !== '' ? (' • PO ' . $poNumber) : '');
+                $body = 'Admin rejected the Request For Payment.' . ($reason !== '' ? ("\n\nReason: " . $reason) : '');
+                foreach ($recips as $r) {
+                    $params = ['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$r['user_id'], 'j' => $subject, 'b' => $body];
+                    if ($hasAtt) { $params['an'] = basename($attName); $params['ap'] = $attPath; }
+                    $ins->execute($params);
+                }
+            }
+            if ($msgId > 0) {
+                $st = $this->pdo->prepare('UPDATE messages SET is_read = TRUE WHERE id = :id AND recipient_id = :me');
+                $st->execute(['id' => $msgId, 'me' => (int)($_SESSION['user_id'] ?? 0)]);
+            }
+            header('Location: /inbox?rfp_rejected=1');
+        } catch (\Throwable $e) {
+            header('Location: /inbox?error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
+    /**
      * Simple Users page for admins: list users and provide a quick create form.
      */
     public function users(): void
@@ -359,7 +460,22 @@ class AdminController extends BaseController
                     $adminId = (int)($_SESSION['user_id'] ?? 0);
                     $st = $this->pdo->prepare('SELECT password_hash FROM users WHERE user_id = :id');
                     $st->execute(['id' => $adminId]);
-     */
+                    // Fallback completed; stop here after successful rerender
+                    return;
+                } catch (\Throwable $ee) {
+                    $msg = rawurlencode($ee->getMessage());
+                    header('Location: /admin/users?error=' . $msg);
+                    return;
+                }
+            }
+            // If a different SQL error occurred, show a simple message
+            http_response_code(500);
+            header('Content-Type: text/plain');
+            echo 'Error loading users: ' . $e->getMessage();
+        }
+    }
+
+    /** Create a new user (admin). */
     public function createUser(): void
     {
         if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
