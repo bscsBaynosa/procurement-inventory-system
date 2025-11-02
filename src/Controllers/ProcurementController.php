@@ -139,26 +139,56 @@ class ProcurementController extends BaseController
         // Optional: price matrix from supplier_items matched by item name (case-insensitive)
         $prices = [];
         try {
-            // Collect distinct, non-empty item names
-            $names = [];
-            foreach ($rows as $r) { $n = strtolower(trim((string)($r['item_name'] ?? ''))); if ($n !== '') { $names[$n] = true; } }
-            $names = array_keys($names);
+            // Collect distinct, non-empty item names and required quantities per item
+            $byNameQty = [];
+            foreach ($rows as $r) {
+                $n = strtolower(trim((string)($r['item_name'] ?? '')));
+                if ($n === '') { continue; }
+                $qty = (int)($r['quantity'] ?? 0);
+                $byNameQty[$n] = ($byNameQty[$n] ?? 0) + max(0, $qty);
+            }
+            $names = array_keys($byNameQty);
             if ($suppliers && $names) {
                 $inSup = implode(',', array_fill(0, count($suppliers), '?'));
                 $inNames = implode(',', array_fill(0, count($names), '?'));
                 $params = [];
                 foreach ($suppliers as $s) { $params[] = (int)$s['user_id']; }
                 foreach ($names as $nm) { $params[] = $nm; }
-                $sql = 'SELECT supplier_id, LOWER(name) AS lname, price, unit FROM supplier_items WHERE supplier_id IN (' . $inSup . ') AND LOWER(name) IN (' . $inNames . ')';
+                // Fetch items with packaging info
+                $sql = 'SELECT id, supplier_id, LOWER(name) AS lname, price, unit, package_label, pieces_per_package FROM supplier_items WHERE supplier_id IN (' . $inSup . ') AND LOWER(name) IN (' . $inNames . ')';
                 $st = $pdo->prepare($sql);
                 $st->execute($params);
+                $itemsById = [];
+                $ids = [];
                 foreach ($st->fetchAll() as $row) {
-                    $sid = (int)$row['supplier_id'];
-                    $lname = (string)$row['lname'];
-                    $price = (float)($row['price'] ?? 0);
+                    $itemsById[(int)$row['id']] = $row;
+                    $ids[] = (int)$row['id'];
+                }
+                // Default to base price per package; then evaluate tiers for needed packages
+                foreach ($itemsById as $it) {
+                    $sid = (int)$it['supplier_id'];
+                    $lname = (string)$it['lname'];
+                    $basePrice = (float)($it['price'] ?? 0);
+                    $piecesPerPkg = max(1, (int)($it['pieces_per_package'] ?? 1));
+                    $neededPieces = max(0, (int)($byNameQty[$lname] ?? 0));
+                    $neededPkgs = $piecesPerPkg > 0 ? (int)ceil($neededPieces / $piecesPerPkg) : 0;
+                    $best = $basePrice;
+                    // Fetch tiers for this item and choose the price that applies to neededPkgs
+                    if ($neededPkgs > 0) {
+                        try {
+                            $tq = $pdo->prepare('SELECT min_packages, max_packages, price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC');
+                            $tq->execute(['id' => (int)$it['id']]);
+                            foreach ($tq->fetchAll() as $t) {
+                                $min = (int)$t['min_packages'];
+                                $max = $t['max_packages'] !== null ? (int)$t['max_packages'] : null;
+                                if ($neededPkgs >= $min && ($max === null || $neededPkgs <= $max)) {
+                                    $best = min($best, (float)$t['price_per_package']);
+                                }
+                            }
+                        } catch (\Throwable $e) { /* tiers table may not exist yet */ }
+                    }
                     if (!isset($prices[$sid])) { $prices[$sid] = []; }
-                    // If multiple matches, keep the lowest price
-                    if (!isset($prices[$sid][$lname]) || $price < $prices[$sid][$lname]) { $prices[$sid][$lname] = $price; }
+                    if (!isset($prices[$sid][$lname]) || $best < $prices[$sid][$lname]) { $prices[$sid][$lname] = $best; }
                 }
             }
         } catch (\Throwable $ignored) { /* supplier_items may not exist yet; ignore */ }

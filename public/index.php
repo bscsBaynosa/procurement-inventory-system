@@ -198,6 +198,48 @@ if ($method === 'POST' && $path === '/supplier/items/delete') {
 	$supplier->itemsDelete();
 	exit;
 }
+// Supplier: Item price tiers
+if ($method === 'POST' && $path === '/supplier/items/tiers/add') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
+	$supplier->addPriceTier();
+	exit;
+}
+if ($method === 'POST' && $path === '/supplier/items/tiers/delete') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
+	$supplier->deletePriceTier();
+	exit;
+}
+// Supplier: Packages
+if ($method === 'GET' && $path === '/supplier/packages') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
+	$supplier->packagesPage();
+	exit;
+}
+if ($method === 'POST' && $path === '/supplier/packages') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
+	$supplier->packagesCreate();
+	exit;
+}
+if ($method === 'POST' && $path === '/supplier/packages/update') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
+	$supplier->packagesUpdate();
+	exit;
+}
+if ($method === 'POST' && $path === '/supplier/packages/delete') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
+	$supplier->packagesDelete();
+	exit;
+}
+if ($method === 'POST' && $path === '/supplier/packages/items/add') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
+	$supplier->packageAddItem();
+	exit;
+}
+if ($method === 'POST' && $path === '/supplier/packages/items/delete') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
+	$supplier->packageRemoveItem();
+	exit;
+}
 
 // Manager: Purchase Requests actions
 if ($method === 'GET' && $path === '/manager/requests') {

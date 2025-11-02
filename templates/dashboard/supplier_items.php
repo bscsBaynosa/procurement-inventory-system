@@ -133,6 +133,42 @@
                                         <button class="btn muted" type="button" onclick="toggleEditRow(<?= (int)$it['id'] ?>)">Cancel</button>
                                     </div>
                                 </form>
+                                <?php $tid = (int)$it['id']; $tiersFor = $tiers[$tid] ?? []; ?>
+                                <div style="margin-top:12px;">
+                                    <strong>Price tiers</strong>
+                                    <div class="muted" style="font-size:12px;margin:4px 0 8px;">Add quantity-based price breaks by number of packages.</div>
+                                    <table style="width:100%; border:1px solid var(--border); border-radius:8px; overflow:hidden;">
+                                        <thead><tr><th style="width:180px;">Min packages</th><th style="width:180px;">Max packages</th><th style="width:220px;">Price per package</th><th>Note</th><th style="width:120px;">Actions</th></tr></thead>
+                                        <tbody>
+                                            <?php if ($tiersFor): foreach ($tiersFor as $t): ?>
+                                                <tr>
+                                                    <td><?= (int)$t['min_packages'] ?></td>
+                                                    <td><?= $t['max_packages'] !== null ? (int)$t['max_packages'] : '—' ?></td>
+                                                    <td>₱ <?= number_format((float)$t['price_per_package'], 2) ?></td>
+                                                    <td><?= htmlspecialchars((string)($t['note'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                                    <td>
+                                                        <form method="POST" action="/supplier/items/tiers/delete" onsubmit="return confirm('Delete this tier?');">
+                                                            <input type="hidden" name="id" value="<?= (int)$t['id'] ?>" />
+                                                            <button class="btn muted" type="submit">Delete</button>
+                                                        </form>
+                                                    </td>
+                                                </tr>
+                                            <?php endforeach; else: ?>
+                                                <tr><td colspan="5" class="muted">No tiers yet.</td></tr>
+                                            <?php endif; ?>
+                                            <tr>
+                                                <form method="POST" action="/supplier/items/tiers/add">
+                                                    <input type="hidden" name="supplier_item_id" value="<?= (int)$it['id'] ?>" />
+                                                    <td><input type="number" name="min_packages" min="1" value="1" /></td>
+                                                    <td><input type="number" name="max_packages" min="1" placeholder="(blank = no max)" /></td>
+                                                    <td><input type="number" name="price_per_package" min="0" step="0.01" value="0" /></td>
+                                                    <td><input type="text" name="note" placeholder="e.g., wholesale" /></td>
+                                                    <td><button class="btn" type="submit">Add tier</button></td>
+                                                </form>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
                             </td>
                         </tr>
                     <?php endforeach; else: ?>
