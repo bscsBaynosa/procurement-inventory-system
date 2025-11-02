@@ -85,7 +85,7 @@
                                         </select>
                                         <button class="btn primary" type="submit">Update</button>
                                     </form>
-                                    <a class="btn" href="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>">View</a>
+                                    <a class="btn" href="/admin/requests/review?pr=<?= urlencode((string)$g['pr_number']) ?>">View</a>
                                     <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>">Download PDF</a>
                                 </div>
                             </td>

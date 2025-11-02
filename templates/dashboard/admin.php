@@ -138,6 +138,7 @@
             <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
                 <div style="font-weight:700;">Recent requests</div>
                 <div style="display:flex; gap:8px; align-items:center;">
+                    <a href="/admin/requests" class="btn" style="text-decoration:none;">Go to Purchase Requests</a>
                     <input id="rqSearch" placeholder="Search" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;"/>
                     <select id="rqFilter" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;">
                         <option value="">All</option>
@@ -150,11 +151,11 @@
                 </div>
             </div>
             <table>
-                <thead><tr><th>ID</th><th>Item</th><th>Branch</th><th>Status</th><th>Created</th></tr></thead>
+                <thead><tr><th>PR ID</th><th>Item</th><th>Branch</th><th>Status</th><th>Created</th></tr></thead>
                 <tbody id="rqBody">
                 <?php if (!empty($recent)): foreach ($recent as $r): ?>
                     <tr data-status="<?= htmlspecialchars((string)($r['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
-                        <td><?= (int)$r['request_id'] ?></td>
+                        <td class="mono"><?= htmlspecialchars((string)($r['pr_number'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                         <td><?= htmlspecialchars((string)($r['item_name'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
                         <td><?= htmlspecialchars((string)($r['branch_name'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
                         <td><?= htmlspecialchars((string)($r['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>

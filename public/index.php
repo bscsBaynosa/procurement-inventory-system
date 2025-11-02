@@ -568,6 +568,16 @@ if ($method === 'GET' && $path === '/admin/requests/history') {
 	$admin->viewRequestsHistoryAdmin();
 	exit;
 }
+if ($method === 'GET' && $path === '/admin/requests/review') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
+	$admin->reviewRequestGroup();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/pr/revise') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
+	$admin->revisePR();
+	exit;
+}
 
 // Settings (profile)
 if ($method === 'GET' && $path === '/settings') {
