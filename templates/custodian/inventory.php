@@ -189,6 +189,7 @@
                         <?php if ($sel!==''): ?>
                         <a class="btn muted" href="/admin-assistant/reports/inventory?category=<?= rawurlencode($sel) ?>&download=1">Inventory Report</a>
                         <?php endif; ?>
+                        <a id="proceedPRBtnTop" class="btn primary" href="/admin-assistant/requests/review">Proceed to Purchase Requisition (<span id="prCartCountTop"><?= (int)($cart_count ?? 0) ?></span>)</a>
                     </div>
                 </div>
                 <table>
@@ -258,7 +259,12 @@
                                         <?php endif; ?>
                                     </div>
                                 <?php else: ?>
-                                    <span class="muted">Select a category to edit stocks</span>
+                                    <?php if ($isLow): ?>
+                                        <button class="btn primary" type="button" data-add-to-pr data-item-id="<?= (int)$it['item_id'] ?>">Add to Purchase Requisition</button>
+                                        <span class="muted" style="font-size:12px;">Low stock</span>
+                                    <?php else: ?>
+                                        <span class="muted">—</span>
+                                    <?php endif; ?>
                                 <?php endif; ?>
                             </td>
                         </tr>
@@ -267,9 +273,7 @@
                     <?php endif; ?>
                     </tbody>
                 </table>
-                                <div style="margin-top:10px; display:flex; gap:8px; justify-content:flex-end; align-items:center;">
-                                        <a id="proceedPRBtn" class="btn primary" href="/admin-assistant/requests/review">Proceed to Purchase Requisition (<span id="prCartCount"><?= (int)($cart_count ?? 0) ?></span>)</a>
-                                </div>
+                                <!-- Proceed button moved to the top action bar to avoid redundancy -->
             </div>
         </div>
     </main>
@@ -278,10 +282,12 @@
 <script>
 // Inline enhancement: add-to-cart via AJAX and live counter update
 (function(){
-    function updateCount(n){
-        var el = document.getElementById('prCartCount');
-        if (el) el.textContent = String(n);
-    }
+        function updateCount(n){
+            var el1 = document.getElementById('prCartCount');
+            if (el1) el1.textContent = String(n);
+            var el2 = document.getElementById('prCartCountTop');
+            if (el2) el2.textContent = String(n);
+        }
     async function addToCart(itemId, btn){
         try {
             const form = new URLSearchParams();
