@@ -322,6 +322,13 @@ if ($method === 'GET' && $path === '/procurement/pos') {
 	exit;
 }
 
+// Procurement: Purchase Order detail view
+if ($method === 'GET' && $path === '/procurement/po/view') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->poView();
+	exit;
+}
+
 // Admin: PO approval/rejection
 if ($method === 'POST' && $path === '/admin/po/approve') {
 	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') { header('Location: /login'); exit; }
