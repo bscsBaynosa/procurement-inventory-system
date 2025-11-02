@@ -17,6 +17,8 @@ class RequestService
 		$this->ensurePrColumns();
 		// Ensure enum values used by canvassing gate exist (safe to call often)
 		$this->ensureRequestStatusEnum();
+		// Ensure revision columns exist
+		$this->ensureRevisionColumns();
 	}
 
 	public function createPurchaseRequest(array $payload, int $userId): array
@@ -152,6 +154,7 @@ class RequestService
 	{
 		// Ensure columns exist before selecting them
 		$this->ensurePrColumns();
+		$this->ensureRevisionColumns();
 		$this->ensureRequestStatusEnum();
 	 $sql = 'SELECT pr.request_id, pr.pr_number, pr.item_id, pr.branch_id, pr.request_type, pr.quantity, pr.unit, pr.status, pr.priority, pr.needed_by, pr.created_at, pr.updated_at, pr.is_archived,
 		 i.name AS item_name, b.name AS branch_name,
@@ -195,6 +198,7 @@ class RequestService
 	{
 		// Ensure columns for grouping exist (pr_number, is_archived)
 		$this->ensurePrColumns();
+		$this->ensureRevisionColumns();
 
 		$includeArchived = (bool)($filters['include_archived'] ?? false);
 		$sort = (string)($filters['sort'] ?? 'date');
@@ -229,7 +233,15 @@ class RequestService
 					WHEN 'cancelled' THEN 50
 					ELSE 0 END) AS status_rank,
 				-- Most recent status string for display
-				(SELECT pr2.status FROM purchase_requests pr2 WHERE pr2.pr_number = pr.pr_number ORDER BY pr2.updated_at DESC LIMIT 1) AS status
+				(SELECT pr2.status FROM purchase_requests pr2 WHERE pr2.pr_number = pr.pr_number ORDER BY pr2.updated_at DESC LIMIT 1) AS status,
+				-- Revision state aggregation and most recent value
+				MAX(CASE pr.revision_state
+					WHEN 'proposed' THEN 100
+					WHEN 'justified' THEN 90
+					WHEN 'recheck_requested' THEN 80
+					WHEN 'accepted' THEN 70
+					ELSE 0 END) AS revision_rank,
+				(SELECT pr3.revision_state FROM purchase_requests pr3 WHERE pr3.pr_number = pr.pr_number AND pr3.revision_state IS NOT NULL ORDER BY pr3.updated_at DESC LIMIT 1) AS revision_state
 			FROM purchase_requests pr
 			LEFT JOIN inventory_items i ON i.item_id = pr.item_id
 			LEFT JOIN branches b ON b.branch_id = pr.branch_id
@@ -242,6 +254,7 @@ class RequestService
 		$params = [];
 		if (!empty($filters['branch_id'])) { $conditions[] = 'branch_id = :branch_id'; $params['branch_id'] = (int)$filters['branch_id']; }
 		if (!empty($filters['status'])) { $conditions[] = 'status = :status'; $params['status'] = (string)$filters['status']; }
+		if (!empty($filters['revision'])) { $conditions[] = 'revision_state = :revision'; $params['revision'] = (string)$filters['revision']; }
 		if (!$includeArchived) { $conditions[] = 'is_archived = FALSE'; }
 		if ($conditions) { $sql .= ' WHERE ' . implode(' AND ', $conditions); }
 		$sql .= ' ORDER BY ' . $sortExpr . ' ' . $order . ', pr_number ASC';
@@ -256,9 +269,11 @@ class RequestService
 	public function getGroupDetails(string $prNumber): array
 	{
 		$this->ensurePrColumns();
+		$this->ensureRevisionColumns();
 		$stmt = $this->pdo->prepare(
 			"SELECT pr.request_id, pr.pr_number, pr.item_id, i.name AS item_name, pr.quantity, pr.unit, pr.status, pr.created_at,
-				pr.branch_id, b.name AS branch_name, pr.requested_by, u.full_name AS requested_by_name
+				pr.branch_id, b.name AS branch_name, pr.requested_by, u.full_name AS requested_by_name,
+				pr.revision_state, pr.revision_notes
 			 FROM purchase_requests pr
 			 LEFT JOIN inventory_items i ON i.item_id = pr.item_id
 			 LEFT JOIN branches b ON b.branch_id = pr.branch_id
@@ -700,6 +715,16 @@ SQL);
 				}
 			} catch (\Throwable $ignored) {}
 		}
+	}
+
+	/** Ensure revision-related columns exist for grouped PR flow. */
+	private function ensureRevisionColumns(): void
+	{
+		try {
+			$this->pdo->exec("ALTER TABLE purchase_requests
+				ADD COLUMN IF NOT EXISTS revision_state VARCHAR(32),
+				ADD COLUMN IF NOT EXISTS revision_notes TEXT");
+		} catch (\Throwable $e) {}
 	}
 }
 

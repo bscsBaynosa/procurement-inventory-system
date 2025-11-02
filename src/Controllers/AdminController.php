@@ -571,6 +571,11 @@ class AdminController extends BaseController
         $msgId = isset($_POST['message_id']) ? (int)$_POST['message_id'] : 0;
         if ($pr === '') { header('Location: /inbox'); return; }
         try {
+            // Mark group revision as accepted
+            try {
+                $st = $this->pdo->prepare("UPDATE purchase_requests SET revision_state = 'accepted', updated_by = :by, updated_at = NOW() WHERE pr_number = :pr");
+                $st->execute(['by' => (int)($_SESSION['user_id'] ?? 0), 'pr' => $pr]);
+            } catch (\Throwable $ignored) {}
             // Record a follow-up event on all requests under PR
             $rows = $this->requests()->getGroupDetails($pr);
             foreach ($rows as $r) {
@@ -609,6 +614,11 @@ class AdminController extends BaseController
         $msgId = isset($_POST['message_id']) ? (int)$_POST['message_id'] : 0;
         if ($pr === '' || $notes === '') { header('Location: /inbox'); return; }
         try {
+            // Mark group revision as justified with notes
+            try {
+                $st = $this->pdo->prepare("UPDATE purchase_requests SET revision_state = 'justified', revision_notes = :notes, updated_by = :by, updated_at = NOW() WHERE pr_number = :pr");
+                $st->execute(['notes' => $notes, 'by' => (int)($_SESSION['user_id'] ?? 0), 'pr' => $pr]);
+            } catch (\Throwable $ignored) {}
             // Record follow-up notes on all requests
             $rows = $this->requests()->getGroupDetails($pr);
             foreach ($rows as $r) {
@@ -779,6 +789,37 @@ class AdminController extends BaseController
         }
     }
 
+    /** Admin: Request recheck from Admin Assistant for a PR group revision. */
+    public function recheckRevision(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        $notes = isset($_POST['notes']) ? trim((string)$_POST['notes']) : '';
+        if ($pr === '') { header('Location: /admin/requests'); return; }
+        try {
+            // Update revision_state for the whole group
+            $st = $this->pdo->prepare("UPDATE purchase_requests SET revision_state = 'recheck_requested', revision_notes = :notes, updated_by = :by, updated_at = NOW() WHERE pr_number = :pr");
+            $st->execute(['notes' => ($notes !== '' ? $notes : null), 'by' => (int)($_SESSION['user_id'] ?? 0), 'pr' => $pr]);
+            // Notify requesters
+            try {
+                $pdo = $this->pdo;
+                $stR = $pdo->prepare("SELECT DISTINCT requested_by FROM purchase_requests WHERE pr_number = :pr");
+                $stR->execute(['pr' => $pr]);
+                $recipients = array_map(static fn($r) => (int)$r['requested_by'], $stR->fetchAll() ?: []);
+                if ($recipients) {
+                    $ins = $pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
+                    $subject = 'PR ' . $pr . ' • Recheck Requested';
+                    $body = "Admin requested a recheck for PR $pr." . ($notes !== '' ? ("\n\nNotes:\n" . $notes) : '');
+                    foreach ($recipients as $to) { $ins->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => $to, 'j' => $subject, 'b' => $body]); }
+                }
+            } catch (\Throwable $ignored) {}
+            header('Location: /admin/requests/review?pr=' . rawurlencode($pr) . '&recheck=1');
+        } catch (\Throwable $e) {
+            header('Location: /admin/requests/review?pr=' . rawurlencode($pr) . '&error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
     /** Admin: Grouped PRs view */
     public function viewRequestsAdmin(): void
     {
@@ -786,16 +827,18 @@ class AdminController extends BaseController
         if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
         $branchId = isset($_GET['branch']) && $_GET['branch'] !== '' ? (int)$_GET['branch'] : null;
         $status = isset($_GET['status']) && $_GET['status'] !== '' ? (string)$_GET['status'] : null;
+        $revision = isset($_GET['revision']) && $_GET['revision'] !== '' ? (string)$_GET['revision'] : null;
         $sort = isset($_GET['sort']) ? (string)$_GET['sort'] : 'date';
         $order = isset($_GET['order']) ? (string)$_GET['order'] : 'desc';
         $rows = $this->requests()->getRequestsGrouped([
             'branch_id' => $branchId,
             'status' => $status,
+            'revision' => $revision,
             'include_archived' => false,
             'sort' => $sort,
             'order' => $order,
         ]);
-        $this->render('admin/requests_list.php', [ 'groups' => $rows, 'filters' => [ 'branch' => $branchId, 'status' => $status, 'sort' => $sort, 'order' => $order ] ]);
+        $this->render('admin/requests_list.php', [ 'groups' => $rows, 'filters' => [ 'branch' => $branchId, 'status' => $status, 'revision' => $revision, 'sort' => $sort, 'order' => $order ] ]);
     }
 
     /** Admin: Review a PR group with actions (approve, reject, revise quantities). */
@@ -807,7 +850,13 @@ class AdminController extends BaseController
         if ($pr === '') { header('Location: /admin/requests'); return; }
         $rows = $this->requests()->getGroupDetails($pr);
         if (!$rows) { header('Location: /admin/requests'); return; }
-        $this->render('admin/request_review.php', [ 'pr' => $pr, 'rows' => $rows ]);
+        // Derive latest revision state/notes from group rows
+        $revState = null; $revNotes = null;
+        foreach ($rows as $r) {
+            if (!empty($r['revision_state'])) { $revState = (string)$r['revision_state']; }
+            if (!empty($r['revision_notes'])) { $revNotes = (string)$r['revision_notes']; }
+        }
+        $this->render('admin/request_review.php', [ 'pr' => $pr, 'rows' => $rows, 'revision_state' => $revState, 'revision_notes' => $revNotes ]);
     }
 
     /** Admin: Update group status */
@@ -853,6 +902,7 @@ class AdminController extends BaseController
         if ($pr === '') { header('Location: /admin/requests'); return; }
         $ids = isset($_POST['request_id']) && is_array($_POST['request_id']) ? array_map('intval', $_POST['request_id']) : [];
         $qtys = isset($_POST['quantity']) && is_array($_POST['quantity']) ? array_map('intval', $_POST['quantity']) : [];
+        $revNotes = isset($_POST['revision_notes']) ? trim((string)$_POST['revision_notes']) : '';
         if (!$ids) { header('Location: /admin/requests/review?pr=' . rawurlencode($pr)); return; }
         $rows = $this->requests()->getGroupDetails($pr);
         $origById = [];
@@ -867,6 +917,13 @@ class AdminController extends BaseController
                 $changed[] = [$rid, (int)$origById[$rid], $newQ];
             }
         }
+        // Set group revision_state to proposed and store optional notes
+        if ($changed) {
+            try {
+                $st = $this->pdo->prepare("UPDATE purchase_requests SET revision_state = 'proposed', revision_notes = :notes, updated_by = :by, updated_at = NOW() WHERE pr_number = :pr");
+                $st->execute(['notes' => ($revNotes !== '' ? $revNotes : null), 'by' => (int)($_SESSION['user_id'] ?? 0), 'pr' => $pr]);
+            } catch (\Throwable $ignored) {}
+        }
         // Notify all requesters in the group
         try {
             $pdo = $this->pdo;
@@ -877,7 +934,7 @@ class AdminController extends BaseController
                 $lines = [];
                 foreach ($changed as [$rid,$old,$new]) { $lines[] = 'Request #' . $rid . ': ' . $old . ' → ' . $new; }
                 $subject = 'PR ' . $pr . ' • Revision Proposed';
-                $body = "The Admin proposed a revision of quantities for PR $pr.\n\nChanges:\n" . implode("\n", $lines) . "\n\nPlease accept the revision or reply with justification.";
+                $body = "The Admin proposed a revision of quantities for PR $pr.\n\nChanges:\n" . implode("\n", $lines) . ($revNotes !== '' ? ("\n\nNotes:\n" . $revNotes) : '') . "\n\nPlease accept the revision or reply with justification.";
                 $ins = $pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
                 foreach ($recipients as $to) {
                     $ins->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => $to, 'j' => $subject, 'b' => $body]);

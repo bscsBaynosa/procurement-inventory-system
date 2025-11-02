@@ -551,6 +551,12 @@ if ($method === 'POST' && $path === '/admin/pr/reject') {
 	$admin->rejectPR();
 	exit;
 }
+// Admin: PR revision recheck request
+if ($method === 'POST' && $path === '/admin/pr/recheck') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
+	$admin->recheckRevision();
+	exit;
+}
 
 // Admin: Grouped PRs view and status updates
 if ($method === 'GET' && $path === '/admin/requests') {

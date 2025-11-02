@@ -38,6 +38,25 @@
             </span>
         </div>
 
+        <?php if (!empty($revision_state) || !empty($revision_notes)): ?>
+            <?php
+                $rev = (string)($revision_state ?? '');
+                $revLabelMap = [
+                    'proposed' => 'Revision Proposed',
+                    'accepted' => 'Revision Accepted',
+                    'justified' => 'Justification Provided',
+                    'recheck_requested' => 'Recheck Requested',
+                ];
+                $revLabel = $revLabelMap[$rev] ?? 'Revision';
+            ?>
+            <div class="card" style="background:color-mix(in oklab, var(--accent) 10%, transparent); border:1px solid color-mix(in oklab, var(--accent) 35%, var(--border)); padding:12px; border-radius:12px; margin: 0 0 12px;">
+                <div style="font-weight:600;">Current Revision State: <?= htmlspecialchars($revLabel, ENT_QUOTES, 'UTF-8') ?></div>
+                <?php if (!empty($revision_notes)): ?>
+                    <div style="margin-top:6px; white-space:pre-wrap; color:var(--muted);">Notes: <?= nl2br(htmlspecialchars((string)$revision_notes, ENT_QUOTES, 'UTF-8')) ?></div>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
+
         <form method="POST" action="/admin/pr/revise">
             <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?>" />
             <table>
@@ -67,6 +86,7 @@
             </table>
 
             <div style="margin-top:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <input type="text" name="revision_notes" placeholder="Revision notes (optional)" style="min-width:260px; padding:8px 10px; border:1px solid var(--border); border-radius:8px;" />
                 <button class="btn" type="submit">Revise</button>
                 <form method="POST" action="/admin/pr/approve" onsubmit="return confirm('Approve PR <?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?>?');">
                     <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?>" />
@@ -76,6 +96,11 @@
                     <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?>" />
                     <input type="text" name="notes" placeholder="Reason (optional)" style="min-width:260px; padding:8px 10px; border:1px solid var(--border); border-radius:8px;" />
                     <button class="btn danger" type="submit">Reject</button>
+                </form>
+                <form method="POST" action="/admin/pr/recheck" onsubmit="return confirm('Send back PR <?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?> for recheck?');" style="display:inline-flex; gap:8px; align-items:center;">
+                    <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?>" />
+                    <input type="text" name="notes" placeholder="Recheck note (optional)" style="min-width:260px; padding:8px 10px; border:1px solid var(--border); border-radius:8px;" />
+                    <button class="btn" type="submit">Send back for recheck</button>
                 </form>
             </div>
         </form>

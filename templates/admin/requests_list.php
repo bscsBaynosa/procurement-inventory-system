@@ -66,6 +66,14 @@
                                 'cancelled'=>'Cancelled'
                             ];
                             $statusLabel = $labelMap[$status] ?? $status;
+                            $rev = (string)($g['revision_state'] ?? '');
+                            $revMap = [
+                                'proposed' => 'Revision Proposed',
+                                'accepted' => 'Revision Accepted',
+                                'justified' => 'Justification Provided',
+                                'recheck_requested' => 'Recheck Requested',
+                            ];
+                            $revLabel = $rev !== '' ? ($revMap[$rev] ?? $rev) : '';
                         ?>
                         <tr>
                             <td class="mono"><?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?></td>
@@ -73,7 +81,14 @@
                             <td><pre style="margin:0;white-space:pre-wrap;line-height:1.3;max-height:3.2em;overflow:hidden;">&ZeroWidthSpace;<?= htmlspecialchars((string)($g['items_summary'] ?? ''), ENT_QUOTES, 'UTF-8') ?></pre></td>
                             <td class="nowrap"><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)($g['min_created_at'] ?? 'now'))), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)($g['requested_by_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><span class="badge"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></span></td>
+                            <td>
+                                <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                                    <span class="badge"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></span>
+                                    <?php if ($revLabel !== ''): ?>
+                                        <span class="badge" style="border-color:#f59e0b; background:color-mix(in oklab, #f59e0b 10%, transparent);"><?= htmlspecialchars($revLabel, ENT_QUOTES, 'UTF-8') ?></span>
+                                    <?php endif; ?>
+                                </div>
+                            </td>
                             <td>
                                 <div class="actions" style="display:flex; gap:8px; align-items:center;">
                                     <form action="/admin/requests/update-group-status" method="POST" style="display:inline-flex; gap:6px; align-items:center;">
