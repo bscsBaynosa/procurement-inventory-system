@@ -89,10 +89,12 @@
         </div>
 
         <div class="cards">
-            <div class="card"><div style="font-size:12px;color:var(--muted)">Users</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['users_total'] ?? 0) ?></div></div>
-            <div class="card"><div style="font-size:12px;color:var(--muted)">Active</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['users_active'] ?? 0) ?></div></div>
-            <div class="card"><div style="font-size:12px;color:var(--muted)">Managers</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['managers'] ?? 0) ?></div></div>
-            <div class="card"><div style="font-size:12px;color:var(--muted)">Admin Assistants</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['admin_assistants'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Users</div><div style="font-size:28px;font-weight:800;><?= (int)($counts['users_total'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Active</div><div style="font-size:28px;font-weight:800;><?= (int)($counts['users_active'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Managers</div><div style="font-size:28px;font-weight:800;><?= (int)($counts['managers'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Procurement</div><div style="font-size:28px;font-weight:800;><?= (int)($counts['procurement'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Admin Assistants</div><div style="font-size:28px;font-weight:800;><?= (int)($counts['admin_assistants'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Suppliers</div><div style="font-size:28px;font-weight:800;><?= (int)($counts['suppliers'] ?? 0) ?></div></div>
         </div>
 
         <div class="cards grid-3" style="margin-top:12px;">

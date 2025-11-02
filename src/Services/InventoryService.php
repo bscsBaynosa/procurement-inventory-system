@@ -23,6 +23,12 @@ class InventoryService
 		];
 	}
 
+	/** Public accessor for categories list (for dashboards). */
+	public function getAllowedCategories(): array
+	{
+		return $this->allowedCategories();
+	}
+
 	public function __construct(?PDO $pdo = null)
 	{
 		$this->pdo = $pdo ?? Connection::resolve();
@@ -192,6 +198,8 @@ class InventoryService
 	 */
 	public function getStatsPerBranch(): array
 	{
+		// One-time cleanup: remove deprecated 'Paper' category items entirely
+		try { $this->pdo->exec("DELETE FROM inventory_items WHERE category ILIKE 'paper%'"); } catch (\Throwable $e) {}
 		$sql = "
 			SELECT b.branch_id, b.name,
 				COALESCE(COUNT(i.item_id),0) AS total,
@@ -200,12 +208,44 @@ class InventoryService
 				COALESCE(SUM(CASE WHEN i.status='for_replacement' THEN 1 ELSE 0 END),0) AS for_replacement,
 				COALESCE(SUM(CASE WHEN i.status='retired' THEN 1 ELSE 0 END),0) AS retired
 			FROM branches b
-			LEFT JOIN inventory_items i ON i.branch_id = b.branch_id
+			LEFT JOIN inventory_items i ON i.branch_id = b.branch_id AND (i.category IS NULL OR i.category NOT ILIKE 'paper%')
 			GROUP BY b.branch_id, b.name
 			ORDER BY b.name ASC
 		";
 		$stmt = $this->pdo->query($sql);
 		return $stmt->fetchAll();
+	}
+
+	/**
+	 * Count distinct suppliers per category based on supplier_items.category.
+	 * Returns [ [category, suppliers] ... ] including categories with zero suppliers.
+	 */
+	public function getSupplierCountsByCategory(): array
+	{
+		$cats = $this->allowedCategories();
+		$vals = [];
+		$params = [];
+		foreach ($cats as $i => $c) { $key = 'c'.$i; $vals[] = '(:'.$key.')'; $params[$key] = $c; }
+		$sql = "WITH cats(category) AS (VALUES ".implode(',', $vals)."), agg AS (
+			SELECT COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') AS category,
+			       COUNT(DISTINCT supplier_id) AS suppliers
+			FROM supplier_items
+			GROUP BY 1
+		)
+		SELECT cats.category, COALESCE(agg.suppliers, 0) AS suppliers
+		FROM cats
+		LEFT JOIN agg ON agg.category = cats.category
+		ORDER BY cats.category ASC";
+		try {
+			$st = $this->pdo->prepare($sql);
+			$st->execute($params);
+			return $st->fetchAll(PDO::FETCH_ASSOC);
+		} catch (\Throwable $e) {
+			// If supplier_items table doesn't exist yet, return zeros
+			$out = [];
+			foreach ($cats as $c) { $out[] = ['category' => $c, 'suppliers' => 0]; }
+			return $out;
+		}
 	}
 
 	private function hasMaintainingColumn(): bool

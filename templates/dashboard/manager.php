@@ -43,6 +43,18 @@
     <?php require __DIR__ . '/../layouts/_sidebar.php'; ?>
     <main class="content">
         <div class="h1">Manager Overview</div>
+        <?php if (!empty($supplierCatCounts)): ?>
+            <div class="grid">
+                <?php foreach ($supplierCatCounts as $row): ?>
+                    <div class="card">
+                        <h3><?= htmlspecialchars((string)($row['category'] ?? 'Category'), ENT_QUOTES, 'UTF-8') ?></h3>
+                        <div class="stats">
+                            <span class="badge">Suppliers: <?= (int)($row['suppliers'] ?? 0) ?></span>
+                        </div>
+                    </div>
+                <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
         <?php if (!empty($branchStats)): ?>
             <div class="grid">
                 <?php foreach ($branchStats as $b): ?>

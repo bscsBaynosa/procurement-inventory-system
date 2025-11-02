@@ -41,8 +41,10 @@ class AdminController extends BaseController
                 'users_total' => 0,
                 'users_active' => 0,
                 'branches' => 0,
-                'managers' => 0,
+                'managers' => 0,            // procurement_manager
+                'procurement' => 0,         // procurement (staff)
                 'admin_assistants' => 0,
+                'suppliers' => 0,
                 'requests' => [
                     'pending' => 0,
                     'approved' => 0,
@@ -61,11 +63,15 @@ class AdminController extends BaseController
             // Branches
             $stmt = $this->pdo->query('SELECT COUNT(*) FROM branches');
             $counts['branches'] = (int)$stmt->fetchColumn();
-            // Role counts
+            // Role counts (split out managers vs procurement vs suppliers)
             $stmt = $this->pdo->query("SELECT role, COUNT(*) AS c FROM users GROUP BY role");
             foreach ($stmt->fetchAll() as $row) {
-                if ($row['role'] === 'procurement_manager' || $row['role'] === 'procurement') { $counts['managers'] += (int)$row['c']; }
-                if ($row['role'] === 'admin_assistant' || $row['role'] === 'custodian') { $counts['admin_assistants'] += (int)$row['c']; }
+                $role = (string)$row['role'];
+                $c = (int)$row['c'];
+                if ($role === 'procurement_manager') { $counts['managers'] += $c; }
+                if ($role === 'procurement') { $counts['procurement'] += $c; }
+                if ($role === 'admin_assistant' || $role === 'custodian') { $counts['admin_assistants'] += $c; }
+                if ($role === 'supplier') { $counts['suppliers'] += $c; }
             }
 
             // Requests by status (incoming)

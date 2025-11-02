@@ -184,8 +184,13 @@ class ProcurementController extends BaseController
             'sort' => 'date',
             'order' => 'desc',
         ]);
-        $branchStats = $this->inventory()->getStatsPerBranch();
-        $this->render('dashboard/manager.php', ['groups' => $groups, 'branchStats' => $branchStats]);
+        // Supplier availability per category (distinct suppliers that have items in a category)
+        $supplierCatCounts = $this->inventory()->getSupplierCountsByCategory();
+        $this->render('dashboard/manager.php', [
+            'groups' => $groups,
+            'branchStats' => $this->inventory()->getStatsPerBranch(),
+            'supplierCatCounts' => $supplierCatCounts,
+        ]);
     }
 
     /**

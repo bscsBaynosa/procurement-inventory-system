@@ -23,6 +23,7 @@ class SupplierController extends BaseController
             supplier_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
             name VARCHAR(255) NOT NULL,
             description TEXT,
+            category VARCHAR(100),
             price NUMERIC(12,2) NOT NULL DEFAULT 0,
             unit VARCHAR(32) NOT NULL DEFAULT 'pcs',
             package_label VARCHAR(32) NOT NULL DEFAULT 'pack',
@@ -31,9 +32,12 @@ class SupplierController extends BaseController
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )");
         // If table exists from older version, add missing columns
+        $this->pdo->exec("ALTER TABLE supplier_items ADD COLUMN IF NOT EXISTS category VARCHAR(100)");
         $this->pdo->exec("ALTER TABLE supplier_items ADD COLUMN IF NOT EXISTS package_label VARCHAR(32) NOT NULL DEFAULT 'pack'");
         $this->pdo->exec("ALTER TABLE supplier_items ADD COLUMN IF NOT EXISTS pieces_per_package INTEGER NOT NULL DEFAULT 1");
         $this->pdo->exec("ALTER TABLE supplier_items ALTER COLUMN unit SET DEFAULT 'pcs'");
+        // Helpful index for category supplier lookups
+        try { $this->pdo->exec("CREATE INDEX IF NOT EXISTS idx_supplier_items_category ON supplier_items((COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized')))"); } catch (\Throwable $e) {}
         // Price tiers for bulk/package quantity breaks
         $this->pdo->exec("CREATE TABLE IF NOT EXISTS supplier_item_price_tiers (
             id BIGSERIAL PRIMARY KEY,
