@@ -559,6 +559,82 @@ class AdminController extends BaseController
         }
     }
 
+    /** Admin Assistant: Accept Admin's revision proposal for a PR group. */
+    public function acceptRevision(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['admin_assistant','custodian','admin'], true)) { header('Location: /login'); return; }
+        // Treat legacy 'custodian' as admin_assistant
+        $role = $_SESSION['role'] === 'custodian' ? 'admin_assistant' : $_SESSION['role'];
+        if ($role !== 'admin_assistant' && ($role !== 'admin')) { header('Location: /login'); return; }
+        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        $msgId = isset($_POST['message_id']) ? (int)$_POST['message_id'] : 0;
+        if ($pr === '') { header('Location: /inbox'); return; }
+        try {
+            // Record a follow-up event on all requests under PR
+            $rows = $this->requests()->getGroupDetails($pr);
+            foreach ($rows as $r) {
+                $this->requests()->followUpRequest((int)$r['request_id'], (int)($_SESSION['user_id'] ?? 0), 'Revision accepted by Admin Assistant');
+            }
+            // Notify Admin users
+            $stU = $this->pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role = 'admin'");
+            $admins = $stU ? $stU->fetchAll() : [];
+            if ($admins) {
+                $ins = $this->pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
+                $subject = 'PR ' . $pr . ' • Revision Accepted';
+                $body = 'The Admin Assistant accepted the proposed revision for PR ' . $pr . '. You may proceed to review and approve.';
+                foreach ($admins as $a) {
+                    $ins->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$a['user_id'], 'j' => $subject, 'b' => $body]);
+                }
+            }
+            if ($msgId > 0) {
+                $st = $this->pdo->prepare('UPDATE messages SET is_read = TRUE WHERE id = :id AND recipient_id = :me');
+                $st->execute(['id' => $msgId, 'me' => (int)($_SESSION['user_id'] ?? 0)]);
+            }
+            header('Location: /inbox?ok=1');
+        } catch (\Throwable $e) {
+            header('Location: /inbox?error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
+    /** Admin Assistant: Send justification for a revision proposal. */
+    public function justifyRevision(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['admin_assistant','custodian','admin'], true)) { header('Location: /login'); return; }
+        $role = $_SESSION['role'] === 'custodian' ? 'admin_assistant' : $_SESSION['role'];
+        if ($role !== 'admin_assistant' && ($role !== 'admin')) { header('Location: /login'); return; }
+        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        $notes = isset($_POST['notes']) ? trim((string)$_POST['notes']) : '';
+        $msgId = isset($_POST['message_id']) ? (int)$_POST['message_id'] : 0;
+        if ($pr === '' || $notes === '') { header('Location: /inbox'); return; }
+        try {
+            // Record follow-up notes on all requests
+            $rows = $this->requests()->getGroupDetails($pr);
+            foreach ($rows as $r) {
+                $this->requests()->followUpRequest((int)$r['request_id'], (int)($_SESSION['user_id'] ?? 0), 'Justification from Admin Assistant: ' . $notes);
+            }
+            // Notify Admin users
+            $stU = $this->pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role = 'admin'");
+            $admins = $stU ? $stU->fetchAll() : [];
+            if ($admins) {
+                $ins = $this->pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
+                $subject = 'PR ' . $pr . ' • Justification Provided';
+                $body = "The Admin Assistant provided a justification for PR $pr:\n\n" . $notes;
+                foreach ($admins as $a) {
+                    $ins->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$a['user_id'], 'j' => $subject, 'b' => $body]);
+                }
+            }
+            if ($msgId > 0) {
+                $st = $this->pdo->prepare('UPDATE messages SET is_read = TRUE WHERE id = :id AND recipient_id = :me');
+                $st->execute(['id' => $msgId, 'me' => (int)($_SESSION['user_id'] ?? 0)]);
+            }
+            header('Location: /inbox?ok=1');
+        } catch (\Throwable $e) {
+            header('Location: /inbox?error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
     /** Mark a message as read for the current user. */
     public function markMessageRead(): void
     {

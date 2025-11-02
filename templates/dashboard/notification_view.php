@@ -103,6 +103,26 @@
                     </div>
                 </div>
             <?php endif; ?>
+
+            <?php if (($_SESSION['role'] ?? null) === 'admin_assistant' && stripos((string)$message['subject'], 'Revision Proposed') !== false && !empty($prNumber)): ?>
+                <div class="card" style="margin-top:14px;">
+                    <h3 style="margin-top:0;">Revision Proposed</h3>
+                    <p class="muted" style="margin-top:0;">The Admin proposed revised quantities for PR <?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>. You can accept or provide justification.</p>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start;">
+                        <form method="POST" action="/assistant/pr/revision/accept" onsubmit="return confirm('Accept the proposed revision for PR <?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>?');">
+                            <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>" />
+                            <input type="hidden" name="message_id" value="<?= (int)$message['id'] ?>" />
+                            <button class="btn primary" type="submit">Accept Revision</button>
+                        </form>
+                        <form method="POST" action="/assistant/pr/revision/justify" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                            <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>" />
+                            <input type="hidden" name="message_id" value="<?= (int)$message['id'] ?>" />
+                            <textarea name="notes" placeholder="Provide justification" style="min-width:300px; min-height:40px;"></textarea>
+                            <button class="btn" type="submit">Send Justification</button>
+                        </form>
+                    </div>
+                </div>
+            <?php endif; ?>
         </div>
     </main>
 </div>

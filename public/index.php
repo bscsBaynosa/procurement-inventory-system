@@ -578,6 +578,17 @@ if ($method === 'POST' && $path === '/admin/pr/revise') {
 	$admin->revisePR();
 	exit;
 }
+// Admin Assistant: revision responses
+if ($method === 'POST' && $path === '/assistant/pr/revision/accept') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['admin_assistant','custodian','admin'], true)) { header('Location: /login'); exit; }
+	$admin->acceptRevision();
+	exit;
+}
+if ($method === 'POST' && $path === '/assistant/pr/revision/justify') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['admin_assistant','custodian','admin'], true)) { header('Location: /login'); exit; }
+	$admin->justifyRevision();
+	exit;
+}
 
 // Settings (profile)
 if ($method === 'GET' && $path === '/settings') {
