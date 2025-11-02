@@ -24,6 +24,10 @@
         .btn.danger{ background:#dc2626; color:#fff; border:0; }
         input.qty{ width:90px; padding:6px 8px; border:1px solid var(--border); border-radius:8px; }
         .row{ display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+        .input{ padding:8px 10px; border:1px solid var(--border); border-radius:8px; background:var(--card); color:var(--text); }
+        .input.full{ width:100%; box-sizing:border-box; }
+        .actions-row{ display:grid; grid-template-columns: auto 1fr auto 1fr auto; gap:10px; align-items:center; margin-top:10px; }
+        @media (max-width: 1000px){ .actions-row{ grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
@@ -85,25 +89,28 @@
                 </tbody>
             </table>
 
-            <div style="margin-top:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                <input type="text" name="revision_notes" placeholder="Revision notes (optional)" style="min-width:260px; padding:8px 10px; border:1px solid var(--border); border-radius:8px;" />
+            <div style="margin-top:12px; display:flex; gap:10px; align-items:center;">
+                <input class="input full" type="text" name="revision_notes" placeholder="Revision notes (optional)" />
                 <button class="btn" type="submit">Revise</button>
-                <form method="POST" action="/admin/pr/approve" onsubmit="return confirm('Approve PR <?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?>?');">
-                    <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?>" />
-                    <button class="btn primary" type="submit">Approve</button>
-                </form>
-                <form method="POST" action="/admin/pr/reject" onsubmit="return confirm('Reject PR <?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?>?');" style="display:inline-flex; gap:8px; align-items:center;">
-                    <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?>" />
-                    <input type="text" name="notes" placeholder="Reason (optional)" style="min-width:260px; padding:8px 10px; border:1px solid var(--border); border-radius:8px;" />
-                    <button class="btn danger" type="submit">Reject</button>
-                </form>
-                <form method="POST" action="/admin/pr/recheck" onsubmit="return confirm('Send back PR <?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?> for recheck?');" style="display:inline-flex; gap:8px; align-items:center;">
-                    <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?>" />
-                    <input type="text" name="notes" placeholder="Recheck note (optional)" style="min-width:260px; padding:8px 10px; border:1px solid var(--border); border-radius:8px;" />
-                    <button class="btn" type="submit">Send back for recheck</button>
-                </form>
             </div>
         </form>
+
+        <div class="actions-row">
+            <form method="POST" action="/admin/pr/approve" onsubmit="return confirm('Approve PR <?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?>?');">
+                <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?>" />
+                <button class="btn primary" type="submit">Approve</button>
+            </form>
+            <form method="POST" action="/admin/pr/reject" onsubmit="return confirm('Reject PR <?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?>?');" style="display:flex; gap:8px; align-items:center;">
+                <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?>" />
+                <input class="input full" type="text" name="notes" placeholder="Reason (optional)" />
+                <button class="btn danger" type="submit">Reject</button>
+            </form>
+            <form method="POST" action="/admin/pr/recheck" onsubmit="return confirm('Send back PR <?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?> for recheck?');" style="display:flex; gap:8px; align-items:center;">
+                <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?>" />
+                <input class="input full" type="text" name="notes" placeholder="Recheck note (optional)" />
+                <button class="btn" type="submit">Send back for recheck</button>
+            </form>
+        </div>
     </main>
 </div>
 </body>
