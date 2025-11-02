@@ -804,7 +804,10 @@ class CustodianController extends BaseController
     /** Purchase Request create form */
     public function newRequest(): void
     {
-    if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['admin_assistant', 'admin'], true)) { header('Location: /login'); return; }
+    $role = $_SESSION['role'] ?? '';
+    // Normalize legacy role name to the new alias used across routes
+    if ($role === 'custodian') { $role = 'admin_assistant'; }
+    if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant', 'admin'], true)) { header('Location: /login'); return; }
         $branchId = $_SESSION['branch_id'] ?? null;
         $items = $this->inventory()->listInventory($branchId ? (int)$branchId : null);
         $prPreview = $this->requests()->getNextPrNumberPreview();
