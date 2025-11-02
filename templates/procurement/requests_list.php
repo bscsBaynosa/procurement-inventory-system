@@ -129,7 +129,7 @@
                                         <button class="btn" type="submit">Archive</button>
                                     </form>
                                     <?php if ($canCreatePo): ?>
-                                        <a class="btn primary" href="/procurement/po" title="Proceed to PO creation for items under this PR">Proceed to PO</a>
+                                        <a class="btn primary" href="/procurement/po/create?pr=<?= urlencode((string)$g['pr_number']) ?>" title="Proceed to PO creation for items under this PR">Proceed to PO</a>
                                     <?php elseif ($awaitingCanvass): ?>
                                         <span class="muted">Awaiting Canvassing Approval</span>
                                     <?php elseif (!$canProcess): ?>

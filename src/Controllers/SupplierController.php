@@ -295,4 +295,76 @@ class SupplierController extends BaseController
         $del->execute(['id' => $rowId]);
         header('Location: /supplier/packages?item_removed=1#pkg-' . (int)$pkgId);
     }
+
+    // --- Purchase Orders assigned to Supplier ---
+    public function posPage(): void
+    {
+        if (($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); return; }
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        // Ensure table exists (created by ProcurementController normally)
+        try {
+            $this->pdo->exec("CREATE TABLE IF NOT EXISTS purchase_orders (id BIGSERIAL PRIMARY KEY, pr_number VARCHAR(64) NOT NULL, po_number VARCHAR(64) NOT NULL, supplier_id BIGINT NOT NULL, status VARCHAR(64) NOT NULL DEFAULT 'draft', pdf_path TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());");
+        } catch (\Throwable $e) {}
+        $st = $this->pdo->prepare('SELECT id, pr_number, po_number, status, pdf_path, created_at FROM purchase_orders WHERE supplier_id = :sid ORDER BY created_at DESC');
+        $st->execute(['sid' => $me]);
+        $pos = $st->fetchAll();
+        $this->render('dashboard/supplier_pos.php', ['pos' => $pos]);
+    }
+
+    public function poRespond(): void
+    {
+        if (($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); return; }
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        $poId = (int)($_POST['po_id'] ?? 0);
+        $payment = trim((string)($_POST['payment_method'] ?? ''));
+        $delivery = trim((string)($_POST['delivery_option'] ?? ''));
+        $message = trim((string)($_POST['message'] ?? ''));
+        // Optional: attach deal PDF path from a file upload (out of scope here). We allow message only.
+        if ($poId <= 0) { header('Location: /supplier/pos?error=Invalid+PO'); return; }
+        // Verify ownership
+        $st = $this->pdo->prepare('SELECT pr_number FROM purchase_orders WHERE id=:id AND supplier_id=:sid');
+        $st->execute(['id' => $poId, 'sid' => $me]);
+        $pr = $st->fetchColumn();
+        if (!$pr) { header('Location: /supplier/pos?error=Not+found'); return; }
+        // Ensure messages has attachment columns
+        try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
+        try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
+        // Send response to procurement
+        $subject = 'Supplier PO Response • PR ' . (string)$pr;
+        $body = "Payment: $payment\nDelivery: $delivery\n\n" . ($message !== '' ? $message : '');
+        $recipients = $this->pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('procurement_manager','procurement')")->fetchAll();
+        if ($recipients) {
+            $ins = $this->pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
+            foreach ($recipients as $row) { $ins->execute(['s' => $me, 'r' => (int)$row['user_id'], 'j' => $subject, 'b' => $body]); }
+        }
+        // Mark PO as responded
+        $this->pdo->prepare("UPDATE purchase_orders SET status='supplier_response_submitted', updated_at=NOW() WHERE id=:id")
+            ->execute(['id' => $poId]);
+        // Update PR group status
+        try { (new \App\Services\RequestService())->updateGroupStatus((string)$pr, 'supplier_response', $me, 'Supplier responded to PO'); } catch (\Throwable $ignored) {}
+        header('Location: /supplier/pos?responded=1');
+    }
+
+    public function downloadPO(): void
+    {
+        if (!isset($_SESSION['user_id'])) { header('Location: /login'); return; }
+        $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+        if ($id <= 0) { http_response_code(404); echo 'Not found'; return; }
+        // Load PO
+        $st = $this->pdo->prepare('SELECT supplier_id, pdf_path FROM purchase_orders WHERE id = :id');
+        $st->execute(['id' => $id]);
+        $row = $st->fetch();
+        if (!$row) { http_response_code(404); echo 'Not found'; return; }
+        $role = $_SESSION['role'] ?? '';
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        // Authorization: supplier owner OR procurement/admin roles
+        if (!($role === 'admin' || $role === 'procurement' || $role === 'procurement_manager' || ($role === 'supplier' && $me === (int)$row['supplier_id']))) {
+            http_response_code(403); echo 'Forbidden'; return; }
+        $path = (string)($row['pdf_path'] ?? '');
+        if ($path === '' || !is_file($path)) { http_response_code(404); echo 'File not found'; return; }
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: attachment; filename="' . basename($path) . '"');
+        header('Content-Length: ' . (string)filesize($path));
+        readfile($path);
+    }
 }

@@ -124,6 +124,109 @@ class PDFService
 		$mpdf->Output($filename, 'D');
 	}
 
+	/**
+	 * Generate a Purchase Order PDF file closely matching the provided form.
+	 * @param array $po Associative data: po_number, date, vendor_name, vendor_address, vendor_tin, reference, terms, center, items[], notes, deliver_to, look_for, prepared_by, reviewed_by (optional), approved_by
+	 *                  Each item: [description, unit, qty, unit_price, total]
+	 * @param string $filePath Destination absolute file path
+	 */
+	public function generatePurchaseOrderPDFToFile(array $po, string $filePath): void
+	{
+		$mpdf = new Mpdf(['format' => 'A4', 'orientation' => 'P', 'margin_left' => 8, 'margin_right' => 8, 'margin_top' => 8, 'margin_bottom' => 8]);
+		$poNum = htmlspecialchars((string)($po['po_number'] ?? ''));
+		$date = htmlspecialchars((string)($po['date'] ?? date('Y-m-d')));
+		$vendor = htmlspecialchars((string)($po['vendor_name'] ?? ''));
+		$addr = nl2br(htmlspecialchars((string)($po['vendor_address'] ?? ''), ENT_QUOTES, 'UTF-8'));
+		$tin = htmlspecialchars((string)($po['vendor_tin'] ?? ''));
+		$ref = htmlspecialchars((string)($po['reference'] ?? ''));
+		$terms = htmlspecialchars((string)($po['terms'] ?? ''));
+		$center = htmlspecialchars((string)($po['center'] ?? ''));
+		$notes = nl2br(htmlspecialchars((string)($po['notes'] ?? ''), ENT_QUOTES, 'UTF-8'));
+		$deliverTo = nl2br(htmlspecialchars((string)($po['deliver_to'] ?? ''), ENT_QUOTES, 'UTF-8'));
+		$lookFor = htmlspecialchars((string)($po['look_for'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$prepared = htmlspecialchars((string)($po['prepared_by'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$reviewed = htmlspecialchars((string)($po['reviewed_by'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$approved = htmlspecialchars((string)($po['approved_by'] ?? ''), ENT_QUOTES, 'UTF-8');
+
+		$header = '<div style="text-align:center;font-weight:800;font-size:20px;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
+			. '<div style="text-align:center;font-size:10px;margin-bottom:6px;">Address: Basement, Marian Medical Arts Bldg., Dahlia Street, West Fairview, Quezon City</div>';
+		// Top grid Vendor vs PO meta
+		$top = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-bottom:6px;">'
+			. '<tr>'
+			. '<td style="width:55%;vertical-align:top;">'
+			. '<div style="font-size:11px;margin-bottom:6px;"><strong>VENDOR:</strong><br>' . $vendor . '</div>'
+			. '<div style="font-size:11px;margin-bottom:6px;"><strong>ADDRESS:</strong><br>' . $addr . '</div>'
+			. '<div style="font-size:11px;"><strong>VAT/TIN:</strong> ' . $tin . '</div>'
+			. '</td>'
+			. '<td style="vertical-align:top;">'
+			. '<table width="100%" border="0" cellspacing="0" cellpadding="4" style="font-size:11px;">'
+			. '<tr><td style="width:40%;border-bottom:1px solid #ccc;">PURCHASE ORDER</td><td style="text-align:right;border-bottom:1px solid #ccc;">' . $poNum . '</td></tr>'
+			. '<tr><td style="border-bottom:1px solid #ccc;">CENTER</td><td style="border-bottom:1px solid #ccc;">' . $center . '</td></tr>'
+			. '<tr><td style="border-bottom:1px solid #ccc;">DATE</td><td style="border-bottom:1px solid #ccc;">' . $date . '</td></tr>'
+			. '<tr><td style="border-bottom:1px solid #ccc;">REFERENCE:</td><td style="border-bottom:1px solid #ccc;">' . $ref . '</td></tr>'
+			. '<tr><td style="border-bottom:1px solid #ccc;">TERMS OF PAYMENT:</td><td style="border-bottom:1px solid #ccc;">' . $terms . '</td></tr>'
+			. '</table>'
+			. '</td>'
+			. '</tr>'
+			. '</table>';
+
+		// Items table
+		$itemsRows = '';
+		$total = 0.0;
+		foreach (($po['items'] ?? []) as $it) {
+			$desc = htmlspecialchars((string)($it['description'] ?? ''), ENT_QUOTES, 'UTF-8');
+			$unit = htmlspecialchars((string)($it['unit'] ?? ''), ENT_QUOTES, 'UTF-8');
+			$qty = (int)($it['qty'] ?? 0);
+			$price = (float)($it['unit_price'] ?? 0);
+			$line = (float)($it['total'] ?? ($qty * $price));
+			$total += $line;
+			$itemsRows .= '<tr>'
+				. '<td>' . $desc . '</td>'
+				. '<td style="text-align:center;">' . $unit . '</td>'
+				. '<td style="text-align:center;">' . $qty . '</td>'
+				. '<td style="text-align:right;">' . number_format($price, 2) . '</td>'
+				. '<td style="text-align:right;">' . number_format($line, 2) . '</td>'
+				. '</tr>';
+		}
+		// Optional nothing follows line to visually close
+		$itemsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="6">'
+			. '<thead><tr><th>ITEM DESCRIPTION</th><th style="width:8%;">U/M</th><th style="width:8%;">QTY</th><th style="width:15%;">UNIT PRICE</th><th style="width:15%;">TOTAL</th></tr></thead>'
+			. '<tbody>' . $itemsRows . '</tbody>'
+			. '<tfoot><tr><td colspan="4" style="text-align:right;font-weight:700;">TOTAL:</td><td style="text-align:right;font-weight:700;">₱ ' . number_format($total, 2) . '</td></tr></tfoot>'
+			. '</table>';
+
+		// Notes, delivery and signatures
+		$footer = '<div style="margin-top:8px;font-size:11px;">'
+			. '<div style="margin-bottom:6px;"><strong>NOTES & INSTRUCTIONS:</strong><br>' . $notes . '</div>'
+			. '<div style="margin-bottom:8px;text-align:center;">'
+			. '<div style="font-weight:700;">PLEASE DELIVER TO:</div>'
+			. '<div>PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
+			. '<div>' . $deliverTo . '</div>'
+			. '<div>LOOK FOR: ' . $lookFor . '</div>'
+			. '</div>'
+			. '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="font-size:11px;">'
+			. '<tr>'
+			. '<td style="width:33%;vertical-align:bottom;">'
+			. '<div style="height:48px;"></div>'
+			. '<div style="border-top:1px solid #999;text-align:center;padding-top:6px;">PREPARED BY:<br>' . $prepared . '<br><small>Procurement & Gen. Services</small></div>'
+			. '</td>'
+			. '<td style="width:33%;vertical-align:bottom;">'
+			. '<div style="height:48px;"></div>'
+			. '<div style="border-top:1px solid #999;text-align:center;padding-top:6px;">REVIEWED BY:<br>' . ($reviewed !== '' ? $reviewed : '&nbsp;') . '<br><small>Finance Officer</small></div>'
+			. '</td>'
+			. '<td style="width:34%;vertical-align:bottom;">'
+			. '<div style="height:48px;"></div>'
+			. '<div style="border-top:1px solid #999;text-align:center;padding-top:6px;">APPROVED BY:<br>' . $approved . '<br><small>Administrator</small></div>'
+			. '</td>'
+			. '</tr>'
+			. '</table>'
+			. '</div>';
+
+		$html = $header . $top . $itemsTable . $footer;
+		$mpdf->WriteHTML($html);
+		$mpdf->Output($filePath, 'F');
+	}
+
 	public function generateConsumptionReportPDF(array $meta, array $rows, string $output = 'D', ?string $fileName = null): void
 	{
 		$mpdf = $this->createMpdf();

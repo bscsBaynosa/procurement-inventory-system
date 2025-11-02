@@ -72,10 +72,11 @@ try {
                 <svg viewBox="0 0 24 24"><path d="M3 3h18v14H6l-3 3V3z"/></svg>
                 Purchase Requests
             </a>
-            <a href="/procurement/po" class="<?= nav_active('/procurement/po', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Purchase Orders</a>
+            <a href="/procurement/pos" class="<?= nav_active('/procurement/pos', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Purchase Orders</a>
         <?php elseif ($role === 'supplier'): ?>
             <a href="/supplier/items" class="<?= nav_active('/supplier/items', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Items & Pricing</a>
             <a href="/supplier/packages" class="<?= nav_active('/supplier/packages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 6l9-4 9 4-9 4-9-4zm0 6l9 4 9-4M3 18l9 4 9-4"/></svg> Package Deals</a>
+            <a href="/supplier/pos" class="<?= nav_active('/supplier/pos', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Purchase Orders</a>
         <?php endif; ?>
         <?php if ($role !== 'guest'): ?>
             <a href="/inbox" class="<?= nav_active_many(['/inbox','/notifications'], $path) ?>">

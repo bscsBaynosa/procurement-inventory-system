@@ -191,6 +191,66 @@ class AdminController extends BaseController
     }
 
     /**
+     * POST: Approve a submitted Purchase Order and notify Procurement and Supplier.
+     */
+    public function approvePO(): void
+    {
+        if (($_SESSION['role'] ?? '') !== 'admin') { header('Location: /login'); return; }
+        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        $poId = isset($_POST['po_id']) ? (int)$_POST['po_id'] : 0;
+        if ($pr === '') { header('Location: /inbox?error=No+PR'); return; }
+        // Find the PO
+        $st = $poId > 0
+            ? $this->pdo->prepare('SELECT id, po_number, supplier_id, pdf_path FROM purchase_orders WHERE id=:id AND pr_number=:pr')
+            : $this->pdo->prepare("SELECT id, po_number, supplier_id, pdf_path FROM purchase_orders WHERE pr_number=:pr ORDER BY created_at DESC LIMIT 1");
+        $st->execute($poId > 0 ? ['id' => $poId, 'pr' => $pr] : ['pr' => $pr]);
+        $po = $st->fetch();
+        if (!$po) { header('Location: /inbox?error=PO+not+found'); return; }
+        $this->pdo->prepare("UPDATE purchase_orders SET status='po_admin_approved', updated_at=NOW() WHERE id=:id")
+            ->execute(['id' => (int)$po['id']]);
+        // Notify Procurement (all) and Supplier with the PO attachment
+        try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
+        try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
+        $subject = 'PO Approved • PR ' . $pr . ' • PO ' . (string)$po['po_number'];
+        $body = 'Your Purchase Order has been approved by Admin.';
+        $file = (string)($po['pdf_path'] ?? '');
+        // Procurement recipients
+        $man = $this->pdo->query("SELECT user_id FROM users WHERE is_active=TRUE AND role IN ('procurement_manager','procurement')")->fetchAll();
+        if ($man) {
+            $ins = $this->pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)');
+            foreach ($man as $row) { $ins->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$row['user_id'], 'j' => $subject, 'b' => $body, 'an' => ($file !== '' ? basename($file) : null), 'ap' => ($file !== '' ? $file : null)]); }
+        }
+        // Supplier recipient
+        $ins2 = $this->pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)');
+        $ins2->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$po['supplier_id'], 'j' => 'New Purchase Order • ' . (string)$po['po_number'], 'b' => 'A PO has been issued to you. Please review and respond with your terms.', 'an' => ($file !== '' ? basename($file) : null), 'ap' => ($file !== '' ? $file : null)]);
+        // Update PR group status
+        try { $this->requests()->updateGroupStatus($pr, 'po_admin_approved', (int)($_SESSION['user_id'] ?? 0), 'PO approved by admin'); } catch (\Throwable $ignored) {}
+        header('Location: /inbox?po_approved=1');
+    }
+
+    /**
+     * POST: Reject a submitted Purchase Order
+     */
+    public function rejectPO(): void
+    {
+        if (($_SESSION['role'] ?? '') !== 'admin') { header('Location: /login'); return; }
+        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        $poId = isset($_POST['po_id']) ? (int)$_POST['po_id'] : 0;
+        $reason = trim((string)($_POST['reason'] ?? ''));
+        if ($pr === '') { header('Location: /inbox?error=No+PR'); return; }
+        $st = $poId > 0
+            ? $this->pdo->prepare('SELECT id FROM purchase_orders WHERE id=:id AND pr_number=:pr')
+            : $this->pdo->prepare("SELECT id FROM purchase_orders WHERE pr_number=:pr ORDER BY created_at DESC LIMIT 1");
+        $st->execute($poId > 0 ? ['id' => $poId, 'pr' => $pr] : ['pr' => $pr]);
+        $po = $st->fetch();
+        if (!$po) { header('Location: /inbox?error=PO+not+found'); return; }
+        $this->pdo->prepare("UPDATE purchase_orders SET status='po_rejected', updated_at=NOW() WHERE id=:id")
+            ->execute(['id' => (int)$po['id']]);
+        try { $this->requests()->updateGroupStatus($pr, 'po_rejected', (int)($_SESSION['user_id'] ?? 0), $reason !== '' ? ('PO rejected: ' . $reason) : 'PO rejected'); } catch (\Throwable $ignored) {}
+        header('Location: /inbox?po_rejected=1');
+    }
+
+    /**
      * Simple Users page for admins: list users and provide a quick create form.
      */
     public function users(): void

@@ -57,6 +57,10 @@
                 if (preg_match('/PR\s*([0-9\-]+)/i', (string)($message['subject'] ?? ''), $mm)) {
                     $prNumber = $mm[1];
                 }
+                $poNumber = null;
+                if (preg_match('/PO\s*([0-9A-Za-z\-]+)/i', (string)($message['subject'] ?? ''), $mpo)) {
+                    $poNumber = $mpo[1];
+                }
             ?>
             <div style="margin-top:16px; display:flex; gap:10px; align-items:center;">
                 <?php if ($requestId > 0): ?>
@@ -98,6 +102,24 @@
                             <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>" />
                             <input type="hidden" name="message_id" value="<?= (int)$message['id'] ?>" />
                             <input type="text" name="notes" placeholder="Reason (optional)" style="min-width:240px;" />
+                            <button class="btn danger" type="submit">Reject</button>
+                        </form>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <?php if (($_SESSION['role'] ?? null) === 'admin' && stripos((string)$message['subject'], 'PO For Approval') !== false && !empty($prNumber)): ?>
+                <div class="card" style="margin-top:14px;">
+                    <h3 style="margin-top:0;">Purchase Order Approval</h3>
+                    <div class="muted" style="font-size:12px;margin:4px 0 8px;">PR <?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?><?= $poNumber? ' • PO ' . htmlspecialchars((string)$poNumber, ENT_QUOTES, 'UTF-8') : '' ?></div>
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                        <form method="POST" action="/admin/po/approve" onsubmit="return confirm('Approve PO for PR <?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>?');">
+                            <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>" />
+                            <button class="btn primary" type="submit">Approve PO</button>
+                        </form>
+                        <form method="POST" action="/admin/po/reject" onsubmit="return confirm('Reject PO for PR <?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>?');" style="display:flex; gap:8px; align-items:center;">
+                            <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$prNumber, ENT_QUOTES, 'UTF-8') ?>" />
+                            <input type="text" name="reason" placeholder="Reason (optional)" style="min-width:240px;" />
                             <button class="btn danger" type="submit">Reject</button>
                         </form>
                     </div>

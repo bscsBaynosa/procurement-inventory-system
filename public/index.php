@@ -302,23 +302,52 @@ if ($method === 'POST' && $path === '/manager/requests/send-for-approval') {
 	$manager->sendForAdminApproval();
 	exit;
 }
-if ($method === 'GET' && $path === '/manager/requests/generate-po') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','admin'], true)) { header('Location: /login'); exit; }
-	$manager->generatePO();
+
+// Procurement: Purchase Order creation
+if ($method === 'GET' && $path === '/procurement/po/create') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->poCreate();
+	exit;
+}
+if ($method === 'POST' && $path === '/procurement/po/create') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->poSubmit();
 	exit;
 }
 
-// Procurement: PO module
-if ($method === 'GET' && $path === '/procurement/po') {
+// Procurement: Purchase Orders list (new consolidated view)
+if ($method === 'GET' && $path === '/procurement/pos') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
-	$manager->po();
+	$manager->poList();
 	exit;
 }
-if ($method === 'GET' && $path === '/procurement/po/create') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
-	$manager->createPO();
+
+// Admin: PO approval/rejection
+if ($method === 'POST' && $path === '/admin/po/approve') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') { header('Location: /login'); exit; }
+	$admin->approvePO();
 	exit;
 }
+if ($method === 'POST' && $path === '/admin/po/reject') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') { header('Location: /login'); exit; }
+	$admin->rejectPO();
+	exit;
+}
+
+// Supplier: POs list and response
+if ($method === 'GET' && $path === '/supplier/pos') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
+	$supplier->posPage();
+	exit;
+}
+if ($method === 'POST' && $path === '/supplier/po/respond') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
+	$supplier->poRespond();
+	exit;
+}
+// Legacy generate PO route removed in favor of unified PR-group → PO flow
+
+// Legacy Procurement PO list/create routes removed; use /procurement/po/create (GET/POST) with pr=...
 
 // Inbox (all messages) for all roles
 if ($method === 'GET' && $path === '/notifications') {
@@ -345,6 +374,13 @@ if ($method === 'GET' && $path === '/inbox/view') {
 if ($method === 'GET' && $path === '/inbox/download') {
 	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
 	$admin->downloadMessageAttachment();
+	exit;
+}
+
+// Secure PO PDF download
+if ($method === 'GET' && $path === '/po/download') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$supplier->downloadPO();
 	exit;
 }
 
@@ -773,7 +809,25 @@ if ($method === 'GET' && $path === '/setup/status') {
 				$counts[] = sprintf("count:%s=%d", $t, $c);
 			}
 		}
-		echo "OK\n" . implode("\n", $checks) . "\n" . implode("\n", $counts) . "\n";
+		// DB meta: size, connections, server version (best-effort)
+		$meta = [];
+		try {
+			$sizePretty = $pdo->query("SELECT pg_size_pretty(pg_database_size(current_database()))")->fetchColumn();
+			$sizeBytes = (string)$pdo->query("SELECT pg_database_size(current_database())")->fetchColumn();
+			$meta[] = 'db_size=' . ($sizePretty ?: 'unknown') . ' (' . $sizeBytes . ' bytes)';
+		} catch (\Throwable $e) { /* ignore */ }
+		try {
+			$maxCon = (string)$pdo->query("SHOW max_connections")->fetchColumn();
+			// Count active connections to this DB
+			$activeCon = (int)$pdo->query("SELECT COUNT(*) FROM pg_stat_activity WHERE datname = current_database()")
+								  ->fetchColumn();
+			$meta[] = 'connections=' . $activeCon . '/' . ($maxCon !== '' ? $maxCon : 'unknown');
+		} catch (\Throwable $e) { /* ignore */ }
+		try {
+			$ver = (string)$pdo->query("SELECT version()")->fetchColumn();
+			$meta[] = 'server_version=' . ($ver ?: 'unknown');
+		} catch (\Throwable $e) { /* ignore */ }
+		echo "OK\n" . implode("\n", $checks) . "\n" . implode("\n", $counts) . "\n" . implode("\n", $meta) . "\n";
 	} catch (Throwable $e) {
 		http_response_code(500);
 		echo 'ERROR ' . $e->getMessage();

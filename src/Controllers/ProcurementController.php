@@ -31,6 +31,143 @@ class ProcurementController extends BaseController
     private function inventory(): InventoryService { return $this->inventory ??= new InventoryService(); }
     private function pdf(): PDFService { return $this->pdf ??= new PDFService(); }
 
+    // --- Purchase Orders ---
+    private function ensurePoTables(): void
+    {
+        $pdo = \App\Database\Connection::resolve();
+        // purchase_orders header
+        $pdo->exec("CREATE TABLE IF NOT EXISTS purchase_orders (
+            id BIGSERIAL PRIMARY KEY,
+            pr_number VARCHAR(64) NOT NULL,
+            po_number VARCHAR(64) NOT NULL,
+            supplier_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
+            vendor_name VARCHAR(255),
+            vendor_address TEXT,
+            vendor_tin VARCHAR(64),
+            center VARCHAR(128),
+            reference VARCHAR(255),
+            terms TEXT,
+            notes TEXT,
+            deliver_to TEXT,
+            look_for VARCHAR(255),
+            status VARCHAR(64) NOT NULL DEFAULT 'draft',
+            total NUMERIC(14,2) NOT NULL DEFAULT 0,
+            pdf_path TEXT,
+            created_by BIGINT NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )");
+        // purchase_order_items lines
+        $pdo->exec("CREATE TABLE IF NOT EXISTS purchase_order_items (
+            id BIGSERIAL PRIMARY KEY,
+            po_id BIGINT NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+            description TEXT NOT NULL,
+            unit VARCHAR(32) NOT NULL,
+            qty INTEGER NOT NULL DEFAULT 0,
+            unit_price NUMERIC(12,2) NOT NULL DEFAULT 0,
+            line_total NUMERIC(12,2) NOT NULL DEFAULT 0
+        )");
+    }
+
+    /** GET: Create PO form for a canvassing-approved PR */
+    public function poCreate(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
+        $pr = isset($_GET['pr']) ? trim((string)$_GET['pr']) : '';
+        if ($pr === '') { header('Location: /manager/requests'); return; }
+        $rows = $this->requests()->getGroupDetails($pr);
+        if (!$rows) { header('Location: /manager/requests'); return; }
+        // Require canvassing_approved to proceed
+        $status = (string)($rows[0]['status'] ?? '');
+        if ($status !== 'canvassing_approved' && $status !== 'po_rejected') { header('Location: /manager/requests?error=PO+allowed+only+after+canvassing+approval'); return; }
+        $this->ensurePoTables();
+        // Load suppliers list (optional: narrow to previously selected suppliers)
+        $pdo = \App\Database\Connection::resolve();
+        $suppliers = $pdo->query("SELECT user_id, full_name FROM users WHERE is_active=TRUE AND role='supplier' ORDER BY full_name ASC")->fetchAll();
+        $this->render('procurement/po_create.php', [ 'pr' => $pr, 'rows' => $rows, 'suppliers' => $suppliers ]);
+    }
+
+    /** POST: Create PO, generate PDF, and send to Admin for approval */
+    public function poSubmit(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
+        $this->ensurePoTables();
+        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        $supplierId = (int)($_POST['supplier_id'] ?? 0);
+        $poNumber = isset($_POST['po_number']) ? trim((string)$_POST['po_number']) : '';
+        if ($pr === '' || $supplierId <= 0 || $poNumber === '') { header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Missing+fields'); return; }
+        $vendorName = trim((string)($_POST['vendor_name'] ?? ''));
+        $vendorAddress = trim((string)($_POST['vendor_address'] ?? ''));
+        $vendorTin = trim((string)($_POST['vendor_tin'] ?? ''));
+        $center = trim((string)($_POST['center'] ?? ''));
+        $reference = trim((string)($_POST['reference'] ?? ''));
+        $terms = trim((string)($_POST['terms'] ?? ''));
+        $notes = trim((string)($_POST['notes'] ?? ''));
+        $deliverTo = trim((string)($_POST['deliver_to'] ?? 'MHI Bldg., New York St., Brgy. Immaculate Concepcion, Cubao, Quezon City'));
+        $lookFor = trim((string)($_POST['look_for'] ?? (string)($_SESSION['full_name'] ?? '')));
+        $date = date('Y-m-d');
+        // Items arrays
+        $descs = $_POST['item_desc'] ?? [];
+        $units = $_POST['item_unit'] ?? [];
+        $qtys = $_POST['item_qty'] ?? [];
+        $prices = $_POST['item_price'] ?? [];
+        $items = [];
+        $total = 0.0;
+        $n = min(count($descs), count($units), count($qtys), count($prices));
+        for ($i=0; $i<$n; $i++) {
+            $desc = trim((string)$descs[$i]); if ($desc === '') continue;
+            $unit = trim((string)$units[$i]);
+            $qty = (int)$qtys[$i];
+            $price = (float)$prices[$i];
+            $line = $qty * $price; $total += $line;
+            $items[] = [ 'description' => $desc, 'unit' => $unit, 'qty' => $qty, 'unit_price' => $price, 'total' => $line ];
+        }
+        if (empty($items)) { header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Add+at+least+one+item'); return; }
+        $pdo = \App\Database\Connection::resolve();
+        // Insert PO
+        $ins = $pdo->prepare('INSERT INTO purchase_orders (pr_number, po_number, supplier_id, vendor_name, vendor_address, vendor_tin, center, reference, terms, notes, deliver_to, look_for, status, total, created_by) VALUES (:pr,:po,:sid,:vn,:va,:vt,:ce,:ref,:te,:no,:dt,:lf,\'submitted\',:tot,:uid) RETURNING id');
+        $ins->execute(['pr' => $pr, 'po' => $poNumber, 'sid' => $supplierId, 'vn' => $vendorName ?: null, 'va' => $vendorAddress ?: null, 'vt' => $vendorTin ?: null, 'ce' => $center ?: null, 'ref' => $reference ?: null, 'te' => $terms ?: null, 'no' => $notes ?: null, 'dt' => $deliverTo ?: null, 'lf' => $lookFor ?: null, 'tot' => $total, 'uid' => (int)($_SESSION['user_id'] ?? 0)]);
+        $poId = (int)$ins->fetchColumn();
+        $lineIns = $pdo->prepare('INSERT INTO purchase_order_items (po_id, description, unit, qty, unit_price, line_total) VALUES (:po,:d,:u,:q,:p,:t)');
+        foreach ($items as $it) { $lineIns->execute(['po' => $poId, 'd' => $it['description'], 'u' => $it['unit'], 'q' => $it['qty'], 'p' => $it['unit_price'], 't' => $it['total']]); }
+        // Generate PDF to storage
+        $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
+        if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+        $file = $dir . DIRECTORY_SEPARATOR . 'PO-' . preg_replace('/[^A-Za-z0-9_-]/','_', $poNumber) . '.pdf';
+        $this->pdf()->generatePurchaseOrderPDFToFile([
+            'po_number' => $poNumber,
+            'date' => $date,
+            'vendor_name' => $vendorName,
+            'vendor_address' => $vendorAddress,
+            'vendor_tin' => $vendorTin,
+            'reference' => $reference,
+            'terms' => $terms,
+            'center' => $center,
+            'notes' => $notes,
+            'deliver_to' => $deliverTo,
+            'look_for' => $lookFor,
+            'prepared_by' => (string)($_SESSION['full_name'] ?? ''),
+            'approved_by' => '',
+            'items' => $items,
+        ], $file);
+        // Persist pdf path
+        $pdo->prepare('UPDATE purchase_orders SET pdf_path=:p, updated_at=NOW() WHERE id=:id')->execute(['p' => $file, 'id' => $poId]);
+        // Ensure messages has attachment columns
+        try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
+        // Send to Admin for approval
+        $subject = 'PO For Approval • PR ' . $pr . ' • PO ' . $poNumber;
+        $body = 'Please review the attached Purchase Order for PR ' . $pr . ' and approve.';
+        $recipients = $pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('admin')")->fetchAll();
+        if ($recipients) {
+            $insMsg = $pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)');
+            foreach ($recipients as $row) { $insMsg->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$row['user_id'], 'j' => $subject, 'b' => $body, 'an' => basename($file), 'ap' => $file]); }
+        }
+        // Update PR status
+        try { $this->requests()->updateGroupStatus($pr, 'po_submitted', (int)($_SESSION['user_id'] ?? 0), 'PO submitted for admin approval'); } catch (\Throwable $ignored) {}
+        header('Location: /manager/requests?po=1');
+    }
+
     public function index(): void
     {
         if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager', 'procurement', 'admin'], true)) {
@@ -39,16 +176,7 @@ class ProcurementController extends BaseController
         }
 
         $branchId = $_SESSION['branch_id'] ?? null;
-        // If there are approved requests, send Procurement to the PO flow
-        $approved = $this->requests()->getAllRequests([
-            'branch_id' => $branchId ? (int)$branchId : null,
-            // Redirect to PO only when canvassing has been approved
-            'status' => 'canvassing_approved',
-        ]);
-        if (!empty($approved)) {
-            header('Location: /procurement/po');
-            return;
-        }
+        // Keep Procurement on dashboard; PO listing is now at /procurement/pos
         // Grouped view data for dashboard preview table
         $groups = $this->requests()->getRequestsGrouped([
             'branch_id' => $branchId ? (int)$branchId : null,
@@ -58,6 +186,35 @@ class ProcurementController extends BaseController
         ]);
         $branchStats = $this->inventory()->getStatsPerBranch();
         $this->render('dashboard/manager.php', ['groups' => $groups, 'branchStats' => $branchStats]);
+    }
+
+    /**
+     * GET: Purchase Orders list for Procurement.
+     * Shows all POs with supplier, PR, totals, status, and a secure download link.
+     */
+    public function poList(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
+        $this->ensurePoTables();
+        $pdo = \App\Database\Connection::resolve();
+        // Optional filters
+        $status = isset($_GET['status']) && $_GET['status'] !== '' ? (string)$_GET['status'] : null;
+        $supplier = isset($_GET['supplier']) && $_GET['supplier'] !== '' ? (int)$_GET['supplier'] : null;
+        $where = [];
+        $params = [];
+        if ($status !== null) { $where[] = 'po.status = :status'; $params['status'] = $status; }
+        if ($supplier !== null) { $where[] = 'po.supplier_id = :sid'; $params['sid'] = $supplier; }
+        $sql = 'SELECT po.id, po.pr_number, po.po_number, po.status, po.total, po.pdf_path, po.created_at, u.full_name AS supplier_name
+                FROM purchase_orders po
+                JOIN users u ON u.user_id = po.supplier_id';
+        if ($where) { $sql .= ' WHERE ' . implode(' AND ', $where); }
+        $sql .= ' ORDER BY po.created_at DESC';
+        $st = $pdo->prepare($sql);
+        $st->execute($params);
+        $pos = $st->fetchAll();
+        // Load suppliers for filter dropdown
+        $suppliers = $pdo->query("SELECT user_id, full_name FROM users WHERE role='supplier' AND is_active=TRUE ORDER BY full_name ASC")->fetchAll();
+        $this->render('procurement/po_list.php', [ 'pos' => $pos, 'filters' => ['status' => $status, 'supplier' => $supplier], 'suppliers' => $suppliers ]);
     }
 
     /**
