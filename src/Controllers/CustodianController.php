@@ -324,6 +324,14 @@ class CustodianController extends BaseController
         foreach ($ids as $id) {
             $iid = (int)$id; if ($iid > 0) { $_SESSION['pr_cart'][$iid] = ['quantity' => 1]; }
         }
+        $count = is_array($_SESSION['pr_cart']) ? count($_SESSION['pr_cart']) : 0;
+        // If this is an AJAX request, return JSON with the updated count
+        $isAjax = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string)$_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+        if ($isAjax || (isset($_SERVER['HTTP_ACCEPT']) && strpos((string)$_SERVER['HTTP_ACCEPT'], 'application/json') !== false)) {
+            header('Content-Type: application/json');
+            echo json_encode(['ok' => true, 'count' => $count]);
+            return;
+        }
         $ref = $_SERVER['HTTP_REFERER'] ?? '/admin-assistant/inventory';
         header('Location: ' . $ref);
     }

@@ -186,10 +186,9 @@
                         <?php endif; ?>
                     </div>
                 </div>
-                <form method="POST" action="/admin-assistant/inventory/cart-add">
                 <table>
                     <thead>
-                    <tr><th></th><th>Name</th><th>Category</th><th>Stocks</th><th>Status</th><th>Unit</th><th>Actions</th></tr>
+                    <tr><th>Name</th><th>Category</th><th>Stocks</th><th>Status</th><th>Unit</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
                     <?php if (!empty($items)): foreach ($items as $it): 
@@ -200,7 +199,6 @@
                         $threshold = max($min, $halfMaint);
                         $isLow = ($threshold > 0) ? ($qty <= $threshold) : false; ?>
                         <tr>
-                            <td><?php if ($isLow): ?><input type="checkbox" name="item_ids[]" value="<?= (int)$it['item_id'] ?>" /><?php endif; ?></td>
                             <td><?= htmlspecialchars((string)$it['name'], ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)($it['category'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
                             <td>
@@ -249,7 +247,10 @@
                                         <button class="btn muted" type="submit">Save Meta</button>
                                     </form>
                                     <?php if ($isLow): ?>
-                                        <span class="muted" style="font-size:12px;">Low — select at left to request</span>
+                                        <div style="margin-top:6px;">
+                                            <button class="btn primary" type="button" data-add-to-pr data-item-id="<?= (int)$it['item_id'] ?>">Add to Purchase Requisition</button>
+                                            <span class="muted" style="font-size:12px; margin-left:6px;">Low stock</span>
+                                        </div>
                                     <?php endif; ?>
                                 <?php else: ?>
                                     <span class="muted">Select a category to edit stocks</span>
@@ -261,15 +262,45 @@
                     <?php endif; ?>
                     </tbody>
                 </table>
-                <div style="margin-top:10px; display:flex; gap:8px; justify-content:space-between; align-items:center;">
-                    <button class="btn muted" type="submit">Add selected low‑stock items</button>
-                    <a class="btn primary" href="/admin-assistant/requests/review">Proceed to Purchase Requisition (<?= (int)($cart_count ?? 0) ?>)</a>
-                </div>
-                </form>
+                                <div style="margin-top:10px; display:flex; gap:8px; justify-content:flex-end; align-items:center;">
+                                        <a id="proceedPRBtn" class="btn primary" href="/admin-assistant/requests/review">Proceed to Purchase Requisition (<span id="prCartCount"><?= (int)($cart_count ?? 0) ?></span>)</a>
+                                </div>
             </div>
         </div>
     </main>
 </div>
 <script src="/js/main.js"></script>
+<script>
+// Inline enhancement: add-to-cart via AJAX and live counter update
+(function(){
+    function updateCount(n){
+        var el = document.getElementById('prCartCount');
+        if (el) el.textContent = String(n);
+    }
+    async function addToCart(itemId, btn){
+        try {
+            const form = new URLSearchParams();
+            form.append('item_ids[]', String(itemId));
+            const res = await fetch('/admin-assistant/inventory/cart-add', {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: form.toString()
+            });
+            const data = await res.json();
+            if (data && data.ok){
+                updateCount(data.count);
+                if (btn){ btn.textContent = 'Added'; btn.disabled = true; }
+            }
+        } catch(e){ console.error('Add to PR failed', e); }
+    }
+    document.addEventListener('click', function(ev){
+        const t = ev.target.closest('[data-add-to-pr]');
+        if (!t) return;
+        ev.preventDefault();
+        const id = t.getAttribute('data-item-id');
+        if (id) addToCart(id, t);
+    });
+})();
+</script>
 </body>
 </html>
