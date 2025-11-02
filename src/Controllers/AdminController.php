@@ -201,18 +201,47 @@ class AdminController extends BaseController
         try {
             $list = $this->pdo->query('SELECT user_id, username, first_name, last_name, full_name, email, role, is_active, branch_id, created_at FROM users ORDER BY created_at DESC LIMIT 100')->fetchAll();
             $branches = $this->pdo->query('SELECT branch_id, name FROM branches WHERE is_active = TRUE ORDER BY name ASC')->fetchAll();
+            // Branches already handled by an Admin Assistant (reserved)
+            $reserved = $this->pdo->query("SELECT DISTINCT branch_id FROM users WHERE is_active = TRUE AND role = 'admin_assistant' AND branch_id IS NOT NULL")->fetchAll(\PDO::FETCH_COLUMN);
+            $reservedSet = [];
+            foreach ($reserved as $bid) { $reservedSet[(int)$bid] = true; }
+            $branchesUnassigned = [];
+            foreach ($branches as $b) { if (empty($reservedSet[(int)$b['branch_id']])) { $branchesUnassigned[] = $b; } }
             $created = isset($_GET['created']) ? true : false;
             $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
             $editUser = null;
+            $branchesForEdit = $branchesUnassigned; // default
             if (isset($_GET['edit'])) {
                 $id = (int)$_GET['edit'];
                 if ($id > 0) {
                     $st = $this->pdo->prepare('SELECT user_id, username, first_name, last_name, email, role, is_active, branch_id FROM users WHERE user_id = :id');
                     $st->execute(['id' => $id]);
                     $editUser = $st->fetch();
+                    // If editing an admin assistant, allow their currently assigned branch too
+                    if ($editUser && ($editUser['role'] ?? '') === 'admin_assistant') {
+                        $currentBid = $editUser['branch_id'] ?? null;
+                        if ($currentBid !== null) {
+                            $currentBid = (int)$currentBid;
+                            $present = false;
+                            foreach ($branchesUnassigned as $b) { if ((int)$b['branch_id'] === $currentBid) { $present = true; break; } }
+                            if (!$present) {
+                                foreach ($branches as $b) {
+                                    if ((int)$b['branch_id'] === $currentBid) { $branchesForEdit[] = $b; break; }
+                                }
+                            }
+                        }
+                    }
                 }
             }
-            $this->render('dashboard/users.php', [ 'users' => $list, 'branches' => $branches, 'created' => $created, 'error' => $error, 'editUser' => $editUser ]);
+            $this->render('dashboard/users.php', [
+                'users' => $list,
+                'branches' => $branches,
+                'branches_unassigned' => $branchesUnassigned,
+                'branches_for_edit' => $branchesForEdit,
+                'created' => $created,
+                'error' => $error,
+                'editUser' => $editUser
+            ]);
         } catch (\PDOException $e) {
             if ($e->getCode() === '42703') { // undefined_column first_name/last_name on legacy DB
                 try {
@@ -228,31 +257,48 @@ class AdminController extends BaseController
                     // Retry load
                     $list = $this->pdo->query('SELECT user_id, username, first_name, last_name, full_name, email, role, is_active, branch_id, created_at FROM users ORDER BY created_at DESC LIMIT 100')->fetchAll();
                     $branches = $this->pdo->query('SELECT branch_id, name FROM branches WHERE is_active = TRUE ORDER BY name ASC')->fetchAll();
+                    $reserved = $this->pdo->query("SELECT DISTINCT branch_id FROM users WHERE is_active = TRUE AND role = 'admin_assistant' AND branch_id IS NOT NULL")->fetchAll(\PDO::FETCH_COLUMN);
+                    $reservedSet = [];
+                    foreach ($reserved as $bid) { $reservedSet[(int)$bid] = true; }
+                    $branchesUnassigned = [];
+                    foreach ($branches as $b) { if (empty($reservedSet[(int)$b['branch_id']])) { $branchesUnassigned[] = $b; } }
                     $created = isset($_GET['created']) ? true : false;
                     $error = isset($_GET['error']) ? (string)$_GET['error'] : '';
                     $editUser = null;
+                    $branchesForEdit = $branchesUnassigned;
                     if (isset($_GET['edit'])) {
                         $id = (int)$_GET['edit'];
                         if ($id > 0) {
                             $st = $this->pdo->prepare('SELECT user_id, username, first_name, last_name, email, role, is_active, branch_id FROM users WHERE user_id = :id');
                             $st->execute(['id' => $id]);
                             $editUser = $st->fetch();
+                            if ($editUser && ($editUser['role'] ?? '') === 'admin_assistant') {
+                                $currentBid = $editUser['branch_id'] ?? null;
+                                if ($currentBid !== null) {
+                                    $currentBid = (int)$currentBid;
+                                    $present = false;
+                                    foreach ($branchesUnassigned as $b) { if ((int)$b['branch_id'] === $currentBid) { $present = true; break; } }
+                                    if (!$present) {
+                                        foreach ($branches as $b) {
+                                            if ((int)$b['branch_id'] === $currentBid) { $branchesForEdit[] = $b; break; }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
-                    $this->render('dashboard/users.php', [ 'users' => $list, 'branches' => $branches, 'created' => $created, 'error' => $error, 'editUser' => $editUser ]);
-                    return;
-                } catch (\Throwable $mig) {
-                    // Fall back to minimal list using full_name only
-                }
-            }
-            http_response_code(500);
-            header('Content-Type: text/plain');
-            echo 'Error loading users: ' . $e->getMessage();
-        }
-    }
-
-    /**
-     * Handle admin user creation POST.
+                    $this->render('dashboard/users.php', [
+                        'users' => $list,
+                        'branches' => $branches,
+                        'branches_unassigned' => $branchesUnassigned,
+                        'branches_for_edit' => $branchesForEdit,
+                        'created' => $created,
+                        'error' => $error,
+                        'editUser' => $editUser
+                    ]);
+                    $adminId = (int)($_SESSION['user_id'] ?? 0);
+                    $st = $this->pdo->prepare('SELECT password_hash FROM users WHERE user_id = :id');
+                    $st->execute(['id' => $adminId]);
      */
     public function createUser(): void
     {
@@ -266,9 +312,34 @@ class AdminController extends BaseController
         $role = (string)($_POST['role'] ?? '');
         $branchId = isset($_POST['branch_id']) && $_POST['branch_id'] !== '' ? (int)$_POST['branch_id'] : null;
         $password = (string)($_POST['password'] ?? '');
+    $adminPasswordConfirm = (string)($_POST['admin_password_confirm'] ?? '');
 
         if ($username === '' || $firstName === '' || $lastName === '' || $role === '' || $password === '') {
             header('Location: /admin/users?error=Missing+required+fields');
+            return;
+        }
+
+        // Confirm admin identity by password (extra security)
+        if ($adminPasswordConfirm === '') {
+            header('Location: /admin/users?error=Admin+password+required');
+            return;
+        }
+        try {
+            $adminId = (int)($_SESSION['user_id'] ?? 0);
+            $st = $this->pdo->prepare('SELECT password_hash FROM users WHERE user_id = :id AND role = \CAST(:r AS user_role)');
+            // Some DBs can't cast parameterized enums directly, fallback to string compare
+        } catch (\Throwable $ignored) {}
+        try {
+            $st = $this->pdo->prepare('SELECT password_hash FROM users WHERE user_id = :id AND role = \CAST(\'admin\' AS user_role)');
+            $st->execute(['id' => $adminId]);
+        } catch (\Throwable $e) {
+            // Fallback when enum cast is problematic
+            $st = $this->pdo->prepare("SELECT password_hash FROM users WHERE user_id = :id AND role = 'admin'");
+            $st->execute(['id' => $adminId]);
+        }
+        $hashRow = $st->fetch(\PDO::FETCH_ASSOC);
+        if (!$hashRow || !password_verify($adminPasswordConfirm, (string)$hashRow['password_hash'])) {
+            header('Location: /admin/users?error=Invalid+admin+password');
             return;
         }
 
@@ -276,9 +347,21 @@ class AdminController extends BaseController
         try { $this->pdo->exec("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'supplier'"); } catch (\Throwable $e) {}
         try { $this->pdo->exec("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'admin_assistant'"); } catch (\Throwable $e) {}
         try { $this->pdo->exec("ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'procurement'"); } catch (\Throwable $e) {}
-        if (!in_array($role, ['admin','admin_assistant','procurement','supplier','custodian','procurement_manager'], true)) {
+        // Accept only updated roles (legacy roles no longer allowed for creation)
+        if (!in_array($role, ['admin','admin_assistant','procurement','supplier'], true)) {
             header('Location: /admin/users?error=Invalid+role');
             return;
+        }
+
+        // Enforce branch constraints
+        if ($role === 'admin_assistant') {
+            if ($branchId === null) { header('Location: /admin/users?error=Branch+is+required+for+Admin+Assistant'); return; }
+            $chk = $this->pdo->prepare("SELECT user_id FROM users WHERE is_active = TRUE AND role = 'admin_assistant' AND branch_id = :b LIMIT 1");
+            $chk->execute(['b' => $branchId]);
+            if ($chk->fetch()) { header('Location: /admin/users?error=This+branch+already+has+an+Admin+Assistant'); return; }
+        } else {
+            // Non-admin_assistant roles shouldn't carry a branch assignment
+            $branchId = null;
         }
 
         try {
@@ -345,6 +428,15 @@ class AdminController extends BaseController
         $branchId = isset($_POST['branch_id']) && $_POST['branch_id'] !== '' ? (int)$_POST['branch_id'] : null;
         $active = isset($_POST['is_active']) ? (bool)$_POST['is_active'] : true;
         if ($id <= 0 || $firstName === '' || $lastName === '' || $role === '') { header('Location: /admin/users?error=Invalid+data'); return; }
+        // Enforce branch rules and uniqueness when role is admin_assistant
+        if ($role === 'admin_assistant') {
+            if ($branchId === null) { header('Location: /admin/users?error=Branch+is+required+for+Admin+Assistant'); return; }
+            $chk = $this->pdo->prepare("SELECT user_id FROM users WHERE is_active = TRUE AND role = 'admin_assistant' AND branch_id = :b AND user_id <> :id LIMIT 1");
+            $chk->execute(['b' => $branchId, 'id' => $id]);
+            if ($chk->fetch()) { header('Location: /admin/users?error=This+branch+already+has+an+Admin+Assistant'); return; }
+        } else {
+            $branchId = null;
+        }
         try {
             $stmt = $this->pdo->prepare('UPDATE users SET first_name = :fn, last_name = :ln, full_name = :n, email = :e, role = :r, branch_id = :b, is_active = :a, updated_by = :by WHERE user_id = :id');
             $stmt->execute([
