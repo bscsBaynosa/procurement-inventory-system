@@ -38,10 +38,17 @@ class InventoryService
 	{
 		$sql = 'SELECT status, COUNT(*) as cnt FROM inventory_items';
 		$params = [];
+		$wheres = [];
 		if ($branchId) {
-			$sql .= ' WHERE branch_id = :b';
+			$wheres[] = 'branch_id = :b';
 			$params['b'] = $branchId;
 		}
+		// Exclude deprecated categories from all high-level counts
+		$wheres[] = '(category IS NULL OR category NOT ILIKE :no_paper)';
+		$params['no_paper'] = 'paper%';
+		$wheres[] = '(category IS NULL OR category NOT ILIKE :no_bondpaper)';
+		$params['no_bondpaper'] = 'bondpaper%';
+		if ($wheres) { $sql .= ' WHERE ' . implode(' AND ', $wheres); }
 		$sql .= ' GROUP BY status';
 
 		$rows = $this->pdo->prepare($sql);
@@ -76,6 +83,8 @@ class InventoryService
 		// Exclude deprecated 'Paper' category completely
 		$conds[] = '(category IS NULL OR category NOT ILIKE :no_paper)';
 		$params['no_paper'] = 'paper%';
+		$conds[] = '(category IS NULL OR category NOT ILIKE :no_bondpaper)';
+		$params['no_bondpaper'] = 'bondpaper%';
 		if ($conds) { $sql .= ' WHERE ' . implode(' AND ', $conds); }
 		$sql .= "\n    GROUP BY COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized')\n)\nSELECT cats.category,\n       COALESCE(agg.total, 0) AS total,\n       COALESCE(agg.good, 0) AS good,\n       COALESCE(agg.for_repair, 0) AS for_repair,\n       COALESCE(agg.for_replacement, 0) AS for_replacement,\n       COALESCE(agg.retired, 0) AS retired\nFROM cats\nLEFT JOIN agg ON agg.category = cats.category\nORDER BY cats.category ASC";
 		$stmt = $this->pdo->prepare($sql);
@@ -101,6 +110,8 @@ class InventoryService
 		// Exclude deprecated 'Paper' category entirely from any listings
 		$wheres[] = '(category IS NULL OR category NOT ILIKE :no_paper)';
 		$params['no_paper'] = 'paper%';
+		$wheres[] = '(category IS NULL OR category NOT ILIKE :no_bondpaper)';
+		$params['no_bondpaper'] = 'bondpaper%';
 		if ($wheres) { $sql .= ' WHERE ' . implode(' AND ', $wheres); }
 		$sql .= ' ORDER BY name ASC';
 		$stmt = $this->pdo->prepare($sql);
@@ -198,8 +209,9 @@ class InventoryService
 	 */
 	public function getStatsPerBranch(): array
 	{
-		// One-time cleanup: remove deprecated 'Paper' category items entirely
+		// One-time cleanup: remove deprecated 'Paper' and 'Bondpaper' categories entirely
 		try { $this->pdo->exec("DELETE FROM inventory_items WHERE category ILIKE 'paper%'"); } catch (\Throwable $e) {}
+		try { $this->pdo->exec("DELETE FROM inventory_items WHERE category ILIKE 'bondpaper%'"); } catch (\Throwable $e) {}
 		$sql = "
 			SELECT b.branch_id, b.name,
 				COALESCE(COUNT(i.item_id),0) AS total,
@@ -208,7 +220,7 @@ class InventoryService
 				COALESCE(SUM(CASE WHEN i.status='for_replacement' THEN 1 ELSE 0 END),0) AS for_replacement,
 				COALESCE(SUM(CASE WHEN i.status='retired' THEN 1 ELSE 0 END),0) AS retired
 			FROM branches b
-			LEFT JOIN inventory_items i ON i.branch_id = b.branch_id AND (i.category IS NULL OR i.category NOT ILIKE 'paper%')
+			LEFT JOIN inventory_items i ON i.branch_id = b.branch_id AND (i.category IS NULL OR (i.category NOT ILIKE 'paper%' AND i.category NOT ILIKE 'bondpaper%'))
 			GROUP BY b.branch_id, b.name
 			ORDER BY b.name ASC
 		";

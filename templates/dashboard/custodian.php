@@ -135,7 +135,7 @@
         <table>
             <thead>
                 <tr>
-                    <th>ID</th>
+                    <th>PR No.</th>
                     <th>Item</th>
                     <th>Status</th>
                     <th>Created</th>
@@ -144,7 +144,7 @@
             <tbody>
             <?php if (!empty($pendingRequests)): foreach ($pendingRequests as $r): ?>
                 <tr>
-                    <td><?= (int)$r['request_id'] ?></td>
+                    <td><?= htmlspecialchars((string)($r['pr_number'] ?? $r['request_id']), ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars((string)($r['item_name'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars((string)($r['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars((string)($r['created_at'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
