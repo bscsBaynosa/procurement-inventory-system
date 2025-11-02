@@ -126,17 +126,17 @@
                     <div class="row3 mb8">
                         <div>
                             <label>Role</label>
-                            <select name="role" required>
+                            <select name="role" id="edit_role" required>
                                 <?php $roles=['admin','admin_assistant','procurement','supplier']; foreach ($roles as $r): ?>
-                                    <option value="<?= $r ?>" <?= ($editUser['role']===$r?'selected':'') ?>><?= ucwords(str_replace('_',' ', $r)) ?></option>
+                                    <option value="<?= $r ?>" <?= ($editUser['role']===$r?'selected':'') ?>><?= ($r==='admin_assistant'?'Admin Assistant':ucwords(str_replace('_',' ', $r))) ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
                         <div>
                             <label>Branch</label>
-                            <select name="branch_id">
+                            <select name="branch_id" id="edit_branch">
                                 <option value="">— None —</option>
-                                <?php foreach ($branches as $b): ?>
+                                <?php $list = $branches_for_edit ?? $branches ?? []; foreach ($list as $b): ?>
                                     <option value="<?= (int)$b['branch_id'] ?>" <?= ((int)$editUser['branch_id']===(int)$b['branch_id']?'selected':'') ?>><?= htmlspecialchars($b['name'], ENT_QUOTES, 'UTF-8') ?></option>
                                 <?php endforeach; ?>
                             </select>
@@ -157,7 +157,7 @@
                 <p class="muted">Use the "Reset" action in the list to set the user's password to their surname.</p>
                 <?php else: ?>
                 <h3 style="margin-top:0">Create User</h3>
-                <form method="POST" action="/admin/users">
+                <form method="POST" action="/admin/users" onsubmit="return confirmAdminPassword(event)">
                     <div class="row mb8">
                         <div>
                             <label>Username</label>
@@ -185,7 +185,7 @@
                         </div>
                         <div>
                             <label>Role</label>
-                            <select name="role" required>
+                            <select name="role" id="create_role" required>
                                 <option value="admin">Admin</option>
                                 <option value="admin_assistant">Admin Assistant</option>
                                 <option value="procurement">Procurement</option>
@@ -196,9 +196,9 @@
                     <div class="row3 mb8">
                         <div>
                             <label>Branch</label>
-                            <select name="branch_id">
+                            <select name="branch_id" id="create_branch">
                                 <option value="">— None —</option>
-                                <?php foreach ($branches as $b): ?>
+                                <?php $bs = $branches_unassigned ?? $branches ?? []; foreach ($bs as $b): ?>
                                     <option value="<?= (int)$b['branch_id'] ?>"><?= htmlspecialchars($b['name'], ENT_QUOTES, 'UTF-8') ?></option>
                                 <?php endforeach; ?>
                             </select>
@@ -211,6 +211,33 @@
                     </div>
                 </form>
                 <p class="muted">New users are created active. Password can be reset anytime to the user's surname from the list.</p>
+                <script>
+                function toggleBranchSelect(roleId, branchSelectId){
+                    const roleSel = document.getElementById(roleId);
+                    const branchSel = document.getElementById(branchSelectId);
+                    if (!roleSel || !branchSel) return;
+                    const needBranch = roleSel.value === 'admin_assistant';
+                    branchSel.disabled = !needBranch;
+                    branchSel.parentElement.style.display = needBranch ? '' : 'none';
+                    if (!needBranch) { branchSel.value = ''; }
+                }
+                function setupRoleBranchWiring(){
+                    toggleBranchSelect('create_role','create_branch');
+                    const cr = document.getElementById('create_role'); if (cr) cr.addEventListener('change', () => toggleBranchSelect('create_role','create_branch'));
+                    toggleBranchSelect('edit_role','edit_branch');
+                    const er = document.getElementById('edit_role'); if (er) er.addEventListener('change', () => toggleBranchSelect('edit_role','edit_branch'));
+                }
+                function confirmAdminPassword(e){
+                    const pass = prompt('Confirm your admin password to proceed with account creation:');
+                    if (pass === null) { e.preventDefault(); return false; }
+                    const form = e.target;
+                    let hidden = form.querySelector('input[name="admin_password_confirm"]');
+                    if (!hidden){ hidden = document.createElement('input'); hidden.type='hidden'; hidden.name='admin_password_confirm'; form.appendChild(hidden); }
+                    hidden.value = pass;
+                    return true;
+                }
+                document.addEventListener('DOMContentLoaded', setupRoleBranchWiring);
+                </script>
                 <?php endif; ?>
             </div>
         </div>
