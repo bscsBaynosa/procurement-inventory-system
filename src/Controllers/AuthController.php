@@ -29,11 +29,14 @@ class AuthController extends BaseController
 
     public function showLanding(?string $error = null, ?string $signupError = null, ?string $signupSuccess = null, ?string $mode = null): void
     {
+        // Provide categories for supplier sign-up select
+        $categories = require __DIR__ . '/../config/categories.php';
         $this->render('auth/landing.php', [
             'error' => $error,
             'signup_error' => $signupError,
             'signup_success' => $signupSuccess,
             'mode' => $mode,
+            'categories' => $categories,
         ]);
     }
 
@@ -200,7 +203,8 @@ class AuthController extends BaseController
     /** Supplier Signup (GET) */
     public function showSupplierSignup(?string $error = null, ?string $success = null): void
     {
-        $this->render('auth/signup_supplier.php', [ 'error' => $error, 'success' => $success ]);
+        $categories = require __DIR__ . '/../config/categories.php';
+        $this->render('auth/signup_supplier.php', [ 'error' => $error, 'success' => $success, 'categories' => $categories ]);
     }
 
     /** Supplier Signup (POST): creates a new supplier user and emails a random password */
@@ -218,6 +222,14 @@ class AuthController extends BaseController
                 return;
             }
             $this->showSupplierSignup('All required fields must be filled.');
+            return;
+        }
+        // Validate category against allowed list
+        $allowedCategories = require __DIR__ . '/../config/categories.php';
+        if (!in_array($category, $allowedCategories, true)) {
+            $msg = 'Please choose a valid category from the list.';
+            if ($from === 'landing') { $this->showLanding(null, $msg, null, 'signup'); return; }
+            $this->showSupplierSignup($msg);
             return;
         }
         try {

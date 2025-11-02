@@ -67,7 +67,13 @@
                             </div>
                             <div class="form-group">
                                 <label for="category">Category</label>
-                                <input id="category" name="category" placeholder="e.g., Office Supplies" required />
+                                <select id="category" name="category" required>
+                                    <option value="" disabled selected>Select a category</option>
+<?php $cats = $categories ?? ['Office Supplies','Medical Equipments','Medicines','Machines','Electronics','Appliances'];
+foreach ($cats as $c): ?>
+                                    <option value="<?= htmlspecialchars($c, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($c, ENT_QUOTES, 'UTF-8') ?></option>
+<?php endforeach; ?>
+                                </select>
                             </div>
                             <div class="form-group">
                                 <label for="username">Username</label>
