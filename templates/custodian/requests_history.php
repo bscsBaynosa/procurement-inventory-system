@@ -31,10 +31,10 @@
         <div class="card">
             <form method="GET" action="/admin-assistant/requests/history" style="display:flex;gap:8px;align-items:center;margin:0 0 12px 0;">
                 <label for="status" style="font-weight:600;">Status</label>
-                <?php $sel = (string)($filters['status'] ?? ''); ?>
+                <?php $sel = strtolower((string)($filters['status'] ?? '')); ?>
                 <select id="status" name="status">
                     <?php $opts = ['all'=>'All','pending'=>'Pending','approved'=>'Approved','canvassing_submitted'=>'Canvassing Submitted','canvassing_approved'=>'Canvassing Approved','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled']; foreach ($opts as $val=>$label): ?>
-                        <option value="<?= htmlspecialchars($val, ENT_QUOTES, 'UTF-8') ?>" <?= $sel===$val? 'selected':'' ?>><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></option>
+                        <option value="<?= htmlspecialchars($val, ENT_QUOTES, 'UTF-8') ?>" <?= ($sel===$val || ($sel==='' && $val==='all'))? 'selected':'' ?>><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></option>
                     <?php endforeach; ?>
                 </select>
                 <button class="btn" type="submit">Apply</button>
@@ -60,7 +60,15 @@
                         </td>
                     </tr>
                 <?php endforeach; else: ?>
-                    <tr><td colspan="5" style="color:#64748b">No history yet. Submit a Purchase Request to generate a PDF.</td></tr>
+                    <tr>
+                        <td colspan="5" style="color:#64748b">
+                            <?php if ($sel && $sel !== 'all'): ?>
+                                No results for the selected status. Try switching Status to “All”.
+                            <?php else: ?>
+                                No history yet. Submit a Purchase Request to generate a PDF.
+                            <?php endif; ?>
+                        </td>
+                    </tr>
                 <?php endif; ?>
                 </tbody>
             </table>

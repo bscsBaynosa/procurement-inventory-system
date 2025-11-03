@@ -652,14 +652,15 @@ class CustodianController extends BaseController
         if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant','admin'], true)) { header('Location: /login'); return; }
                 $me = (int)($_SESSION['user_id'] ?? 0);
                 $branchId = (int)($_SESSION['branch_id'] ?? 0);
-                $status = isset($_GET['status']) ? trim((string)$_GET['status']) : '';
+                // Default to 'all' so users immediately see everything on first load
+                $status = isset($_GET['status']) ? trim((string)$_GET['status']) : 'all';
                 $rows = [];
         try {
                         $pdo = \App\Database\Connection::resolve();
                         // Use service grouping to include computed status and stable sorting
                         $filters = ['include_archived' => false];
                         if ($branchId > 0) { $filters['branch_id'] = $branchId; }
-                        if ($status !== '' && $status !== 'all') { $filters['status'] = $status; }
+                        if ($status !== '' && strtolower($status) !== 'all') { $filters['status'] = $status; }
                         $groups = $this->requests()->getRequestsGrouped($filters);
 
             // 2) Fetch any messages (received OR sent) with PR-like attachments so we can link downloads
@@ -720,7 +721,7 @@ class CustodianController extends BaseController
                 }
             }
         } catch (\Throwable $ignored) {}
-        $this->render('custodian/requests_history.php', [ 'rows' => $rows, 'filters' => ['status' => $status] ]);
+    $this->render('custodian/requests_history.php', [ 'rows' => $rows, 'filters' => ['status' => $status] ]);
     }
 
     /** Generate a PR PDF for an existing PR number (backfill) and send a self-copy so it appears in History. */
