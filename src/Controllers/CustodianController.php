@@ -107,158 +107,16 @@ class CustodianController extends BaseController
             $filtered[] = $it;
         }
         // When no category or filters, still show all items under list
-                    $me = (int)($_SESSION['user_id'] ?? 0);
-                    $branchId = (int)($_SESSION['branch_id'] ?? 0);
-                    $status = isset($_GET['status']) ? trim((string)$_GET['status']) : 'all';
-                    $rows = [];
-
-                    // 1) Build from a minimal direct SQL first (most robust), then we can enhance
-                    $groups = [];
-                    try {
-                        $pdo = \App\Database\Connection::resolve();
-                        $conds = [];
-                        $params = [];
-                        if ($branchId > 0) { $conds[] = '(pr.branch_id = :b OR pr.branch_id IS NULL)'; $params['b'] = $branchId; }
-                        if ($status !== '' && strtolower($status) !== 'all') { $conds[] = 'pr.status = :s'; $params['s'] = $status; }
-                        $sql = 'WITH g AS (
-                                    SELECT pr_number,
-                                           MIN(created_at) AS min_created_at
-                                    FROM purchase_requests pr';
-                        if ($conds) { $sql .= ' WHERE ' . implode(' AND ', $conds); }
-                        $sql .= ' GROUP BY pr_number)
-                                 SELECT g.pr_number,
-                                        g.min_created_at,
-                                        (SELECT pr2.status FROM purchase_requests pr2 WHERE pr2.pr_number = g.pr_number ORDER BY pr2.updated_at DESC NULLS LAST, pr2.created_at DESC LIMIT 1) AS status
-                                 FROM g
-                                 ORDER BY g.min_created_at DESC
-                                 LIMIT 200';
-                        $st = $pdo->prepare($sql);
-                        $st->execute($params);
-                        $groups = $st->fetchAll(\PDO::FETCH_ASSOC) ?: [];
-                    } catch (\Throwable $e) { $groups = []; $pdo = null; }
-                    // If direct SQL returned nothing, fall back to service dataset as a secondary attempt
-                    if (empty($groups)) {
-                        try {
-                            $filters = [];
-                            if ($branchId > 0) { $filters['branch_id'] = $branchId; }
-                            if ($status !== '' && strtolower($status) !== 'all') { $filters['status'] = $status; }
-                            $raw = $this->requests()->getAllRequests($filters);
-                            $by = [];
-                            foreach ($raw as $row) {
-                                $prn = (string)($row['pr_number'] ?? '');
-                                if ($prn === '') { $prn = 'R' . (int)($row['request_id'] ?? 0); }
-                                if (!isset($by[$prn])) {
-                                    $by[$prn] = [
-                                        'pr_number' => $prn,
-                                        'min_created_at' => (string)($row['created_at'] ?? ''),
-                                        'status' => (string)($row['status'] ?? ''),
-                                    ];
-                                } else {
-                                    $by[$prn]['min_created_at'] = min($by[$prn]['min_created_at'], (string)($row['created_at'] ?? ''));
-                                    $by[$prn]['status'] = (string)($row['status'] ?? $by[$prn]['status']);
-                                }
-                            }
-                            $groups = array_values($by);
-                        } catch (\Throwable $e) { $groups = []; }
-                    }
-
-                    // 2) Map attachments from messages (best-effort)
-                    $msgs = [];
-                    try {
-                        $pdo = \App\Database\Connection::resolve();
-                        $stMsg = $pdo->prepare("SELECT id, subject, attachment_name, attachment_path, created_at FROM messages 
-                            WHERE (recipient_id = :me OR sender_id = :me)
-                            AND attachment_path IS NOT NULL AND attachment_name IS NOT NULL AND attachment_name ILIKE 'pr_%' 
-                            ORDER BY created_at DESC LIMIT 500");
-                        $stMsg->execute(['me' => $me]);
-                        $msgs = $stMsg->fetchAll(\PDO::FETCH_ASSOC) ?: [];
-                    } catch (\Throwable $e) { $msgs = []; $pdo = null; }
-                    $byPr = [];
-                    foreach ($msgs as $m) {
-                        $subj = (string)($m['subject'] ?? '');
-                        $fname = (string)($m['attachment_name'] ?? '');
-                        $pr = '';
-                        if (preg_match('/PR\s*([0-9\-]+)/i', $subj, $mm)) { $pr = $mm[1]; }
-                        if ($pr === '' && preg_match('/^pr_([0-9\-]+)/i', $fname, $mm2)) { $pr = $mm2[1]; }
-                        if ($pr !== '' && !isset($byPr[$pr])) { $byPr[$pr] = $m; }
-                    }
-
-                    foreach ($groups as $g) {
-                        $pr = (string)$g['pr_number'];
-                        $r = [
-                            'pr_number' => $pr,
-                            'created_at' => (string)($g['min_created_at'] ?? ($g['created_at'] ?? '')),
-                            'status' => (string)($g['status'] ?? ''),
-                            'attachment_name' => null,
-                            'message_id' => null,
-                        ];
-                        if (isset($byPr[$pr])) {
-                            $m = $byPr[$pr];
-                            $r['attachment_name'] = (string)$m['attachment_name'];
-                            $r['message_id'] = (int)$m['id'];
-                            $r['created_at'] = (string)($m['created_at'] ?? $r['created_at']);
-                        }
-                        $rows[] = $r;
-                    }
-
-                    // 3) If still empty, show message-only matches
-                    if (empty($rows) && !empty($msgs)) {
-                        foreach ($msgs as $m) {
-                            $subj = (string)($m['subject'] ?? '');
-                            $fname = (string)($m['attachment_name'] ?? '');
-                            $pr = '';
-                            if (preg_match('/PR\s*([0-9\-]+)/i', $subj, $mm)) { $pr = $mm[1]; }
-                            if ($pr === '' && preg_match('/^pr_([0-9\-]+)/i', $fname, $mm2)) { $pr = $mm2[1]; }
-                            if ($pr !== '') {
-                                $rows[] = [
-                                    'pr_number' => $pr,
-                                    'created_at' => (string)($m['created_at'] ?? ''),
-                                    'status' => '',
-                                    'attachment_name' => (string)$m['attachment_name'],
-                                    'message_id' => (int)$m['id'],
-                                ];
-                            }
-                        }
-                    }
-
-                    // 4) If still empty, query raw purchase_requests directly (ignore filters except status/branch)
-                    if (empty($rows)) {
-                        try {
-                            $pdo = $pdo ?: \App\Database\Connection::resolve();
-                            $cond2 = '';
-                            $params2 = [];
-                            if ($branchId > 0) { $cond2 = ' WHERE (pr.branch_id = :b OR pr.branch_id IS NULL)'; $params2['b'] = $branchId; }
-                            if ($status !== '' && strtolower($status) !== 'all') { $cond2 .= ($cond2 ? ' AND ' : ' WHERE ') . 'pr.status = :s'; $params2['s'] = $status; }
-                            $sql2 = 'SELECT pr_number, request_id, status, created_at FROM purchase_requests pr ' . $cond2 . ' ORDER BY created_at DESC LIMIT 100';
-                            $st2 = $pdo->prepare($sql2);
-                            $st2->execute($params2);
-                            foreach ($st2->fetchAll(\PDO::FETCH_ASSOC) ?: [] as $row) {
-                                $rows[] = [
-                                    'pr_number' => (string)($row['pr_number'] ?? ('R' . (int)$row['request_id'])),
-                                    'created_at' => (string)($row['created_at'] ?? ''),
-                                    'status' => (string)($row['status'] ?? ''),
-                                    'attachment_name' => null,
-                                    'message_id' => null,
-                                ];
-                            }
-                        } catch (\Throwable $e) { /* ignore */ }
-                    }
-
-                    // 5) Append diagnostics when page is still empty, to unblock visibility
-                    if (empty($rows)) {
-                        try {
-                            $pdo = $pdo ?: \App\Database\Connection::resolve();
-                            $totalPr = (int)$pdo->query('SELECT COUNT(*) FROM purchase_requests')->fetchColumn();
-                            $totalMsg = (int)$pdo->query("SELECT COUNT(*) FROM messages WHERE attachment_path IS NOT NULL AND attachment_name IS NOT NULL")->fetchColumn();
-                            $rows[] = [
-                                'pr_number' => '[debug] pr_count=' . $totalPr,
-                                'created_at' => date('Y-m-d H:i:s'),
-                                'status' => 'debug',
-                                'attachment_name' => 'attachments=' . $totalMsg . '; branch=' . (int)$branchId . '; status=' . $status,
-                                'message_id' => null,
-                            ];
-                        } catch (\Throwable $e) { /* ignore */ }
-                    }
+        // Render the inventory page (the PR History logic that was accidentally pasted here has been removed)
+        $this->render('custodian/inventory.php', [
+            'items' => $filtered,
+            'categories' => $categories,
+            'selected_category' => $selectedCategory,
+            'search' => $search,
+            'filter_status' => $filterStatus,
+            'active_pr_items' => $activePrItems,
+            'cart_count' => isset($_SESSION['pr_cart']) && is_array($_SESSION['pr_cart']) ? count($_SESSION['pr_cart']) : 0,
+        ]);
     }
 
     /** Update limited metadata (unit, status, minimum_quantity) for Admin Assistant */
@@ -621,6 +479,7 @@ class CustodianController extends BaseController
                 // Default to 'all' so users immediately see everything on first load
                 $status = isset($_GET['status']) ? trim((string)$_GET['status']) : 'all';
                 $rows = [];
+        // Build dataset in resilient stages; avoid one big try/catch that swallows everything
         try {
                         $pdo = \App\Database\Connection::resolve();
                         // Build history from the same base query the dashboard uses to avoid mismatches
@@ -662,7 +521,12 @@ class CustodianController extends BaseController
                                 $stMin->execute($paramsMin);
                                 $groups = $stMin->fetchAll(\PDO::FETCH_ASSOC) ?: [];
                         }
-
+        } catch (\Throwable $e) {
+            // continue to next stages with empty groups
+            $groups = [];
+            $pdo = null;
+        }
+        try {
             // 2) Fetch any messages (received OR sent) with PR-like attachments so we can link downloads
             $stMsg = $pdo->prepare("SELECT id, subject, attachment_name, attachment_path, created_at FROM messages 
                 WHERE (recipient_id = :me OR sender_id = :me)
@@ -670,7 +534,8 @@ class CustodianController extends BaseController
                 ORDER BY created_at DESC LIMIT 500");
             $stMsg->execute(['me' => $me]);
             $msgs = $stMsg->fetchAll(\PDO::FETCH_ASSOC) ?: [];
-
+        } catch (\Throwable $e) { $msgs = []; }
+        try {
             // 3) Index messages by PR number parsed from filename or subject
             $byPr = [];
             foreach ($msgs as $m) {
@@ -701,7 +566,10 @@ class CustodianController extends BaseController
                 }
                 $rows[] = $r;
             }
-            // 5) Fallback: if no PR groups discovered (older data or different branch mapping), list any PR PDFs from messages directly
+        } catch (\Throwable $e) { /* ignore merge errors */ }
+
+        // 5) Fallback: if no PR groups discovered (older data or different branch mapping), list any PR PDFs from messages directly
+        try {
             if (empty($rows) && !empty($msgs)) {
                 foreach ($msgs as $m) {
                     $subj = (string)($m['subject'] ?? '');
@@ -720,15 +588,16 @@ class CustodianController extends BaseController
                     }
                 }
             }
-            // 6) Last-resort fallback: show recent raw requests (no PR PDF linkage) so History is never empty
+        } catch (\Throwable $e) { /* ignore */ }
+
+        // 6) Last-resort fallback: show recent raw requests (no PR PDF linkage) so History is never empty
+        try {
             if (empty($rows)) {
+                $pdo = $pdo ?: \App\Database\Connection::resolve();
                 $cond2 = '';
                 $params2 = [];
-                if (!empty($filters['branch_id'])) { $cond2 = ' WHERE (pr.branch_id = :b OR pr.branch_id IS NULL)'; $params2['b'] = (int)$filters['branch_id']; }
-                if (!empty($filters['status'])) {
-                    $cond2 .= ($cond2 ? ' AND ' : ' WHERE ') . 'pr.status = :s';
-                    $params2['s'] = (string)$filters['status'];
-                }
+                if ($branchId > 0) { $cond2 = ' WHERE (pr.branch_id = :b OR pr.branch_id IS NULL)'; $params2['b'] = $branchId; }
+                if ($status !== '' && strtolower($status) !== 'all') { $cond2 .= ($cond2 ? ' AND ' : ' WHERE ') . 'pr.status = :s'; $params2['s'] = $status; }
                 $sql2 = 'SELECT pr_number, request_id, status, created_at FROM purchase_requests pr ' . $cond2 . ' ORDER BY created_at DESC LIMIT 100';
                 $st2 = $pdo->prepare($sql2);
                 $st2->execute($params2);
@@ -742,20 +611,23 @@ class CustodianController extends BaseController
                     ];
                 }
             }
+        } catch (\Throwable $e) { /* ignore */ }
 
-            // Optional diagnostics: append counts when debug=1
-            if ((string)($_GET['debug'] ?? '') === '1') {
+        // Always append a tiny diagnostics row when still empty to reveal DB visibility
+        if (empty($rows)) {
+            try {
+                $pdo = $pdo ?: \App\Database\Connection::resolve();
                 $totalPr = (int)$pdo->query('SELECT COUNT(*) FROM purchase_requests')->fetchColumn();
-                $totalMsg = (int)$pdo->query("SELECT COUNT(*) FROM messages WHERE attachment_path IS NOT NULL AND attachment_name IS NOT NULL AND attachment_name ILIKE '%.pdf'")->fetchColumn();
+                $totalMsg = (int)$pdo->query("SELECT COUNT(*) FROM messages WHERE attachment_path IS NOT NULL AND attachment_name IS NOT NULL")->fetchColumn();
                 $rows[] = [
                     'pr_number' => '[debug] pr_count=' . $totalPr,
                     'created_at' => date('Y-m-d H:i:s'),
                     'status' => 'debug',
-                    'attachment_name' => 'attachments=' . $totalMsg,
+                    'attachment_name' => 'attachments=' . $totalMsg . '; branch=' . (int)$branchId . '; status=' . $status,
                     'message_id' => null,
                 ];
-            }
-        } catch (\Throwable $ignored) {}
+            } catch (\Throwable $e) { /* ignore */ }
+        }
     $this->render('custodian/requests_history.php', [ 'rows' => $rows, 'filters' => ['status' => $status] ]);
     }
 
