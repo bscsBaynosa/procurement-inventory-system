@@ -94,6 +94,18 @@
                         <label>Subject</label>
                         <input name="subject" required placeholder="Subject" value="<?= htmlspecialchars((string)($prefill_subject ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
                     </div>
+                    <?php $prefAttName = isset($prefill_attachment_name) ? (string)$prefill_attachment_name : ''; $prefAttPath = isset($prefill_attachment_path) ? (string)$prefill_attachment_path : ''; ?>
+                    <?php if ($prefAttName !== '' && $prefAttPath !== ''): ?>
+                        <div>
+                            <label>Attachment</label>
+                            <div class="card" style="padding:10px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                                <div><strong>Will attach:</strong> <span class="mono"><?= htmlspecialchars($prefAttName, ENT_QUOTES, 'UTF-8') ?></span></div>
+                                <button type="button" class="btn muted" onclick="(function(f){ f.querySelector('[name=attach_name]').value=''; f.querySelector('[name=attach_path]').value=''; f.querySelector('[data-pref-att]').remove(); })(this.closest('form'));">Remove</button>
+                            </div>
+                            <input type="hidden" name="attach_name" value="<?= htmlspecialchars($prefAttName, ENT_QUOTES, 'UTF-8') ?>" data-pref-att />
+                            <input type="hidden" name="attach_path" value="<?= htmlspecialchars($prefAttPath, ENT_QUOTES, 'UTF-8') ?>" data-pref-att />
+                        </div>
+                    <?php endif; ?>
                     <div>
                         <label>Message</label>
                         <textarea name="body" rows="10" required placeholder="Write your message..."></textarea>

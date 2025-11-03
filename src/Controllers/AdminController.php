@@ -764,7 +764,16 @@ class AdminController extends BaseController
             $users = $this->pdo->query("SELECT user_id, full_name, role FROM users WHERE is_active = TRUE ORDER BY role, full_name")->fetchAll();
             $prefillTo = isset($_GET['to']) ? (int)$_GET['to'] : 0;
             $prefillSubject = isset($_GET['subject']) ? (string)$_GET['subject'] : '';
-            $this->render('dashboard/messages.php', ['inbox' => $inbox, 'users' => $users, 'prefill_to' => $prefillTo, 'prefill_subject' => $prefillSubject]);
+            $prefillAttachName = isset($_GET['attach_name']) ? (string)$_GET['attach_name'] : '';
+            $prefillAttachPath = isset($_GET['attach_path']) ? (string)$_GET['attach_path'] : '';
+            $this->render('dashboard/messages.php', [
+                'inbox' => $inbox,
+                'users' => $users,
+                'prefill_to' => $prefillTo,
+                'prefill_subject' => $prefillSubject,
+                'prefill_attachment_name' => $prefillAttachName,
+                'prefill_attachment_path' => $prefillAttachPath,
+            ]);
         } catch (\PDOException $e) {
             // If messages table doesn't exist yet, create it and retry once
             if ($e->getCode() === '42P01') {
@@ -804,6 +813,17 @@ class AdminController extends BaseController
             $encBody = \App\Services\CryptoService::encrypt($body, 'msg:' . (string)$me . '->' . (string)$to);
             $stmt->execute(['s' => $me, 'r' => $to, 'j' => $subject, 'b' => $encBody]);
             $msgId = (int)$this->pdo->lastInsertId('messages_id_seq');
+            // Optionally auto-attach an existing file (e.g., pre-generated PR PDF)
+            $autoName = isset($_POST['attach_name']) ? trim((string)$_POST['attach_name']) : '';
+            $autoPath = isset($_POST['attach_path']) ? trim((string)$_POST['attach_path']) : '';
+            if ($autoName !== '' && $autoPath !== '' && @is_file($autoPath)) {
+                try {
+                    $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);");
+                    $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;");
+                } catch (\Throwable $e) {}
+                $up = $this->pdo->prepare('UPDATE messages SET attachment_name = :n, attachment_path = :p WHERE id = :id');
+                $up->execute(['n' => $autoName, 'p' => $autoPath, 'id' => $msgId]);
+            }
             // Handle optional attachment upload
             if (!empty($_FILES['attachment']) && is_uploaded_file($_FILES['attachment']['tmp_name'])) {
                 // Ensure attachments table

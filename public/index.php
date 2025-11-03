@@ -501,6 +501,12 @@ if ($method === 'GET' && $path === '/admin-assistant/requests/new') {
 	$custodian->newRequest();
 	exit;
 }
+// Admin Assistant: Purchase Request history (PR PDFs)
+if ($method === 'GET' && $path === '/admin-assistant/requests/history') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
+	$custodian->requestsHistory();
+	exit;
+}
 if ($method === 'POST' && $path === '/admin-assistant/requests') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['custodian','admin','admin_assistant'], true)) { header('Location: /login'); exit; }
 	$custodian->createRequest();

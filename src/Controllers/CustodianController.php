@@ -497,8 +497,10 @@ class CustodianController extends BaseController
                     $bn = (string)($sb->fetchColumn() ?: 'Branch');
                 }
             } catch (\Throwable $ignored) {}
-            $subject = 'Purchase Request of ' . $bn;
-            header('Location: /admin/messages?subject=' . rawurlencode($subject) . $toParam . '&created=' . (int)$created . ($skipped > 0 ? ('&skipped=' . (int)$skipped) : ''));
+            $subject = 'PR ' . $groupPrNumber . ' • ' . $bn . ' • ' . date('Y-m-d');
+            // Prefill compose with recipient, subject, and auto-attach the generated PDF
+            $attachParams = '&attach_name=' . rawurlencode(basename($fileBase)) . '&attach_path=' . rawurlencode($abs);
+            header('Location: /admin/messages?subject=' . rawurlencode($subject) . $toParam . '&created=' . (int)$created . ($skipped > 0 ? ('&skipped=' . (int)$skipped) : '') . $attachParams);
         } else {
             header('Location: /admin-assistant/requests/review?error=cart_empty');
         }
@@ -640,6 +642,24 @@ class CustodianController extends BaseController
         header('Content-Disposition: ' . ($download ? 'attachment' : 'inline') . '; filename="' . basename($fileBase) . '"');
         header('Content-Length: ' . (string)@filesize($abs));
         @readfile($abs);
+    }
+
+    /** Purchase Request history: list PR PDF files sent to the Admin Assistant (self-copy), with secure download links. */
+    public function requestsHistory(): void
+    {
+        $role = $_SESSION['role'] ?? '';
+        if ($role === 'custodian') { $role = 'admin_assistant'; }
+        if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant','admin'], true)) { header('Location: /login'); return; }
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        $rows = [];
+        try {
+            $pdo = \App\Database\Connection::resolve();
+            // Prefer matches that look like PR PDFs we generate
+            $st = $pdo->prepare("SELECT id, subject, attachment_name, attachment_path, created_at FROM messages WHERE recipient_id = :me AND attachment_path IS NOT NULL AND attachment_name IS NOT NULL AND attachment_name ILIKE 'pr_%' ORDER BY created_at DESC LIMIT 200");
+            $st->execute(['me' => $me]);
+            $rows = $st->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+        } catch (\Throwable $ignored) {}
+        $this->render('custodian/requests_history.php', [ 'files' => $rows ]);
     }
 
     /** Generate Consumption Report PDF for recent stock updates; supports category or single item_id */

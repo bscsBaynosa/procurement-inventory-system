@@ -65,7 +65,13 @@ try {
         <?php elseif ($role === 'custodian'): ?>
         <?php elseif ($role === 'admin_assistant'): ?>
             <a href="/admin-assistant/inventory" class="<?= nav_active_many(['/admin-assistant/inventory','/custodian/inventory'], $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm4 0h14v-2H7v2zM3 17h2v-2H3v2zm4 0h14v-2H7v2zM3 9h2V7H3v2zm4 0h14V7H7v2z"/></svg> Inventory</a>
-            <a href="/admin-assistant/requests/new" class="<?= nav_active_many(['/admin-assistant/requests','/custodian/requests'], $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 3h18v14H6l-3 3V3z"/></svg> Purchase Request</a>
+            <div class="<?= nav_active_many(['/admin-assistant/requests','/custodian/requests'], $path) ?>" style="display:flex;flex-direction:column;gap:6px;">
+                <a href="/admin-assistant/requests/review" class="<?= nav_active('/admin-assistant/requests/review', $path) ?>" style="display:flex;align-items:center;gap:10px;"><svg viewBox="0 0 24 24"><path d="M3 3h18v14H6l-3 3V3z"/></svg> Purchase Request</a>
+                <div style="display:flex;flex-direction:column;gap:6px; margin-left:26px;">
+                    <a href="/admin-assistant/requests/review" class="<?= nav_active('/admin-assistant/requests/review', $path) ?>">Requisitions</a>
+                    <a href="/admin-assistant/requests/history" class="<?= nav_active('/admin-assistant/requests/history', $path) ?>">History</a>
+                </div>
+            </div>
             <a href="/admin-assistant/reports" class="<?= nav_active('/admin-assistant/reports', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Reports</a>
         <?php elseif ($role === 'procurement'): ?>
             <a href="/manager/requests" class="<?= nav_active('/manager/requests', $path) ?>">
