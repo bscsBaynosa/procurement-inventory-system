@@ -198,10 +198,14 @@ class RequestService
 	{
 		try {
 			$this->ensurePrColumns();
-			$sql = "SELECT 1 FROM purchase_requests\n\t\t\t\tWHERE item_id = :iid AND COALESCE(is_archived, FALSE) = FALSE\n\t\t\t\t  AND (branch_id = :bid OR (:bid IS NULL AND branch_id IS NULL))\n\t\t\t\t  AND status IN ('pending','approved','canvassing_submitted','canvassing_approved','in_progress','po_submitted','po_admin_approved')\n\t\t\t\tLIMIT 1";
-			$st = $this->pdo->prepare($sql);
+			// If branchId is not set (>0), treat as ANY branch to prevent duplicates globally for this item
 			$bid = $branchId > 0 ? $branchId : null;
-			$st->execute(['iid' => $itemId, 'bid' => $bid]);
+			$sql = "SELECT 1 FROM purchase_requests WHERE item_id = :iid AND COALESCE(is_archived, FALSE) = FALSE\n\t\t\t\t  AND status IN ('pending','approved','canvassing_submitted','canvassing_approved','in_progress','po_submitted','po_admin_approved')";
+			$params = ['iid' => $itemId];
+			if ($bid !== null) { $sql .= " AND branch_id = :bid"; $params['bid'] = $bid; }
+			$sql .= " LIMIT 1";
+			$st = $this->pdo->prepare($sql);
+			$st->execute($params);
 			return (bool)$st->fetchColumn();
 		} catch (\Throwable $e) {
 			return false;
@@ -218,9 +222,9 @@ class RequestService
 			$this->ensurePrColumns();
 			$sql = "SELECT DISTINCT item_id FROM purchase_requests\n\t\t\t\tWHERE COALESCE(is_archived, FALSE) = FALSE\n\t\t\t\t  AND status IN ('pending','approved','canvassing_submitted','canvassing_approved','in_progress','po_submitted','po_admin_approved')\n\t\t\t\t  AND item_id IS NOT NULL";
 			$params = [];
-			if ($branchId !== null) {
-				$sql .= " AND (branch_id = :bid OR (:bid IS NULL AND branch_id IS NULL))";
-				$params['bid'] = $branchId > 0 ? $branchId : null;
+			if ($branchId !== null && $branchId > 0) {
+				$sql .= " AND branch_id = :bid";
+				$params['bid'] = $branchId;
 			}
 			$st = $this->pdo->prepare($sql);
 			$st->execute($params);

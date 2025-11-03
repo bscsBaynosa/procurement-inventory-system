@@ -650,21 +650,17 @@ class CustodianController extends BaseController
         $role = $_SESSION['role'] ?? '';
         if ($role === 'custodian') { $role = 'admin_assistant'; }
         if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant','admin'], true)) { header('Location: /login'); return; }
-        $me = (int)($_SESSION['user_id'] ?? 0);
-        $branchId = (int)($_SESSION['branch_id'] ?? 0);
-        $rows = [];
+                $me = (int)($_SESSION['user_id'] ?? 0);
+                $branchId = (int)($_SESSION['branch_id'] ?? 0);
+                $status = isset($_GET['status']) ? trim((string)$_GET['status']) : '';
+                $rows = [];
         try {
-            $pdo = \App\Database\Connection::resolve();
-                        // 1) Fetch PR groups for this assistant. Prefer branch filter; also include groups they created (requested_by)
-                        $stPr = $pdo->prepare("SELECT pr_number, MIN(created_at) AS created_at
-                                                                        FROM purchase_requests
-                                                                        WHERE pr_number IS NOT NULL AND pr_number <> ''
-                                                                            AND ((:b = 0) OR branch_id = :b OR requested_by = :me)
-                                                                        GROUP BY pr_number
-                                                                        ORDER BY MIN(created_at) DESC
-                                                                        LIMIT 200");
-                        $stPr->execute(['b' => $branchId, 'me' => $me]);
-            $groups = $stPr->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+                        $pdo = \App\Database\Connection::resolve();
+                        // Use service grouping to include computed status and stable sorting
+                        $filters = ['include_archived' => false];
+                        if ($branchId > 0) { $filters['branch_id'] = $branchId; }
+                        if ($status !== '' && $status !== 'all') { $filters['status'] = $status; }
+                        $groups = $this->requests()->getRequestsGrouped($filters);
 
             // 2) Fetch any messages (received OR sent) with PR-like attachments so we can link downloads
             $stMsg = $pdo->prepare("SELECT id, subject, attachment_name, attachment_path, created_at FROM messages 
@@ -690,7 +686,8 @@ class CustodianController extends BaseController
                 $pr = (string)$g['pr_number'];
                 $r = [
                     'pr_number' => $pr,
-                    'created_at' => (string)($g['created_at'] ?? ''),
+                    'created_at' => (string)($g['min_created_at'] ?? ($g['created_at'] ?? '')),
+                    'status' => (string)($g['status'] ?? ''),
                     'attachment_name' => null,
                     'message_id' => null,
                 ];
@@ -715,6 +712,7 @@ class CustodianController extends BaseController
                         $rows[] = [
                             'pr_number' => $pr,
                             'created_at' => (string)($m['created_at'] ?? ''),
+                            'status' => '',
                             'attachment_name' => (string)$m['attachment_name'],
                             'message_id' => (int)$m['id'],
                         ];
@@ -722,7 +720,7 @@ class CustodianController extends BaseController
                 }
             }
         } catch (\Throwable $ignored) {}
-        $this->render('custodian/requests_history.php', [ 'rows' => $rows ]);
+        $this->render('custodian/requests_history.php', [ 'rows' => $rows, 'filters' => ['status' => $status] ]);
     }
 
     /** Generate a PR PDF for an existing PR number (backfill) and send a self-copy so it appears in History. */

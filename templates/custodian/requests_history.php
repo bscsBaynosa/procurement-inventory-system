@@ -29,12 +29,23 @@
     <main class="content">
         <h2 style="margin:0 0 12px 0;">Purchase Request • History</h2>
         <div class="card">
+            <form method="GET" action="/admin-assistant/requests/history" style="display:flex;gap:8px;align-items:center;margin:0 0 12px 0;">
+                <label for="status" style="font-weight:600;">Status</label>
+                <?php $sel = (string)($filters['status'] ?? ''); ?>
+                <select id="status" name="status">
+                    <?php $opts = ['all'=>'All','pending'=>'Pending','approved'=>'Approved','canvassing_submitted'=>'Canvassing Submitted','canvassing_approved'=>'Canvassing Approved','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled']; foreach ($opts as $val=>$label): ?>
+                        <option value="<?= htmlspecialchars($val, ENT_QUOTES, 'UTF-8') ?>" <?= $sel===$val? 'selected':'' ?>><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <button class="btn" type="submit">Apply</button>
+            </form>
             <table>
-                <thead><tr><th>PR No.</th><th>File</th><th>Date</th><th>Action</th></tr></thead>
+                <thead><tr><th>PR No.</th><th>Status</th><th>File</th><th>Date</th><th>Action</th></tr></thead>
                 <tbody>
                 <?php if (!empty($rows)): foreach ($rows as $r): ?>
                     <tr>
                         <td class="mono"><?= htmlspecialchars((string)$r['pr_number'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><?= htmlspecialchars((string)($r['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                         <td class="mono">
                             <?= $r['attachment_name'] ? htmlspecialchars((string)$r['attachment_name'], ENT_QUOTES, 'UTF-8') : '<span style="color:#64748b">No PDF yet</span>' ?>
                         </td>
@@ -49,7 +60,7 @@
                         </td>
                     </tr>
                 <?php endforeach; else: ?>
-                    <tr><td colspan="4" style="color:#64748b">No history yet. Submit a Purchase Request to generate a PDF.</td></tr>
+                    <tr><td colspan="5" style="color:#64748b">No history yet. Submit a Purchase Request to generate a PDF.</td></tr>
                 <?php endif; ?>
                 </tbody>
             </table>
