@@ -655,9 +655,15 @@ class CustodianController extends BaseController
         $rows = [];
         try {
             $pdo = \App\Database\Connection::resolve();
-            // 1) Fetch PR groups for this branch (so History is complete even if no PDF was generated yet)
-            $stPr = $pdo->prepare("SELECT pr_number, MIN(created_at) AS created_at FROM purchase_requests WHERE (:b = 0 OR branch_id = :b) GROUP BY pr_number ORDER BY MIN(created_at) DESC LIMIT 200");
-            $stPr->execute(['b' => $branchId]);
+                        // 1) Fetch PR groups for this assistant. Prefer branch filter; also include groups they created (requested_by)
+                        $stPr = $pdo->prepare("SELECT pr_number, MIN(created_at) AS created_at
+                                                                        FROM purchase_requests
+                                                                        WHERE pr_number IS NOT NULL AND pr_number <> ''
+                                                                            AND ((:b = 0) OR branch_id = :b OR requested_by = :me)
+                                                                        GROUP BY pr_number
+                                                                        ORDER BY MIN(created_at) DESC
+                                                                        LIMIT 200");
+                        $stPr->execute(['b' => $branchId, 'me' => $me]);
             $groups = $stPr->fetchAll(\PDO::FETCH_ASSOC) ?: [];
 
             // 2) Fetch any messages (received OR sent) with PR-like attachments so we can link downloads
@@ -696,6 +702,24 @@ class CustodianController extends BaseController
                     $r['created_at'] = (string)($m['created_at'] ?? $r['created_at']);
                 }
                 $rows[] = $r;
+            }
+            // 5) Fallback: if no PR groups discovered (older data or different branch mapping), list any PR PDFs from messages directly
+            if (empty($rows) && !empty($msgs)) {
+                foreach ($msgs as $m) {
+                    $subj = (string)($m['subject'] ?? '');
+                    $fname = (string)($m['attachment_name'] ?? '');
+                    $pr = '';
+                    if (preg_match('/PR\s*([0-9\-]+)/i', $subj, $mm)) { $pr = $mm[1]; }
+                    if ($pr === '' && preg_match('/^pr_([0-9\-]+)/i', $fname, $mm2)) { $pr = $mm2[1]; }
+                    if ($pr !== '') {
+                        $rows[] = [
+                            'pr_number' => $pr,
+                            'created_at' => (string)($m['created_at'] ?? ''),
+                            'attachment_name' => (string)$m['attachment_name'],
+                            'message_id' => (int)$m['id'],
+                        ];
+                    }
+                }
             }
         } catch (\Throwable $ignored) {}
         $this->render('custodian/requests_history.php', [ 'rows' => $rows ]);

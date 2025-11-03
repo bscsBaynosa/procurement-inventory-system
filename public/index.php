@@ -407,6 +407,11 @@ if ($method === 'GET' && $path === '/inbox/download') {
 	$admin->downloadMessageAttachment();
 	exit;
 }
+if ($method === 'GET' && $path === '/inbox/preview') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$admin->previewMessageAttachment();
+	exit;
+}
 
 // Secure PO PDF download
 if ($method === 'GET' && $path === '/po/download') {

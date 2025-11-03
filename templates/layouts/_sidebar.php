@@ -65,11 +65,17 @@ try {
         <?php elseif ($role === 'custodian'): ?>
         <?php elseif ($role === 'admin_assistant'): ?>
             <a href="/admin-assistant/inventory" class="<?= nav_active_many(['/admin-assistant/inventory','/custodian/inventory'], $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm4 0h14v-2H7v2zM3 17h2v-2H3v2zm4 0h14v-2H7v2zM3 9h2V7H3v2zm4 0h14V7H7v2z"/></svg> Inventory</a>
-            <div class="<?= nav_active_many(['/admin-assistant/requests','/custodian/requests'], $path) ?>" style="display:flex;flex-direction:column;gap:6px;">
-                <a href="/admin-assistant/requests/review" class="<?= nav_active('/admin-assistant/requests/review', $path) ?>" style="display:flex;align-items:center;gap:10px;"><svg viewBox="0 0 24 24"><path d="M3 3h18v14H6l-3 3V3z"/></svg> Purchase Request</a>
-                <div style="display:flex;flex-direction:column;gap:6px; margin-left:26px;">
-                    <a href="/admin-assistant/requests/review" class="<?= nav_active('/admin-assistant/requests/review', $path) ?>">Requisitions</a>
-                    <a href="/admin-assistant/requests/history" class="<?= nav_active('/admin-assistant/requests/history', $path) ?>">History</a>
+            <div class="nav-group <?= nav_active_many(['/admin-assistant/requests','/custodian/requests'], $path) ?> <?= strpos($path, '/admin-assistant/requests') === 0 ? 'open' : '' ?>" data-nav-group>
+                <button type="button" class="nav-toggle" data-nav-toggle style="display:flex;align-items:center;gap:10px;background:none;border:0;padding:0;color:inherit;cursor:pointer;width:100%;text-align:left;">
+                    <svg viewBox="0 0 24 24"><path d="M3 3h18v14H6l-3 3V3z"/></svg>
+                    <span>Purchase Request</span>
+                    <svg viewBox="0 0 24 24" style="margin-left:auto;transition:transform .2s ease;" class="chev"><path d="M9 6l6 6-6 6"/></svg>
+                </button>
+                <div class="nav-sub" style="display:block;overflow:hidden;max-height:0;transition:max-height .25s ease;margin-left:26px;">
+                    <div style="display:flex;flex-direction:column;gap:6px;padding-top:6px;">
+                        <a href="/admin-assistant/requests/review" class="<?= nav_active('/admin-assistant/requests/review', $path) ?>">Requisitions</a>
+                        <a href="/admin-assistant/requests/history" class="<?= nav_active('/admin-assistant/requests/history', $path) ?>">History</a>
+                    </div>
                 </div>
             </div>
             <a href="/admin-assistant/reports" class="<?= nav_active('/admin-assistant/reports', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Reports</a>
@@ -101,3 +107,22 @@ try {
         <a href="/logout"><svg viewBox="0 0 24 24"><path d="M10 17l1.41-1.41L8.83 13H20v-2H8.83l2.58-2.59L10 7l-5 5 5 5zM4 19h6v2H4a2 2 0 01-2-2V5a2 2 0 012-2h6v2H4v14z"/></svg> Logout</a>
     </nav>
 </aside>
+<script>
+// Sidebar dropdown toggle (scoped to this partial)
+(function(){
+    var group = document.querySelector('[data-nav-group]');
+    if(!group) return;
+    var toggle = group.querySelector('[data-nav-toggle]');
+    var sub = group.querySelector('.nav-sub');
+    var chev = group.querySelector('.chev');
+    function setOpen(open){
+        if(open){ group.classList.add('open'); sub.style.maxHeight = sub.scrollHeight + 'px'; if(chev){chev.style.transform='rotate(90deg)';} }
+        else { group.classList.remove('open'); sub.style.maxHeight = '0px'; if(chev){chev.style.transform='rotate(0deg)';} }
+    }
+    // Initialize based on current page
+    setOpen(group.classList.contains('active') || group.classList.contains('open'));
+    toggle && toggle.addEventListener('click', function(){ setOpen(!group.classList.contains('open')); });
+    // Recompute height on window resize for smoothness
+    window.addEventListener('resize', function(){ if(group.classList.contains('open')){ sub.style.maxHeight = sub.scrollHeight + 'px'; }});
+})();
+</script>

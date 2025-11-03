@@ -1238,7 +1238,7 @@ class AdminController extends BaseController
         header('Location: /admin/requests/review?pr=' . rawurlencode($pr) . '&revised=1');
     }
 
-    /** Securely stream a message attachment to the current user. */
+    /** Securely stream a message attachment to the current user (download). */
     public function downloadMessageAttachment(): void
     {
         if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
@@ -1247,7 +1247,7 @@ class AdminController extends BaseController
         if ($me <= 0 || $id <= 0) { http_response_code(403); echo 'Forbidden'; return; }
         try {
             // Prefer attachment stored on messages table (attachment_name/path)
-            $st = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id AND recipient_id = :me');
+            $st = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id AND (recipient_id = :me OR sender_id = :me)');
             $st->execute(['id' => $id, 'me' => $me]);
             $row = $st->fetch();
             $name = (string)($row['attachment_name'] ?? 'attachment');
@@ -1255,7 +1255,7 @@ class AdminController extends BaseController
             if (!$row || $path === '' || !is_file($path)) {
                 // Fallback: messages_attachments table
                 try {
-                    $st2 = $this->pdo->prepare('SELECT a.file_name, a.file_path FROM messages_attachments a JOIN messages m ON m.id = a.message_id WHERE a.message_id = :id AND m.recipient_id = :me ORDER BY a.uploaded_at DESC LIMIT 1');
+                    $st2 = $this->pdo->prepare('SELECT a.file_name, a.file_path FROM messages_attachments a JOIN messages m ON m.id = a.message_id WHERE a.message_id = :id AND (m.recipient_id = :me OR m.sender_id = :me) ORDER BY a.uploaded_at DESC LIMIT 1');
                     $st2->execute(['id' => $id, 'me' => $me]);
                     $r2 = $st2->fetch();
                     $name = (string)($r2['file_name'] ?? $name);
@@ -1264,7 +1264,8 @@ class AdminController extends BaseController
             }
             if ($path === '' || !is_file($path)) { http_response_code(404); echo 'File not found'; return; }
             $size = @filesize($path) ?: null;
-            header('Content-Type: application/octet-stream');
+            $isPdf = preg_match('/\.pdf$/i', $name) === 1;
+            header('Content-Type: ' . ($isPdf ? 'application/pdf' : 'application/octet-stream'));
             header('Content-Disposition: attachment; filename="' . rawurlencode($name) . '"');
             if ($size !== null) { header('Content-Length: ' . (string)$size); }
             @readfile($path);
@@ -1272,6 +1273,34 @@ class AdminController extends BaseController
             http_response_code(500);
             header('Content-Type: text/plain');
             echo 'Download error: ' . $e->getMessage();
+        }
+    }
+
+    /** Securely preview (inline) a message attachment (PDF) to the current user. */
+    public function previewMessageAttachment(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+        if ($me <= 0 || $id <= 0) { http_response_code(403); echo 'Forbidden'; return; }
+        try {
+            $st = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id AND (recipient_id = :me OR sender_id = :me)');
+            $st->execute(['id' => $id, 'me' => $me]);
+            $row = $st->fetch();
+            $name = (string)($row['attachment_name'] ?? 'attachment.pdf');
+            $path = (string)($row['attachment_path'] ?? '');
+            if ($path === '' || !is_file($path)) {
+                http_response_code(404); echo 'File not found'; return;
+            }
+            $size = @filesize($path) ?: null;
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: inline; filename="' . rawurlencode($name) . '"');
+            if ($size !== null) { header('Content-Length: ' . (string)$size); }
+            @readfile($path);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            header('Content-Type: text/plain');
+            echo 'Preview error: ' . $e->getMessage();
         }
     }
 
