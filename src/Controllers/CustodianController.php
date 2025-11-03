@@ -112,30 +112,55 @@ class CustodianController extends BaseController
                     $status = isset($_GET['status']) ? trim((string)$_GET['status']) : 'all';
                     $rows = [];
 
-                    // 1) Try to build from the same dataset as the dashboard
+                    // 1) Build from a minimal direct SQL first (most robust), then we can enhance
                     $groups = [];
                     try {
-                        $filters = [];
-                        if ($branchId > 0) { $filters['branch_id'] = $branchId; }
-                        if ($status !== '' && strtolower($status) !== 'all') { $filters['status'] = $status; }
-                        $raw = $this->requests()->getAllRequests($filters);
-                        $by = [];
-                        foreach ($raw as $row) {
-                            $prn = (string)($row['pr_number'] ?? '');
-                            if ($prn === '') { $prn = 'R' . (int)($row['request_id'] ?? 0); }
-                            if (!isset($by[$prn])) {
-                                $by[$prn] = [
-                                    'pr_number' => $prn,
-                                    'min_created_at' => (string)($row['created_at'] ?? ''),
-                                    'status' => (string)($row['status'] ?? ''),
-                                ];
-                            } else {
-                                $by[$prn]['min_created_at'] = min($by[$prn]['min_created_at'], (string)($row['created_at'] ?? ''));
-                                $by[$prn]['status'] = (string)($row['status'] ?? $by[$prn]['status']);
+                        $pdo = \App\Database\Connection::resolve();
+                        $conds = [];
+                        $params = [];
+                        if ($branchId > 0) { $conds[] = '(pr.branch_id = :b OR pr.branch_id IS NULL)'; $params['b'] = $branchId; }
+                        if ($status !== '' && strtolower($status) !== 'all') { $conds[] = 'pr.status = :s'; $params['s'] = $status; }
+                        $sql = 'WITH g AS (
+                                    SELECT pr_number,
+                                           MIN(created_at) AS min_created_at
+                                    FROM purchase_requests pr';
+                        if ($conds) { $sql .= ' WHERE ' . implode(' AND ', $conds); }
+                        $sql .= ' GROUP BY pr_number)
+                                 SELECT g.pr_number,
+                                        g.min_created_at,
+                                        (SELECT pr2.status FROM purchase_requests pr2 WHERE pr2.pr_number = g.pr_number ORDER BY pr2.updated_at DESC NULLS LAST, pr2.created_at DESC LIMIT 1) AS status
+                                 FROM g
+                                 ORDER BY g.min_created_at DESC
+                                 LIMIT 200';
+                        $st = $pdo->prepare($sql);
+                        $st->execute($params);
+                        $groups = $st->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+                    } catch (\Throwable $e) { $groups = []; $pdo = null; }
+                    // If direct SQL returned nothing, fall back to service dataset as a secondary attempt
+                    if (empty($groups)) {
+                        try {
+                            $filters = [];
+                            if ($branchId > 0) { $filters['branch_id'] = $branchId; }
+                            if ($status !== '' && strtolower($status) !== 'all') { $filters['status'] = $status; }
+                            $raw = $this->requests()->getAllRequests($filters);
+                            $by = [];
+                            foreach ($raw as $row) {
+                                $prn = (string)($row['pr_number'] ?? '');
+                                if ($prn === '') { $prn = 'R' . (int)($row['request_id'] ?? 0); }
+                                if (!isset($by[$prn])) {
+                                    $by[$prn] = [
+                                        'pr_number' => $prn,
+                                        'min_created_at' => (string)($row['created_at'] ?? ''),
+                                        'status' => (string)($row['status'] ?? ''),
+                                    ];
+                                } else {
+                                    $by[$prn]['min_created_at'] = min($by[$prn]['min_created_at'], (string)($row['created_at'] ?? ''));
+                                    $by[$prn]['status'] = (string)($row['status'] ?? $by[$prn]['status']);
+                                }
                             }
-                        }
-                        $groups = array_values($by);
-                    } catch (\Throwable $e) { $groups = []; }
+                            $groups = array_values($by);
+                        } catch (\Throwable $e) { $groups = []; }
+                    }
 
                     // 2) Map attachments from messages (best-effort)
                     $msgs = [];
