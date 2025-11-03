@@ -109,9 +109,11 @@ try {
 </aside>
 <style>
 /* Make sidebar dropdown toggle visually consistent with .nav a */
+.nav-group .nav-toggle { font: inherit; color: inherit; -webkit-appearance:none; appearance:none; }
 .nav-group .nav-toggle:hover { background: var(--bg, #f8fafc); }
 .nav-group.open .nav-toggle { background: color-mix(in oklab, var(--accent, #22c55e) 10%, transparent); border-color: color-mix(in oklab, var(--accent, #22c55e) 35%, var(--border, #e2e8f0)); }
 .nav-group .nav-toggle:focus { outline: 2px solid color-mix(in oklab, var(--accent, #22c55e) 50%, transparent); outline-offset: 2px; }
+.nav-group .nav-toggle svg { width: 18px; height: 18px; flex: 0 0 18px; }
 </style>
 <script>
 // Sidebar dropdown toggle (scoped to this partial)
