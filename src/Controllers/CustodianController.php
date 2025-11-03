@@ -736,6 +736,41 @@ class CustodianController extends BaseController
                     }
                 }
             }
+            // 6) Last-resort fallback: show recent raw requests (no PR PDF linkage) so History is never empty
+            if (empty($rows)) {
+                $cond2 = '';
+                $params2 = [];
+                if (!empty($filters['branch_id'])) { $cond2 = ' WHERE (pr.branch_id = :b OR pr.branch_id IS NULL)'; $params2['b'] = (int)$filters['branch_id']; }
+                if (!empty($filters['status'])) {
+                    $cond2 .= ($cond2 ? ' AND ' : ' WHERE ') . 'pr.status = :s';
+                    $params2['s'] = (string)$filters['status'];
+                }
+                $sql2 = 'SELECT pr_number, request_id, status, created_at FROM purchase_requests pr ' . $cond2 . ' ORDER BY created_at DESC LIMIT 100';
+                $st2 = $pdo->prepare($sql2);
+                $st2->execute($params2);
+                foreach ($st2->fetchAll(\PDO::FETCH_ASSOC) ?: [] as $row) {
+                    $rows[] = [
+                        'pr_number' => (string)($row['pr_number'] ?? ('R' . (int)$row['request_id'])),
+                        'created_at' => (string)($row['created_at'] ?? ''),
+                        'status' => (string)($row['status'] ?? ''),
+                        'attachment_name' => null,
+                        'message_id' => null,
+                    ];
+                }
+            }
+
+            // Optional diagnostics: append counts when debug=1
+            if ((string)($_GET['debug'] ?? '') === '1') {
+                $totalPr = (int)$pdo->query('SELECT COUNT(*) FROM purchase_requests')->fetchColumn();
+                $totalMsg = (int)$pdo->query("SELECT COUNT(*) FROM messages WHERE attachment_path IS NOT NULL AND attachment_name IS NOT NULL AND attachment_name ILIKE '%.pdf'")->fetchColumn();
+                $rows[] = [
+                    'pr_number' => '[debug] pr_count=' . $totalPr,
+                    'created_at' => date('Y-m-d H:i:s'),
+                    'status' => 'debug',
+                    'attachment_name' => 'attachments=' . $totalMsg,
+                    'message_id' => null,
+                ];
+            }
         } catch (\Throwable $ignored) {}
     $this->render('custodian/requests_history.php', [ 'rows' => $rows, 'filters' => ['status' => $status] ]);
     }
