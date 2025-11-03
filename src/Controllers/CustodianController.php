@@ -644,22 +644,124 @@ class CustodianController extends BaseController
         @readfile($abs);
     }
 
-    /** Purchase Request history: list PR PDF files sent to the Admin Assistant (self-copy), with secure download links. */
+    /** Purchase Request history: show all PR groups for the assistant's branch and attach/download PDFs when available. */
     public function requestsHistory(): void
     {
         $role = $_SESSION['role'] ?? '';
         if ($role === 'custodian') { $role = 'admin_assistant'; }
         if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant','admin'], true)) { header('Location: /login'); return; }
         $me = (int)($_SESSION['user_id'] ?? 0);
+        $branchId = (int)($_SESSION['branch_id'] ?? 0);
         $rows = [];
         try {
             $pdo = \App\Database\Connection::resolve();
-            // Prefer matches that look like PR PDFs we generate
-            $st = $pdo->prepare("SELECT id, subject, attachment_name, attachment_path, created_at FROM messages WHERE recipient_id = :me AND attachment_path IS NOT NULL AND attachment_name IS NOT NULL AND attachment_name ILIKE 'pr_%' ORDER BY created_at DESC LIMIT 200");
-            $st->execute(['me' => $me]);
-            $rows = $st->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+            // 1) Fetch PR groups for this branch (so History is complete even if no PDF was generated yet)
+            $stPr = $pdo->prepare("SELECT pr_number, MIN(created_at) AS created_at FROM purchase_requests WHERE (:b = 0 OR branch_id = :b) GROUP BY pr_number ORDER BY MIN(created_at) DESC LIMIT 200");
+            $stPr->execute(['b' => $branchId]);
+            $groups = $stPr->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+
+            // 2) Fetch any messages (received OR sent) with PR-like attachments so we can link downloads
+            $stMsg = $pdo->prepare("SELECT id, subject, attachment_name, attachment_path, created_at FROM messages 
+                WHERE (recipient_id = :me OR sender_id = :me)
+                AND attachment_path IS NOT NULL AND attachment_name IS NOT NULL AND attachment_name ILIKE 'pr_%' 
+                ORDER BY created_at DESC LIMIT 500");
+            $stMsg->execute(['me' => $me]);
+            $msgs = $stMsg->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+
+            // 3) Index messages by PR number parsed from filename or subject
+            $byPr = [];
+            foreach ($msgs as $m) {
+                $subj = (string)($m['subject'] ?? '');
+                $fname = (string)($m['attachment_name'] ?? '');
+                $pr = '';
+                if (preg_match('/PR\s*([0-9\-]+)/i', $subj, $mm)) { $pr = $mm[1]; }
+                if ($pr === '' && preg_match('/^pr_([0-9\-]+)/i', $fname, $mm2)) { $pr = $mm2[1]; }
+                if ($pr !== '' && !isset($byPr[$pr])) { $byPr[$pr] = $m; }
+            }
+
+            // 4) Merge: build rows with PR number + optional attachment
+            foreach ($groups as $g) {
+                $pr = (string)$g['pr_number'];
+                $r = [
+                    'pr_number' => $pr,
+                    'created_at' => (string)($g['created_at'] ?? ''),
+                    'attachment_name' => null,
+                    'message_id' => null,
+                ];
+                if (isset($byPr[$pr])) {
+                    $m = $byPr[$pr];
+                    $r['attachment_name'] = (string)$m['attachment_name'];
+                    $r['message_id'] = (int)$m['id'];
+                    // Prefer message timestamp when available
+                    $r['created_at'] = (string)($m['created_at'] ?? $r['created_at']);
+                }
+                $rows[] = $r;
+            }
         } catch (\Throwable $ignored) {}
-        $this->render('custodian/requests_history.php', [ 'files' => $rows ]);
+        $this->render('custodian/requests_history.php', [ 'rows' => $rows ]);
+    }
+
+    /** Generate a PR PDF for an existing PR number (backfill) and send a self-copy so it appears in History. */
+    public function generatePrPdf(): void
+    {
+        if (!$this->auth()->isAuthenticated()) { header('Location: /login'); return; }
+        $role = $_SESSION['role'] ?? '';
+        if ($role === 'custodian') { $role = 'admin_assistant'; }
+        if (!in_array($role, ['admin_assistant','admin'], true)) { header('Location: /login'); return; }
+        $pr = isset($_GET['pr']) ? trim((string)$_GET['pr']) : '';
+        if ($pr === '' || !preg_match('/^[0-9\-]+$/', $pr)) { header('Location: /admin-assistant/requests/history?error=bad_pr'); return; }
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        $branchId = (int)($_SESSION['branch_id'] ?? 0);
+        try {
+            $pdo = \App\Database\Connection::resolve();
+            // Load PR lines for this branch only
+            $st = $pdo->prepare('SELECT pr.item_id, pr.quantity, pr.unit, pr.branch_id, pr.requested_by, i.name AS item_name, i.unit AS default_unit, i.quantity AS stock_on_hand
+                                 FROM purchase_requests pr 
+                                 LEFT JOIN inventory_items i ON i.item_id = pr.item_id
+                                 WHERE pr.pr_number = :pr AND (:b = 0 OR pr.branch_id = :b)
+                                 ORDER BY pr.created_at ASC');
+            $st->execute(['pr' => $pr, 'b' => $branchId]);
+            $lines = $st->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+            if (!$lines) { header('Location: /admin-assistant/requests/history?error=not_found'); return; }
+
+            // Resolve branch name
+            $branchName = 'Branch';
+            if ($branchId) {
+                try { $sb = $pdo->prepare('SELECT name FROM branches WHERE branch_id = :b'); $sb->execute(['b' => $branchId]); $bn = $sb->fetchColumn(); if ($bn) { $branchName = (string)$bn; } } catch (\Throwable $e) {}
+            }
+            $byName = (string)($_SESSION['full_name'] ?? ('User #' . $me));
+            $itemLines = [];
+            foreach ($lines as $row) {
+                $itemLines[] = [
+                    'description' => (string)($row['item_name'] ?? 'Item'),
+                    'unit' => (string)($row['unit'] ?? ($row['default_unit'] ?? 'pcs')),
+                    'qty' => (int)($row['quantity'] ?? 0),
+                    'stock_on_hand' => isset($row['stock_on_hand']) ? (int)$row['stock_on_hand'] : null,
+                ];
+            }
+            // Generate PDF
+            $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
+            if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+            $fileBase = 'pr_' . $pr . '_' . date('Ymd_His') . '.pdf';
+            $abs = $dir . DIRECTORY_SEPARATOR . $fileBase;
+            $pdf = new \App\Services\PDFService();
+            $pdf->generatePurchaseRequisitionToFile([
+                'pr_number' => $pr,
+                'branch_name' => $branchName,
+                'requested_by' => $byName,
+                'prepared_at' => date('Y-m-d H:i'),
+                'justification' => '',
+                'needed_by' => '',
+            ], $itemLines, $abs);
+
+            // Self-copy so it appears in History
+            try {
+                $this->requests()->sendMessage($me, $me, 'Copy: Purchase Request of ' . $branchName . ' • PR ' . $pr, 'Generated PDF copy for your records.', basename($fileBase), $abs);
+            } catch (\Throwable $e) {}
+            header('Location: /admin-assistant/requests/history?ok=1');
+        } catch (\Throwable $e) {
+            header('Location: /admin-assistant/requests/history?error=' . rawurlencode($e->getMessage()));
+        }
     }
 
     /** Generate Consumption Report PDF for recent stock updates; supports category or single item_id */

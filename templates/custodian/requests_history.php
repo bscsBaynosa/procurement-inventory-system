@@ -32,19 +32,20 @@
             <table>
                 <thead><tr><th>PR No.</th><th>File</th><th>Date</th><th>Action</th></tr></thead>
                 <tbody>
-                <?php if (!empty($files)): foreach ($files as $f): ?>
-                    <?php
-                        $subj = (string)($f['subject'] ?? '');
-                        $fname = (string)($f['attachment_name'] ?? '');
-                        $prNum = '';
-                        if (preg_match('/PR\s*([0-9\-]+)/i', $subj, $m)) { $prNum = $m[1]; }
-                        if ($prNum === '' && preg_match('/^pr_([0-9\-]+)/i', $fname, $m2)) { $prNum = $m2[1]; }
-                    ?>
+                <?php if (!empty($rows)): foreach ($rows as $r): ?>
                     <tr>
-                        <td class="mono"><?= htmlspecialchars($prNum !== '' ? $prNum : '—', ENT_QUOTES, 'UTF-8') ?></td>
-                        <td class="mono"><?= htmlspecialchars($fname, ENT_QUOTES, 'UTF-8') ?></td>
-                        <td><?= htmlspecialchars((string)$f['created_at'], ENT_QUOTES, 'UTF-8') ?></td>
-                		<td><a class="btn" href="/inbox/download?id=<?= (int)$f['id'] ?>">Download</a></td>
+                        <td class="mono"><?= htmlspecialchars((string)$r['pr_number'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td class="mono">
+                            <?= $r['attachment_name'] ? htmlspecialchars((string)$r['attachment_name'], ENT_QUOTES, 'UTF-8') : '<span style="color:#64748b">No PDF yet</span>' ?>
+                        </td>
+                        <td><?= htmlspecialchars((string)$r['created_at'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td>
+                            <?php if (!empty($r['message_id'])): ?>
+                                <a class="btn" href="/inbox/download?id=<?= (int)$r['message_id'] ?>">Download</a>
+                            <?php else: ?>
+                                <a class="btn" href="/admin-assistant/requests/history/generate?pr=<?= urlencode((string)$r['pr_number']) ?>">Generate PDF</a>
+                            <?php endif; ?>
+                        </td>
                     </tr>
                 <?php endforeach; else: ?>
                     <tr><td colspan="4" style="color:#64748b">No history yet. Submit a Purchase Request to generate a PDF.</td></tr>
