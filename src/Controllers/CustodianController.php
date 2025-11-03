@@ -667,7 +667,7 @@ class CustodianController extends BaseController
                         if (empty($groups)) {
                                 $cond = '';
                                 $paramsMin = [];
-                                if (!empty($filters['branch_id'])) { $cond = ' WHERE pr.branch_id = :b'; $paramsMin['b'] = (int)$filters['branch_id']; }
+                                if (!empty($filters['branch_id'])) { $cond = ' WHERE (pr.branch_id = :b OR pr.branch_id IS NULL)'; $paramsMin['b'] = (int)$filters['branch_id']; }
                                 $sqlMin = "SELECT pr.pr_number, MIN(pr.created_at) AS min_created_at,
                                                          (SELECT pr2.status FROM purchase_requests pr2 WHERE pr2.pr_number = pr.pr_number ORDER BY pr2.updated_at DESC LIMIT 1) AS status
                                                      FROM purchase_requests pr" . $cond . "

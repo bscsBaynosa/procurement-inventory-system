@@ -297,7 +297,7 @@ class RequestService
 
 		$conditions = [];
 		$params = [];
-		if (!empty($filters['branch_id'])) { $conditions[] = 'branch_id = :branch_id'; $params['branch_id'] = (int)$filters['branch_id']; }
+	if (!empty($filters['branch_id'])) { $conditions[] = '(branch_id = :branch_id OR branch_id IS NULL)'; $params['branch_id'] = (int)$filters['branch_id']; }
 		if (!empty($filters['status'])) { $conditions[] = 'status = :status'; $params['status'] = (string)$filters['status']; }
 		if (!empty($filters['revision'])) { $conditions[] = 'revision_state = :revision'; $params['revision'] = (string)$filters['revision']; }
 		if (!$includeArchived) { $conditions[] = 'is_archived = FALSE'; }
