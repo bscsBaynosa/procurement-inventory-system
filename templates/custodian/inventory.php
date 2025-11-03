@@ -197,7 +197,7 @@
                     <tr><th>Name</th><th>Category</th><th>Stocks</th><th>Status</th><th>Unit</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
-                    <?php $activeSet = []; if (!empty($active_pr_items)) { foreach ($active_pr_items as $aid) { $activeSet[(int)$aid] = true; } }
+                    <?php $activeSet = []; if (!empty($active_pr_items)) { foreach ($active_pr_items as $aid) { $activeSet[(int)$aid] = true; } } ?>
                     <?php if (!empty($items)): foreach ($items as $it): 
                         $qty = (int)($it['quantity'] ?? 0);
                         $min = isset($it['minimum_quantity']) ? (int)$it['minimum_quantity'] : 0;

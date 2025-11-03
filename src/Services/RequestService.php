@@ -198,7 +198,7 @@ class RequestService
 	{
 		try {
 			$this->ensurePrColumns();
-			$sql = "SELECT 1 FROM purchase_requests\n\t\t\t\tWHERE item_id = :iid AND COALESCE(is_archived, FALSE) = FALSE\n\t\t\t\t  AND (branch_id = :bid OR (:bid IS NULL AND branch_id IS NULL))\n\t\t\t\t  AND status IN ('pending','approved','canvassing_submitted','canvassing_approved','in_progress')\n\t\t\t\tLIMIT 1";
+			$sql = "SELECT 1 FROM purchase_requests\n\t\t\t\tWHERE item_id = :iid AND COALESCE(is_archived, FALSE) = FALSE\n\t\t\t\t  AND (branch_id = :bid OR (:bid IS NULL AND branch_id IS NULL))\n\t\t\t\t  AND status IN ('pending','approved','canvassing_submitted','canvassing_approved','in_progress','po_admin_approved')\n\t\t\t\tLIMIT 1";
 			$st = $this->pdo->prepare($sql);
 			$bid = $branchId > 0 ? $branchId : null;
 			$st->execute(['iid' => $itemId, 'bid' => $bid]);
@@ -216,7 +216,7 @@ class RequestService
 	{
 		try {
 			$this->ensurePrColumns();
-			$sql = "SELECT DISTINCT item_id FROM purchase_requests\n\t\t\t\tWHERE COALESCE(is_archived, FALSE) = FALSE\n\t\t\t\t  AND status IN ('pending','approved','canvassing_submitted','canvassing_approved','in_progress')\n\t\t\t\t  AND item_id IS NOT NULL";
+			$sql = "SELECT DISTINCT item_id FROM purchase_requests\n\t\t\t\tWHERE COALESCE(is_archived, FALSE) = FALSE\n\t\t\t\t  AND status IN ('pending','approved','canvassing_submitted','canvassing_approved','in_progress','po_admin_approved')\n\t\t\t\t  AND item_id IS NOT NULL";
 			$params = [];
 			if ($branchId !== null) {
 				$sql .= " AND (branch_id = :bid OR (:bid IS NULL AND branch_id IS NULL))";
