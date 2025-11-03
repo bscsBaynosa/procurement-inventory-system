@@ -661,7 +661,23 @@ class CustodianController extends BaseController
                         $filters = ['include_archived' => false];
                         if ($branchId > 0) { $filters['branch_id'] = $branchId; }
                         if ($status !== '' && strtolower($status) !== 'all') { $filters['status'] = $status; }
-                        $groups = $this->requests()->getRequestsGrouped($filters);
+                                                $groups = $this->requests()->getRequestsGrouped($filters);
+
+                        // Fallback: if grouping returned nothing (older data or missing pr_number), derive minimal groups directly
+                        if (empty($groups)) {
+                                $cond = '';
+                                $paramsMin = [];
+                                if (!empty($filters['branch_id'])) { $cond = ' WHERE pr.branch_id = :b'; $paramsMin['b'] = (int)$filters['branch_id']; }
+                                $sqlMin = "SELECT pr.pr_number, MIN(pr.created_at) AS min_created_at,
+                                                         (SELECT pr2.status FROM purchase_requests pr2 WHERE pr2.pr_number = pr.pr_number ORDER BY pr2.updated_at DESC LIMIT 1) AS status
+                                                     FROM purchase_requests pr" . $cond . "
+                                                     GROUP BY pr.pr_number
+                                                     ORDER BY MIN(pr.created_at) DESC
+                                                     LIMIT 200";
+                                $stMin = $pdo->prepare($sqlMin);
+                                $stMin->execute($paramsMin);
+                                $groups = $stMin->fetchAll(\PDO::FETCH_ASSOC) ?: [];
+                        }
 
             // 2) Fetch any messages (received OR sent) with PR-like attachments so we can link downloads
             $stMsg = $pdo->prepare("SELECT id, subject, attachment_name, attachment_path, created_at FROM messages 
