@@ -657,11 +657,29 @@ class CustodianController extends BaseController
                 $rows = [];
         try {
                         $pdo = \App\Database\Connection::resolve();
-                        // Use service grouping to include computed status and stable sorting
-                        $filters = ['include_archived' => false];
+                        // Build history from the same base query the dashboard uses to avoid mismatches
+                        $filters = [];
                         if ($branchId > 0) { $filters['branch_id'] = $branchId; }
                         if ($status !== '' && strtolower($status) !== 'all') { $filters['status'] = $status; }
-                                                $groups = $this->requests()->getRequestsGrouped($filters);
+                        $raw = $this->requests()->getAllRequests($filters);
+                        // Group by PR number in PHP to ensure we always have rows even on legacy schemas
+                        $by = [];
+                        foreach ($raw as $row) {
+                            $prn = (string)($row['pr_number'] ?? '');
+                            if ($prn === '') { $prn = 'R' . (int)($row['request_id'] ?? 0); }
+                            if (!isset($by[$prn])) {
+                                $by[$prn] = [
+                                    'pr_number' => $prn,
+                                    'min_created_at' => (string)($row['created_at'] ?? ''),
+                                    'status' => (string)($row['status'] ?? ''),
+                                ];
+                            } else {
+                                // Update earliest created_at and take the latest status by updated_at order (approximate via natural input order)
+                                $by[$prn]['min_created_at'] = min($by[$prn]['min_created_at'], (string)($row['created_at'] ?? ''));
+                                $by[$prn]['status'] = (string)($row['status'] ?? $by[$prn]['status']);
+                            }
+                        }
+                        $groups = array_values($by);
 
                         // Fallback: if grouping returned nothing (older data or missing pr_number), derive minimal groups directly
                         if (empty($groups)) {
