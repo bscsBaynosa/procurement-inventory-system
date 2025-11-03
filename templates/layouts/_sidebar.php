@@ -66,7 +66,7 @@ try {
         <?php elseif ($role === 'admin_assistant'): ?>
             <a href="/admin-assistant/inventory" class="<?= nav_active_many(['/admin-assistant/inventory','/custodian/inventory'], $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm4 0h14v-2H7v2zM3 17h2v-2H3v2zm4 0h14v-2H7v2zM3 9h2V7H3v2zm4 0h14V7H7v2z"/></svg> Inventory</a>
             <div class="nav-group <?= nav_active_many(['/admin-assistant/requests','/custodian/requests'], $path) ?> <?= strpos($path, '/admin-assistant/requests') === 0 ? 'open' : '' ?>" data-nav-group>
-                <button type="button" class="nav-toggle" data-nav-toggle style="display:flex;align-items:center;gap:10px;background:none;border:0;padding:0;color:inherit;cursor:pointer;width:100%;text-align:left;">
+                <button type="button" class="nav-toggle" data-nav-toggle style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:none;border:1px solid transparent;color:inherit;cursor:pointer;width:100%;text-align:left;outline:none;">
                     <svg viewBox="0 0 24 24"><path d="M3 3h18v14H6l-3 3V3z"/></svg>
                     <span>Purchase Request</span>
                     <svg viewBox="0 0 24 24" style="margin-left:auto;transition:transform .2s ease;" class="chev"><path d="M9 6l6 6-6 6"/></svg>
@@ -107,6 +107,12 @@ try {
         <a href="/logout"><svg viewBox="0 0 24 24"><path d="M10 17l1.41-1.41L8.83 13H20v-2H8.83l2.58-2.59L10 7l-5 5 5 5zM4 19h6v2H4a2 2 0 01-2-2V5a2 2 0 012-2h6v2H4v14z"/></svg> Logout</a>
     </nav>
 </aside>
+<style>
+/* Make sidebar dropdown toggle visually consistent with .nav a */
+.nav-group .nav-toggle:hover { background: var(--bg, #f8fafc); }
+.nav-group.open .nav-toggle { background: color-mix(in oklab, var(--accent, #22c55e) 10%, transparent); border-color: color-mix(in oklab, var(--accent, #22c55e) 35%, var(--border, #e2e8f0)); }
+.nav-group .nav-toggle:focus { outline: 2px solid color-mix(in oklab, var(--accent, #22c55e) 50%, transparent); outline-offset: 2px; }
+</style>
 <script>
 // Sidebar dropdown toggle (scoped to this partial)
 (function(){
