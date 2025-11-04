@@ -295,11 +295,23 @@ class InventoryService
 		$vals = array();
 		$params = array();
 		foreach ($cats as $i => $c) { $key = 'c'.$i; $vals[] = '(:'.$key.')'; $params[$key] = $c; }
-		$sql = "WITH cats(category) AS (VALUES ".implode(',', $vals)."), agg AS (
-			SELECT COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') AS category,
-				   COUNT(DISTINCT supplier_id) AS suppliers
+		// Normalize supplier_items.category to our allowed buckets so near-miss labels still count
+		$sql = "WITH cats(category) AS (VALUES ".implode(',', $vals)."), src AS (
+			SELECT CASE
+				WHEN category ILIKE 'office%%' OR category ILIKE '%%stationery%%' THEN 'Office Supplies'
+				WHEN category ILIKE 'medical equip%%' OR category ILIKE '%%equipment%%' OR category ILIKE 'medical%%' THEN 'Medical Equipments'
+				WHEN category ILIKE 'medicine%%' OR category ILIKE 'drug%%' THEN 'Medicines'
+				WHEN category ILIKE 'machine%%' THEN 'Machines'
+				WHEN category ILIKE 'electronic%%' OR category ILIKE 'computer%%' OR category ILIKE 'it%%' THEN 'Electronics'
+				WHEN category ILIKE 'appliance%%' THEN 'Appliances'
+				ELSE 'Uncategorized'
+			END AS category,
+			supplier_id
 			FROM supplier_items
-			GROUP BY 1
+		), agg AS (
+			SELECT category, COUNT(DISTINCT supplier_id) AS suppliers
+			FROM src
+			GROUP BY category
 		)
 		SELECT cats.category, COALESCE(agg.suppliers, 0) AS suppliers
 		FROM cats

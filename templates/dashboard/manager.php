@@ -128,7 +128,7 @@
                                         <button class="btn primary" type="submit">Update</button>
                                     </form>
                                     <a class="btn" href="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>">View</a>
-                                    <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>">Download PDF</a>
+                                    <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">Download PDF</a>
                                     <?php if (!empty($g['requested_by_id'])): ?>
                                         <a class="btn" href="/admin/messages?to=<?= urlencode((string)$g['requested_by_id']) ?>&subject=<?= urlencode('Regarding PR ' . (string)$g['pr_number'] . ' - ' . $statusLabel) ?>">Message</a>
                                     <?php endif; ?>

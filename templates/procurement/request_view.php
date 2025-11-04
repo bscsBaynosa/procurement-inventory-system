@@ -25,11 +25,12 @@ $status = isset($rows[0]['status']) ? (string)$rows[0]['status'] : '';
     th, td { border: 1px solid #e5e7eb; padding: 10px; }
     th { background: #f1f5f9; text-align: left; }
     .actions { display: flex; gap: 12px; margin-top: 12px; }
-    .btn { display: inline-flex; align-items:center; gap:8px; font-weight:600; font-size:14px; padding: 10px 16px; border-radius: 10px; text-decoration: none; cursor: pointer; border: 1px solid transparent; }
-    .btn.primary { background: #16a34a; color: #fff; }
-    .btn.primary:hover { background: #15803d; }
-    .btn.secondary { background: #0ea5e9; color: #fff; }
-    .btn.secondary:hover { background: #0284c7; }
+  .btn { display: inline-flex; align-items:center; gap:8px; font-weight:700; font-size:14px; padding: 10px 18px; border-radius: 10px; text-decoration: none; cursor: pointer; border: 1px solid transparent; }
+  /* Green palette across actions */
+  .btn.primary { background: #16a34a; color: #fff; border-color:#15803d; }
+  .btn.primary:hover { background: #15803d; }
+  .btn.secondary { background: #22c55e; color: #fff; border-color:#16a34a; }
+  .btn.secondary:hover { background: #16a34a; }
     .btn.ghost { background: #ffffff; color: #0f172a; border-color: #cbd5e1; }
     .btn.ghost:hover { background:#f8fafc; }
     .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
