@@ -116,8 +116,9 @@
                 </div>
                 <div id="totalsSummary" class="totals"></div>
             </div>
-            <div style="margin-top:12px; display:flex; gap:8px;">
-                <button class="btn primary" type="submit">Generate and Send for Admin Approval</button>
+            <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+                <button id="btnPreview" class="btn" type="button" title="Preview canvassing PDF in a new tab">Generate</button>
+                <button id="btnSend" class="btn primary" type="submit" disabled>Send for Admin Approval</button>
                 <a class="btn" href="/manager/requests">Cancel</a>
             </div>
         </form>
@@ -127,6 +128,11 @@
                 if (awardSel) {
                     awardSel.addEventListener('change', function(){ this.dataset.userSet = '1'; });
                 }
+                const form = document.getElementById('canvassForm');
+                const btnPreview = document.getElementById('btnPreview');
+                const btnSend = document.getElementById('btnSend');
+                const originalAction = form.getAttribute('action');
+                const originalTarget = form.getAttribute('target');
                 function recalc() {
                     const selected = new Set(Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.getAttribute('data-supplier-id')));
                     const table = document.getElementById('priceMatrix');
@@ -199,6 +205,24 @@
                 }
                 document.querySelectorAll('.supplier-choice').forEach(cb => cb.addEventListener('change', recalc));
                 recalc();
+                // Preview flow: submit to preview endpoint in a new tab and enable Send button
+                btnPreview.addEventListener('click', function(){
+                    // Basic validation before preview
+                    const checked = document.querySelectorAll('.supplier-choice:checked').length;
+                    if (checked < 3 || checked > 5) { alert('Please select 3–5 suppliers.'); return; }
+                    // Ensure awarded vendor validity (if chosen)
+                    if (awardSel && awardSel.value) {
+                        const selSet = new Set(Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.value));
+                        if (!selSet.has(awardSel.value)) { alert('Awarded vendor must be one of the selected suppliers.'); return; }
+                    }
+                    form.setAttribute('action', '/manager/requests/canvass/preview');
+                    form.setAttribute('target', '_blank');
+                    form.submit();
+                    // Restore and enable send
+                    form.setAttribute('action', originalAction);
+                    if (originalTarget !== null) { form.setAttribute('target', originalTarget); } else { form.removeAttribute('target'); }
+                    btnSend.disabled = false;
+                });
                 document.getElementById('canvassForm').addEventListener('submit', function(e){
                     const checked = document.querySelectorAll('.supplier-choice:checked').length;
                     if (checked < 3 || checked > 5) {
@@ -214,6 +238,12 @@
                             alert('Awarded vendor must be one of the selected suppliers.');
                             return;
                         }
+                    }
+                    // Enforce preview has been clicked client-side
+                    if (btnSend.disabled) {
+                        e.preventDefault();
+                        alert('Please click Generate to preview the PDF before sending for approval.');
+                        return;
                     }
                 });
             })();

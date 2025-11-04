@@ -315,6 +315,11 @@ if ($method === 'POST' && $path === '/manager/requests/canvass') {
 	$manager->canvassSubmit();
 	exit;
 }
+if ($method === 'POST' && $path === '/manager/requests/canvass/preview') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->canvassPreview();
+	exit;
+}
 if ($method === 'GET' && $path === '/manager/requests/view') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
 	$manager->viewGroup();

@@ -523,6 +523,11 @@ class ProcurementController extends BaseController
     {
         if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager', 'procurement', 'admin'], true)) { header('Location: /login'); return; }
         $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        // Require preview first for UX integrity
+        if (!isset($_SESSION['canvass_previewed']) || !is_array($_SESSION['canvass_previewed']) || empty($_SESSION['canvass_previewed'][$pr])) {
+            header('Location: /manager/requests/canvass?pr=' . urlencode($pr) . '&error=' . rawurlencode('Please generate the preview first'));
+            return;
+        }
         $chosen = isset($_POST['suppliers']) && is_array($_POST['suppliers']) ? array_slice(array_values(array_unique(array_map('intval', $_POST['suppliers']))), 0, 5) : [];
         if ($pr === '' || count($chosen) < 3) { header('Location: /manager/requests/canvass?pr=' . urlencode($pr) . '&error=Pick+at+least+3+suppliers'); return; }
         $rows = $this->requests()->getGroupDetails($pr);
@@ -756,7 +761,43 @@ class ProcurementController extends BaseController
             'attach_path2' => $prPdf,
         ]);
         header('Location: /admin/messages' . ($qs !== '' ? ('?' . $qs) : ''));
+        // Clear preview flag for this PR after successful flow
+        unset($_SESSION['canvass_previewed'][$pr]);
         return;
+    }
+
+    /** POST: Preview Canvassing PDF in a new tab (no DB status change). Sets a session flag to allow sending later. */
+    public function canvassPreview(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager', 'procurement', 'admin'], true)) { header('Location: /login'); return; }
+        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+        $chosen = isset($_POST['suppliers']) && is_array($_POST['suppliers']) ? array_values(array_unique(array_map('intval', $_POST['suppliers']))) : [];
+        if ($pr === '' || count($chosen) < 3) { header('Location: /manager/requests/canvass?pr=' . urlencode($pr) . '&error=Select+3%E2%80%935+suppliers+to+preview'); return; }
+        $rows = $this->requests()->getGroupDetails($pr);
+        if (!$rows) { header('Location: /manager/requests'); return; }
+        $pdo = \App\Database\Connection::resolve();
+        // Map supplier ids to names for preview headers
+        $inParams = implode(',', array_fill(0, count($chosen), '?'));
+        $st = $pdo->prepare('SELECT user_id, full_name FROM users WHERE user_id IN (' . $inParams . ')');
+        $st->execute($chosen);
+        $map = [];
+        foreach ($st->fetchAll() as $s) { $map[(int)$s['user_id']] = (string)$s['full_name']; }
+        // Build simple items array for PDF generator
+        $items = [];
+        foreach ($rows as $r) { $items[] = ($r['item_name'] ?? 'Item') . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''); }
+        // Generate to temp and stream inline
+        $dir = sys_get_temp_dir();
+        $file = rtrim($dir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'Canvassing-PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '-preview.pdf';
+        $this->pdf()->generateCanvassingPDFToFile($pr, $items, array_values($map), $file);
+        if (!is_file($file)) { header('Location: /manager/requests/canvass?pr=' . urlencode($pr) . '&error=Failed+to+generate+preview'); return; }
+        // Set session flag to allow final send later
+        if (!isset($_SESSION['canvass_previewed']) || !is_array($_SESSION['canvass_previewed'])) { $_SESSION['canvass_previewed'] = []; }
+        $_SESSION['canvass_previewed'][$pr] = time();
+        $size = @filesize($file) ?: null;
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: inline; filename="' . rawurlencode('Canvassing-PR-' . $pr . '.pdf') . '"');
+        if ($size !== null) { header('Content-Length: ' . (string)$size); }
+        @readfile($file);
     }
 
     /** POST: Update status for a PR group */
