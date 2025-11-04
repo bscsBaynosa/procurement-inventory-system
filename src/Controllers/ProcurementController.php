@@ -716,6 +716,7 @@ class ProcurementController extends BaseController
                 'description' => (string)($r['item_name'] ?? 'Item'),
                 'unit' => (string)($r['unit'] ?? ''),
                 'qty' => (int)($r['quantity'] ?? 0),
+                'stock_on_hand' => isset($r['stock_on_hand']) ? (int)$r['stock_on_hand'] : null,
             ];
         }
         $this->pdf()->generatePurchaseRequisitionToFile($metaCan, $itemsCan, $file);
@@ -782,6 +783,11 @@ class ProcurementController extends BaseController
             'approved_at' => $approvedAt,
             'canvassed_suppliers' => array_values($map),
             'awarded_to' => (string)($awardedName ?? ''),
+            'canvass_totals' => (function() use ($totals, $chosen) {
+                $out = [];
+                for ($i=0;$i<3;$i++) { $sid = $chosen[$i] ?? 0; $out[$i] = ($sid && isset($totals[$sid])) ? (float)$totals[$sid] : null; }
+                return $out;
+            })(),
         ];
         $items = [];
         foreach ($rows as $r) {
@@ -789,6 +795,7 @@ class ProcurementController extends BaseController
                 'description' => (string)($r['item_name'] ?? 'Item'),
                 'unit' => (string)($r['unit'] ?? ''),
                 'qty' => (int)($r['quantity'] ?? 0),
+                'stock_on_hand' => isset($r['stock_on_hand']) ? (int)$r['stock_on_hand'] : null,
             ];
         }
         $root = realpath(__DIR__ . '/../../..');
@@ -880,6 +887,67 @@ class ProcurementController extends BaseController
             $stR->execute(['s' => '%PR ' . $pr . '%', 'a' => 'pr_' . $pr . '%']);
             $dr = $stR->fetchColumn(); if ($dr) { $dateReceived = date('Y-m-d', strtotime((string)$dr)); }
         } catch (\Throwable $ignored) {}
+        // Compute cheapest totals per supplier for preview (to prefill AWARDED TO and totals)
+        $awardedPreview = '';
+        $totalsPreview = [];
+        try {
+            // Build name->qty map
+            $byNameQty = [];
+            $names = [];
+            foreach ($rows as $r) {
+                $nm = strtolower(trim((string)($r['item_name'] ?? '')));
+                $names[] = $nm;
+                $byNameQty[$nm] = (int)($byNameQty[$nm] ?? 0) + (int)($r['quantity'] ?? 0);
+            }
+            $names = array_values(array_unique($names));
+            if ($names && $chosen) {
+                $inSup = implode(',', array_fill(0, count($chosen), '?'));
+                $inNames = implode(',', array_fill(0, count($names), '?'));
+                $params = [];
+                foreach ($chosen as $sid) { $params[] = (int)$sid; }
+                foreach ($names as $nm) { $params[] = $nm; }
+                $sql = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE supplier_id IN (' . $inSup . ') AND LOWER(name) IN (' . $inNames . ')';
+                $st = $pdo->prepare($sql);
+                $st->execute($params);
+                $prices = [];
+                foreach ($st->fetchAll() as $it) {
+                    $sid = (int)$it['supplier_id'];
+                    $lname = (string)$it['lname'];
+                    $base = (float)($it['price'] ?? 0);
+                    $ppp = max(1, (int)($it['pieces_per_package'] ?? 1));
+                    $needPk = $ppp > 0 ? (int)ceil((int)($byNameQty[$lname] ?? 0) / $ppp) : 0;
+                    $best = $base;
+                    if ($needPk > 0) {
+                        try {
+                            $tq = $pdo->prepare('SELECT min_packages, max_packages, price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC');
+                            $tq->execute(['id' => (int)$it['id']]);
+                            foreach ($tq->fetchAll() as $t) {
+                                $min = (int)$t['min_packages'];
+                                $max = $t['max_packages'] !== null ? (int)$t['max_packages'] : null;
+                                if ($needPk >= $min && ($max === null || $needPk <= $max)) { $best = min($best, (float)$t['price_per_package']); }
+                            }
+                        } catch (\Throwable $e) {}
+                    }
+                    if (!isset($prices[$sid])) { $prices[$sid] = []; }
+                    if (!isset($prices[$sid][$lname]) || $best < $prices[$sid][$lname]) { $prices[$sid][$lname] = $best; }
+                }
+                // Sum totals per supplier and pick cheapest
+                $totals = [];
+                foreach ($prices as $sid => $pm) {
+                    $sum = 0.0;
+                    foreach ($byNameQty as $iname => $_q) { if (isset($pm[$iname])) { $sum += (float)$pm[$iname]; } }
+                    if ($sum > 0) { $totals[$sid] = $sum; }
+                }
+                if ($totals) {
+                    asort($totals);
+                    $sidMin = (int)array_key_first($totals);
+                    if ($sidMin && isset($map[$sidMin])) { $awardedPreview = (string)$map[$sidMin]; }
+                    // Build totals in the same supplier order provided
+                    for ($i=0;$i<3;$i++) { $sid = $chosen[$i] ?? 0; $totalsPreview[$i] = ($sid && isset($totals[$sid])) ? (float)$totals[$sid] : null; }
+                }
+            }
+        } catch (\Throwable $ignored) {}
+
         // Optional canvassing approval fields if already approved (preview after approval)
         $purchaseApprovedBy = '';
         $purchaseApprovedAt = '';
@@ -913,8 +981,8 @@ class ProcurementController extends BaseController
             'date_received' => $dateReceived,
             'noted_by' => $notedBy,
             'canvassed_suppliers' => array_values($map),
-            // Prefer existing awarded_to if saved previously so preview shows it
-            'awarded_to' => (function() use ($pdo, $pr) {
+            // Prefer existing awarded_to if saved; else use computed cheapest for preview
+            'awarded_to' => (function() use ($pdo, $pr, $awardedPreview) {
                 try {
                     $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
                         pr_number VARCHAR(32) PRIMARY KEY,
@@ -930,9 +998,10 @@ class ProcurementController extends BaseController
                     $st = $pdo->prepare('SELECT awarded_to FROM pr_canvassing WHERE pr_number = :pr');
                     $st->execute(['pr' => $pr]);
                     $v = $st->fetchColumn();
-                    return $v ? (string)$v : '';
+                    return $v ? (string)$v : $awardedPreview;
                 } catch (\Throwable $e) { return ''; }
             })(),
+            'canvass_totals' => $totalsPreview,
             'signature_variant' => 'purchase_approval',
             'purchase_approved_by' => $purchaseApprovedBy,
             'purchase_approved_at' => $purchaseApprovedAt,
@@ -943,6 +1012,7 @@ class ProcurementController extends BaseController
                 'description' => (string)($r['item_name'] ?? 'Item'),
                 'unit' => (string)($r['unit'] ?? ''),
                 'qty' => (int)($r['quantity'] ?? 0),
+                'stock_on_hand' => isset($r['stock_on_hand']) ? (int)$r['stock_on_hand'] : null,
             ];
         }
         // Generate to temp and stream inline

@@ -362,7 +362,8 @@ class RequestService
 				pr.branch_id, b.name AS branch_name, pr.requested_by, u.full_name AS requested_by_name,
 				pr.revision_state, pr.revision_notes,
 				pr.needed_by, pr.justification,
-				pr.approved_by, pr.approved_at
+				pr.approved_by, pr.approved_at,
+				i.quantity AS stock_on_hand
 			 FROM purchase_requests pr
 			 LEFT JOIN inventory_items i ON i.item_id = pr.item_id
 			 LEFT JOIN branches b ON b.branch_id = pr.branch_id

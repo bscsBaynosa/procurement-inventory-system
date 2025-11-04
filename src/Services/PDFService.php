@@ -325,6 +325,14 @@ class PDFService
 				$cols .= '<td style="text-align:center;vertical-align:top;height:40px;">' . $name . '</td>';
 			}
 			$awCell = '<td style="text-align:center;vertical-align:top;height:40px;">' . ($awarded !== '' ? htmlspecialchars($awarded, ENT_QUOTES, 'UTF-8') : '&nbsp;') . '</td>';
+			// Optional totals row to justify award (expects meta[canvass_totals] = [t1,t2,t3])
+			$tot = isset($meta['canvass_totals']) && is_array($meta['canvass_totals']) ? array_values($meta['canvass_totals']) : [];
+			$totCells = '';
+			for ($i=0; $i<3; $i++) {
+				$val = isset($tot[$i]) ? (float)$tot[$i] : null;
+				$totCells .= '<td style="text-align:center;vertical-align:top;height:24px;">' . ($val !== null ? ('₱ ' . number_format($val, 2)) : '&nbsp;') . '</td>';
+			}
+			$totAward = '<td style="text-align:center;vertical-align:top;height:24px;">&nbsp;</td>';
 			$head = '<div style="text-align:center;font-weight:700;margin:8px 0 4px;">CANVASSING</div>';
 			$canvas = $head
 				. '<table width="100%" border="1" cellspacing="0" cellpadding="6">'
@@ -334,7 +342,8 @@ class PDFService
 				. '<th style="width:25%;text-align:center;">' . $labels[2] . '</th>'
 				. '<th style="width:25%;text-align:center;">' . $labels[3] . '</th>'
 				. '</tr></thead>'
-				. '<tbody><tr>' . $cols . $awCell . '</tr></tbody>'
+				. '<tbody><tr>' . $cols . $awCell . '</tr>'
+				. '<tr>' . $totCells . $totAward . '</tr></tbody>'
 				. '</table>';
 		}
 
