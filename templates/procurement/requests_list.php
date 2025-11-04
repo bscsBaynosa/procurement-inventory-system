@@ -133,7 +133,7 @@
                                     <?php elseif ($awaitingCanvass): ?>
                                         <span class="muted">Awaiting Canvassing Approval</span>
                                     <?php elseif (!$canProcess): ?>
-                                        <form action="/manager/requests/send-for-approval" method="POST" style="display:inline;" onsubmit="(function(f){ var b=f.querySelector('button[type=submit]'); if(b){ b.disabled=true; b.textContent='Preparing…'; } })(this)">
+                                        <form action="/manager/requests/send-for-approval" method="POST" style="display:inline;" onsubmit="return (function(f){ var b=f.querySelector('button[type=submit]'); if(b){ b.disabled=true; b.textContent='Preparing…'; } return true; })(this)">
                                             <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
                                             <button class="btn primary" type="submit" title="Send to Admin for approval with attached PR PDF">Send for Admin Approval</button>
                                         </form>
