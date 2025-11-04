@@ -226,7 +226,7 @@ class PDFService
 			. '</tr>'
 			. '</table>';
 
-		$titleRow = '<div style="text-align:center;font-size:10px;font-style:italic;">PURCHASE REQUISITION NO. <span style="border-bottom:1px solid #444;padding:0 40px;">' . $pr . '</span></div>';
+		$titleRow = '<div style="text-align:center;font-size:11px;font-style:italic;">PURCHASE REQUISITION NO. <span style="font-size:13px;font-weight:700;border-bottom:1px solid #444;padding:0 48px;">' . $pr . '</span></div>';
 
 		$reqMeta = '<table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top:6px;font-size:10px;">'
 			. '<tr>'
