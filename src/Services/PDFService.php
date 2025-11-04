@@ -132,40 +132,58 @@ class PDFService
 	 */
 	public function generatePurchaseRequisitionToFile(array $meta, array $items, string $filePath): void
 	{
-		// Layout adapted to client's PR form; canvassed columns intentionally omitted for Admin Assistant workflow.
-		$mpdf = new Mpdf(['format' => 'A4', 'orientation' => 'P', 'margin_left' => 8, 'margin_right' => 8, 'margin_top' => 8, 'margin_bottom' => 10]);
+		// Redesigned to closely match the provided PR form template
+		$mpdf = new Mpdf(['format' => 'A4', 'orientation' => 'P', 'margin_left' => 10, 'margin_right' => 10, 'margin_top' => 12, 'margin_bottom' => 12]);
 		$pr = htmlspecialchars((string)($meta['pr_number'] ?? ''), ENT_QUOTES, 'UTF-8');
 		$branch = htmlspecialchars((string)($meta['branch_name'] ?? ''), ENT_QUOTES, 'UTF-8');
 		$reqBy = htmlspecialchars((string)($meta['requested_by'] ?? ''), ENT_QUOTES, 'UTF-8');
-		$prepAt = htmlspecialchars((string)($meta['prepared_at'] ?? date('Y-m-d H:i')), ENT_QUOTES, 'UTF-8');
+		$prepAt = htmlspecialchars((string)($meta['prepared_at'] ?? date('Y-m-d')), ENT_QUOTES, 'UTF-8');
 		$justRaw = (string)($meta['justification'] ?? '');
 		$just = nl2br(htmlspecialchars($justRaw, ENT_QUOTES, 'UTF-8'));
 		$need = htmlspecialchars((string)($meta['needed_by'] ?? ''), ENT_QUOTES, 'UTF-8');
 
-		// Header block
-		$header = '<div style="text-align:center;font-weight:800;font-size:16px;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
-			. '<div style="text-align:center;font-size:11px;margin:2px 0 6px;">PURCHASE REQUISITION</div>'
-			. '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="font-size:11px;">'
+		// Try to include the hospital logo if available
+		$logoPath = realpath(__DIR__ . '/../../public/img/pocc-logo.svg');
+		$logoHtml = '';
+		if ($logoPath && is_file($logoPath)) {
+			$logoHtml = '<div style="text-align:center;margin-bottom:6px;"><img src="' . $logoPath . '" width="48" height="48" /></div>';
+		}
+
+		$topTitle = '<div style="text-align:center;font-size:16px;font-weight:700;">Philippine Oncology Center Corporation</div>'
+			. '<div style="height:2px;background:#000;margin:6px 0 8px 0;"></div>';
+
+		$revRow = '<table width="100%" border="0" cellspacing="0" cellpadding="2" style="font-size:9px;margin-bottom:6px;">'
 			. '<tr>'
-			. '<td style="width:60%;"><strong>PURCHASE REQUISITION NO.</strong>: <span style="font-weight:800;">' . $pr . '</span></td>'
-			. '<td style="width:20%;"><strong>Effective Date</strong>: &nbsp;</td>'
-			. '<td style="width:20%;"><strong>Rev No.</strong>: &nbsp;</td>'
+			. '<td style="width:15%;">Rev. No.</td>'
+			. '<td style="width:25%;border-bottom:1px solid #444;">&nbsp;</td>'
+			. '<td style="width:10%;"></td>'
+			. '<td style="width:15%;">Effective Date:</td>'
+			. '<td style="width:25%;border-bottom:1px solid #444;">&nbsp;</td>'
 			. '</tr>'
 			. '</table>';
 
-		// Request meta (top of form)
-		$metaTop = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;font-size:11px;">'
+		$titleRow = '<div style="text-align:center;font-size:10px;font-style:italic;">PURCHASE REQUISITION NO. <span style="border-bottom:1px solid #444;padding:0 40px;">' . $pr . '</span></div>';
+
+		$reqMeta = '<table width="100%" border="0" cellspacing="0" cellpadding="4" style="margin-top:10px;font-size:10px;">'
 			. '<tr>'
-			. '<td style="width:60%;"><strong>Requesting Section</strong>: ' . $branch . '</td>'
-			. '<td style="width:20%;"><strong>Date Needed</strong>: ' . ($need !== '' ? $need : '&nbsp;') . '</td>'
-			. '<td style="width:20%;"><strong>Date Received</strong>: &nbsp;</td>'
+			. '<td style="width:20%;">Requesting Section:</td>'
+			. '<td style="width:35%;border-bottom:1px solid #444;">' . $branch . '</td>'
+			. '<td style="width:20%;">&nbsp;</td>'
+			. '<td style="width:25%;">&nbsp;</td>'
 			. '</tr>'
 			. '<tr>'
-			. '<td colspan="3"><strong>Reason for Purchase / Use of Article</strong>:<br>' . ($just !== '' ? $just : '&nbsp;') . '</td>'
+			. '<td>Reason for Purchase/or Use of Article:</td>'
+			. '<td colspan="3" style="border-bottom:1px solid #444;">' . ($just !== '' ? $just : '&nbsp;') . '</td>'
+			. '</tr>'
+			. '<tr>'
+			. '<td>Date Needed:</td>'
+			. '<td style="border-bottom:1px solid #444;">' . ($need !== '' ? $need : '&nbsp;') . '</td>'
+			. '<td style="text-align:right;">Date Received:</td>'
+			. '<td style="border-bottom:1px solid #444;">&nbsp;</td>'
 			. '</tr>'
 			. '</table>';
 
-		// Main table (omit canvassed columns)
+		// Items table with QUANTITY / SPECIFICATION header
 		$rows = '';
 		foreach ($items as $i) {
 			$desc = htmlspecialchars((string)($i['description'] ?? ''), ENT_QUOTES, 'UTF-8');
@@ -174,54 +192,61 @@ class PDFService
 			$stock = isset($i['stock_on_hand']) ? (string)(int)$i['stock_on_hand'] : '&nbsp;';
 			$usage = isset($i['usage_per_month']) ? (string)(int)$i['usage_per_month'] : '&nbsp;';
 			$rows .= '<tr>'
-				. '<td style="text-align:center;width:10%;">' . $stock . '</td>'
-				. '<td style="text-align:center;width:12%;">' . $usage . '</td>'
-				. '<td style="text-align:center;width:12%;">' . $qty . '</td>'
+				. '<td style="text-align:center;width:8%;">' . $stock . '</td>'
+				. '<td style="text-align:center;width:10%;">' . $usage . '</td>'
+				. '<td style="text-align:center;width:10%;">' . $qty . '</td>'
 				. '<td style="text-align:center;width:10%;">' . $unit . '</td>'
-				. '<td>' . $desc . '</td>'
+				. '<td style="width:62%;">' . $desc . '</td>'
 				. '</tr>';
 		}
-		$table = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;font-size:11px;">'
+		// Pad to a full page (approx 20-24 lines) so the form looks complete when printed
+		$target = 22;
+		$pad = $target - count($items);
+		for ($k = 0; $k < $pad; $k++) {
+			$rows .= '<tr>'
+				. '<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>'
+				. '</tr>';
+		}
+		$itemsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="5" style="margin-top:10px;font-size:10px;">'
 			. '<thead>'
 			. '<tr>'
-			. '<th colspan="4" style="text-align:center;width:44%;">QUANTITY</th>'
+			. '<th colspan="4" style="text-align:center;">QUANTITY</th>'
 			. '<th style="text-align:center;">SPECIFICATION</th>'
 			. '</tr>'
 			. '<tr>'
-			. '<th style="text-align:center;width:10%;">Stock on Hand</th>'
-			. '<th style="text-align:center;width:12%;">Usage per Month</th>'
-			. '<th style="text-align:center;width:12%;">Qty. Needed</th>'
-			. '<th style="text-align:center;width:10%;">Unit</th>'
+			. '<th style="text-align:center;">Stock on hand</th>'
+			. '<th style="text-align:center;">Usage per Month</th>'
+			. '<th style="text-align:center;">Qty. Needed</th>'
+			. '<th style="text-align:center;">Unit</th>'
 			. '<th style="text-align:center;">DESCRIPTION</th>'
 			. '</tr>'
 			. '</thead>'
 			. '<tbody>' . $rows . '</tbody>'
 			. '</table>';
 
-		// Signature area
-		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="10" style="margin-top:8px;font-size:11px;">'
+		// Attachments / Additional instruction
+		$attachments = '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="margin-top:8px;font-size:10px;">'
+			. '<tr><td style="width:18%;">Attachments / Additional instruction:</td><td>&nbsp;</td></tr>'
+			. '</table>';
+
+		// Signatures (bottom)
+		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="margin-top:8px;font-size:10px;">'
 			. '<tr>'
-			. '<td style="width:40%;vertical-align:bottom;">'
-			. '<div style="height:48px;"></div>'
-			. '<div style="border-top:1px solid #999;text-align:center;padding-top:6px;">Requested by / Admin Assistant / Custodian<br>' . $reqBy . '</div>'
-			. '</td>'
-			. '<td style="width:30%;vertical-align:bottom;">'
-			. '<div style="height:48px;"></div>'
-			. '<div style="border-top:1px solid #999;text-align:center;padding-top:6px;">Noted by</div>'
-			. '</td>'
-			. '<td style="width:30%;vertical-align:bottom;">'
-			. '<div style="height:48px;"></div>'
-			. '<div style="border-top:1px solid #999;text-align:center;padding-top:6px;">Approved for Purchase</div>'
-			. '</td>'
+			. '<td style="width:60%;">Requisition By:<div style="height:28px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:6px;">' . $reqBy . '</div></td>'
+			. '<td style="width:40%;">Date:<div style="height:28px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:6px;">' . $prepAt . '</div></td>'
 			. '</tr>'
 			. '<tr>'
-			. '<td style="text-align:center;"><strong>Date:</strong> ' . $prepAt . '</td>'
-			. '<td style="text-align:center;"><strong>Date:</strong> &nbsp;</td>'
-			. '<td style="text-align:center;"><strong>Date:</strong> &nbsp;</td>'
+			. '<td>Noted By:<div style="height:28px;"></div><div style="border-top:1px solid #999; padding-top:6px;">&nbsp;</div></td>'
+			. '<td>Date:<div style="height:28px;"></div><div style="border-top:1px solid #999; padding-top:6px;">&nbsp;</div></td>'
 			. '</tr>'
 			. '</table>';
 
-		$html = $header . $metaTop . $table . $sign;
+		$distribution = '<div style="margin-top:10px;font-size:9px;display:flex;justify-content:space-between;">'
+			. '<div>Distribution: ORIGINAL – Administrator</div>'
+			. '<div>Duplicate: Requesting Section</div>'
+			. '</div>';
+
+		$html = $logoHtml . $topTitle . $revRow . $titleRow . $reqMeta . $itemsTable . $attachments . $sign . $distribution;
 		$mpdf->WriteHTML($html);
 		$mpdf->Output($filePath, 'F');
 	}
