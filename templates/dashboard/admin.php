@@ -89,12 +89,12 @@
         </div>
 
         <div class="cards">
-            <div class="card"><div style="font-size:12px;color:var(--muted)">Users</div><div style="font-size:28px;font-weight:800;><?= (int)($counts['users_total'] ?? 0) ?></div></div>
-            <div class="card"><div style="font-size:12px;color:var(--muted)">Active</div><div style="font-size:28px;font-weight:800;><?= (int)($counts['users_active'] ?? 0) ?></div></div>
-            <div class="card"><div style="font-size:12px;color:var(--muted)">Managers</div><div style="font-size:28px;font-weight:800;><?= (int)($counts['managers'] ?? 0) ?></div></div>
-            <div class="card"><div style="font-size:12px;color:var(--muted)">Procurement</div><div style="font-size:28px;font-weight:800;><?= (int)($counts['procurement'] ?? 0) ?></div></div>
-            <div class="card"><div style="font-size:12px;color:var(--muted)">Admin Assistants</div><div style="font-size:28px;font-weight:800;><?= (int)($counts['admin_assistants'] ?? 0) ?></div></div>
-            <div class="card"><div style="font-size:12px;color:var(--muted)">Suppliers</div><div style="font-size:28px;font-weight:800;><?= (int)($counts['suppliers'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Users</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['users_total'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Active</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['users_active'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Managers</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['managers'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Procurement</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['procurement'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Admin Assistants</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['admin_assistants'] ?? 0) ?></div></div>
+            <div class="card"><div style="font-size:12px;color:var(--muted)">Suppliers</div><div style="font-size:28px;font-weight:800;"><?= (int)($counts['suppliers'] ?? 0) ?></div></div>
         </div>
 
         <div class="cards grid-3" style="margin-top:12px;">
@@ -112,7 +112,36 @@
             <div class="cards grid-3">
                 <div class="card">
                     <div style="font-size:12px;color:var(--muted)">Inventory Activity</div>
-                    <?php $d = $series_inventory ?? []; $max = max(1, max($d ?: [0])); $n = max(1, count($d)); $w = 220; $h = 60; $step = ($n>1? $w/($n-1):$w); $pts=[]; for($i=0;$i<$n;$i++){ $x=$i*$step; $y=$h - (($d[$i]??0)/$max*$h); $pts[] = [$x,$y]; } function pathSmooth($pts){ if(count($pts)<2) return ''; $d='M'.$pts[0][0].','.$pts[0][1]; for($i=1;$i<count($pts);$i++){ $x=$pts[$i][0]; $y=$pts[$i][1]; $px=$pts[$i-1][0]; $py=$pts[$i-1][1]; $cx1=$px+($x-$px)/3; $cy1=$py; $cx2=$px+2*($x-$px)/3; $cy2=$y; $d.=' C'.$cx1.','.$cy1.' '.$cx2.','.$cy2.' '.$x.','.$y; } return $d; } $dPath = pathSmooth($pts); ?>
+                    <?php
+                        // Make sparkline generation compatible with older PHP versions (no short array syntax)
+                        $d = isset($series_inventory) && is_array($series_inventory) ? $series_inventory : array();
+                        $max = max(1, max(!empty($d) ? $d : array(0)));
+                        $n = max(1, count($d));
+                        $w = 220; $h = 60; $step = ($n > 1 ? $w/($n-1) : $w);
+                        $pts = array();
+                        for ($i = 0; $i < $n; $i++) {
+                            $x = $i * $step;
+                            $y = $h - ((isset($d[$i]) ? $d[$i] : 0) / $max * $h);
+                            $pts[] = array($x, $y);
+                        }
+                        if (!function_exists('pathSmooth')) {
+                            function pathSmooth($pts){
+                                if(count($pts) < 2) return '';
+                                $d = 'M' . $pts[0][0] . ',' . $pts[0][1];
+                                for ($i = 1; $i < count($pts); $i++) {
+                                    $x = $pts[$i][0];
+                                    $y = $pts[$i][1];
+                                    $px = $pts[$i-1][0];
+                                    $py = $pts[$i-1][1];
+                                    $cx1 = $px + ($x - $px) / 3; $cy1 = $py;
+                                    $cx2 = $px + 2 * ($x - $px) / 3; $cy2 = $y;
+                                    $d .= ' C' . $cx1 . ',' . $cy1 . ' ' . $cx2 . ',' . $cy2 . ' ' . $x . ',' . $y;
+                                }
+                                return $d;
+                            }
+                        }
+                        $dPath = pathSmooth($pts);
+                    ?>
                     <svg class="spark" viewBox="0 0 220 60" preserveAspectRatio="none">
                         <path class="bg" d="M0,59 L220,59" />
                         <path d="<?= htmlspecialchars($dPath, ENT_QUOTES, 'UTF-8') ?>" />
@@ -120,7 +149,19 @@
                 </div>
                 <div class="card">
                     <div style="font-size:12px;color:var(--muted)">Incoming Requests</div>
-                    <?php $d = $series_incoming ?? []; $max = max(1, max($d ?: [0])); $n = max(1, count($d)); $w = 220; $h = 60; $step = ($n>1? $w/($n-1):$w); $pts=[]; for($i=0;$i<$n;$i++){ $x=$i*$step; $y=$h - (($d[$i]??0)/$max*$h); $pts[] = [$x,$y]; } $dPath = pathSmooth($pts); ?>
+                    <?php
+                        $d = isset($series_incoming) && is_array($series_incoming) ? $series_incoming : array();
+                        $max = max(1, max(!empty($d) ? $d : array(0)));
+                        $n = max(1, count($d));
+                        $w = 220; $h = 60; $step = ($n > 1 ? $w/($n-1) : $w);
+                        $pts = array();
+                        for ($i = 0; $i < $n; $i++) {
+                            $x = $i * $step;
+                            $y = $h - ((isset($d[$i]) ? $d[$i] : 0) / $max * $h);
+                            $pts[] = array($x, $y);
+                        }
+                        $dPath = pathSmooth($pts);
+                    ?>
                     <svg class="spark" viewBox="0 0 220 60" preserveAspectRatio="none">
                         <path class="bg" d="M0,59 L220,59" />
                         <path d="<?= htmlspecialchars($dPath, ENT_QUOTES, 'UTF-8') ?>" />
@@ -128,7 +169,19 @@
                 </div>
                 <div class="card">
                     <div style="font-size:12px;color:var(--muted)">Outgoing Purchase Orders</div>
-                    <?php $d = $series_po ?? []; $max = max(1, max($d ?: [0])); $n = max(1, count($d)); $w = 220; $h = 60; $step = ($n>1? $w/($n-1):$w); $pts=[]; for($i=0;$i<$n;$i++){ $x=$i*$step; $y=$h - (($d[$i]??0)/$max*$h); $pts[] = [$x,$y]; } $dPath = pathSmooth($pts); ?>
+                    <?php
+                        $d = isset($series_po) && is_array($series_po) ? $series_po : array();
+                        $max = max(1, max(!empty($d) ? $d : array(0)));
+                        $n = max(1, count($d));
+                        $w = 220; $h = 60; $step = ($n > 1 ? $w/($n-1) : $w);
+                        $pts = array();
+                        for ($i = 0; $i < $n; $i++) {
+                            $x = $i * $step;
+                            $y = $h - ((isset($d[$i]) ? $d[$i] : 0) / $max * $h);
+                            $pts[] = array($x, $y);
+                        }
+                        $dPath = pathSmooth($pts);
+                    ?>
                     <svg class="spark" viewBox="0 0 220 60" preserveAspectRatio="none">
                         <path class="bg" d="M0,59 L220,59" />
                         <path d="<?= htmlspecialchars($dPath, ENT_QUOTES, 'UTF-8') ?>" />

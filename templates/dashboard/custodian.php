@@ -99,7 +99,7 @@
             <div class="card"><div class="muted" style="font-size:12px;">Total Items</div><div style="font-size:28px;font-weight:800;"><?= (int)($inventoryStats['total'] ?? 0) ?></div></div>
         </div>
 
-        <?php $catStats = $categoryStats ?? []; if (!empty($catStats)): ?>
+    <?php $catStats = isset($categoryStats) ? $categoryStats : array(); if (!empty($catStats)): ?>
         <div class="h1" style="margin-top:16px;">By Category</div>
         <div class="grid">
             <?php foreach ($catStats as $row): ?>
