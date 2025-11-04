@@ -266,14 +266,14 @@ class InventoryService
 	/** Fixed set of categories used by the client (no 'Paper' category). */
 	private function allowedCategories(): array
 	{
-		return [
+		return array(
 			'Office Supplies',
 			'Medical Equipments',
 			'Medicines',
 			'Machines',
 			'Electronics',
 			'Appliances',
-		];
+		);
 	}
 
 	/** Public accessor for categories list (for dashboards). */
@@ -290,8 +290,8 @@ class InventoryService
 	public function getStatsByBranch(?int $branchId = null): array
 	{
 		$sql = 'SELECT status, COUNT(*) as cnt FROM inventory_items';
-		$params = [];
-		$wheres = [];
+		$params = array();
+		$wheres = array();
 		if ($branchId) {
 			$wheres[] = 'branch_id = :b';
 			$params['b'] = $branchId;
@@ -306,7 +306,7 @@ class InventoryService
 
 		$rows = $this->pdo->prepare($sql);
 		$rows->execute($params);
-		$stats = ['good' => 0, 'for_repair' => 0, 'for_replacement' => 0, 'retired' => 0, 'total' => 0];
+		$stats = array('good' => 0, 'for_repair' => 0, 'for_replacement' => 0, 'retired' => 0, 'total' => 0);
 		foreach ($rows->fetchAll() as $r) {
 			$stats[$r['status']] = (int)$r['cnt'];
 			$stats['total'] += (int)$r['cnt'];
@@ -323,15 +323,15 @@ class InventoryService
 	{
 		// Build a VALUES list for the fixed categories, then left join with aggregated counts.
 		$cats = $this->allowedCategories();
-		$vals = [];
-		$params = [];
+		$vals = array();
+		$params = array();
 		foreach ($cats as $i => $c) {
 			$key = 'c' . $i;
 			$vals[] = '(:' . $key . ')';
 			$params[$key] = $c;
 		}
 		$sql = "WITH cats(category) AS (VALUES " . implode(',', $vals) . "),\nagg AS (\n    SELECT COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') AS category,\n           COUNT(*) AS total,\n           SUM(CASE WHEN status = 'good' THEN 1 ELSE 0 END) AS good,\n           SUM(CASE WHEN status = 'for_repair' THEN 1 ELSE 0 END) AS for_repair,\n           SUM(CASE WHEN status = 'for_replacement' THEN 1 ELSE 0 END) AS for_replacement,\n           SUM(CASE WHEN status = 'retired' THEN 1 ELSE 0 END) AS retired\n    FROM inventory_items";
-		$conds = [];
+		$conds = array();
 		if ($branchId) { $conds[] = '(branch_id = :b OR branch_id IS NULL)'; $params['b'] = $branchId; }
 		// Exclude deprecated 'Paper' category completely
 		$conds[] = '(category IS NULL OR category NOT ILIKE :no_paper)';
@@ -351,8 +351,8 @@ class InventoryService
 		$hasMaint = $this->hasMaintainingColumn();
 		$selectCols = 'item_id, name, category, status, quantity, unit, minimum_quantity' . ($hasMaint ? ', maintaining_quantity' : ', 0 AS maintaining_quantity');
 		$sql = 'SELECT ' . $selectCols . ' FROM inventory_items';
-		$params = [];
-		$wheres = [];
+		$params = array();
+		$wheres = array();
 		if ($branchId) {
 			// Include branch-specific items and global items (branch_id IS NULL) so common
 			// office supplies appear as choices for PR across branches.
@@ -377,7 +377,7 @@ class InventoryService
 		$hasMaint = $this->hasMaintainingColumn();
 		$selectCols = 'item_id, branch_id, name, category, status, quantity, unit, minimum_quantity' . ($hasMaint ? ', maintaining_quantity' : ', 0 AS maintaining_quantity');
 		$stmt = $this->pdo->prepare('SELECT ' . $selectCols . ' FROM inventory_items WHERE item_id = :id');
-		$stmt->execute(['id' => $itemId]);
+		$stmt->execute(array('id' => $itemId));
 		$row = $stmt->fetch();
 		return $row ?: null;
 	}
@@ -388,7 +388,7 @@ class InventoryService
 		$hasMaint = $this->hasMaintainingColumn();
 		if ($hasMaint) {
 			$stmt = $this->pdo->prepare('INSERT INTO inventory_items (branch_id, name, category, status, quantity, unit, minimum_quantity, maintaining_quantity, created_by, updated_by) VALUES (:b,:n,:c,:s,:q,:u,:min,:maint,:by,:by) RETURNING item_id');
-			$stmt->execute([
+			$stmt->execute(array(
 				'b' => $data['branch_id'] ?? null,
 				'n' => trim((string)($data['name'] ?? '')),
 				'c' => trim((string)($data['category'] ?? '')),
@@ -398,10 +398,10 @@ class InventoryService
 				'min' => (int)($data['minimum_quantity'] ?? 0),
 				'maint' => (int)($data['maintaining_quantity'] ?? 0),
 				'by' => $createdBy,
-			]);
+			));
 		} else {
 			$stmt = $this->pdo->prepare('INSERT INTO inventory_items (branch_id, name, category, status, quantity, unit, minimum_quantity, created_by, updated_by) VALUES (:b,:n,:c,:s,:q,:u,:min,:by,:by) RETURNING item_id');
-			$stmt->execute([
+			$stmt->execute(array(
 				'b' => $data['branch_id'] ?? null,
 				'n' => trim((string)($data['name'] ?? '')),
 				'c' => trim((string)($data['category'] ?? '')),
@@ -410,17 +410,17 @@ class InventoryService
 				'u' => trim((string)($data['unit'] ?? 'pcs')),
 				'min' => (int)($data['minimum_quantity'] ?? 0),
 				'by' => $createdBy,
-			]);
+			));
 		}
 		return (int)$stmt->fetchColumn();
 	}
 
 	public function updateItem(int $itemId, array $data, int $updatedBy): bool
 	{
-		$sets = [];
-		$params = ['id' => $itemId, 'by' => $updatedBy];
+		$sets = array();
+		$params = array('id' => $itemId, 'by' => $updatedBy);
 		$hasMaint = $this->hasMaintainingColumn();
-		$allowed = ['name','category','status','quantity','unit','minimum_quantity'];
+		$allowed = array('name','category','status','quantity','unit','minimum_quantity');
 		if ($hasMaint) { $allowed[] = 'maintaining_quantity'; }
 		foreach ($allowed as $f) {
 			if (array_key_exists($f, $data)) {
@@ -443,7 +443,7 @@ class InventoryService
 	public function deleteItem(int $itemId): bool
 	{
 		$stmt = $this->pdo->prepare('DELETE FROM inventory_items WHERE item_id = :id');
-		return $stmt->execute(['id' => $itemId]);
+		return $stmt->execute(array('id' => $itemId));
 	}
 
 	private function normalizeStatus(string $status): string
@@ -488,12 +488,12 @@ class InventoryService
 	public function getSupplierCountsByCategory(): array
 	{
 		$cats = $this->allowedCategories();
-		$vals = [];
-		$params = [];
+		$vals = array();
+		$params = array();
 		foreach ($cats as $i => $c) { $key = 'c'.$i; $vals[] = '(:'.$key.')'; $params[$key] = $c; }
 		$sql = "WITH cats(category) AS (VALUES ".implode(',', $vals)."), agg AS (
 			SELECT COALESCE(NULLIF(TRIM(category), ''), 'Uncategorized') AS category,
-			       COUNT(DISTINCT supplier_id) AS suppliers
+				   COUNT(DISTINCT supplier_id) AS suppliers
 			FROM supplier_items
 			GROUP BY 1
 		)
@@ -507,8 +507,8 @@ class InventoryService
 			return $st->fetchAll(PDO::FETCH_ASSOC);
 		} catch (\Throwable $e) {
 			// If supplier_items table doesn't exist yet, return zeros
-			$out = [];
-			foreach ($cats as $c) { $out[] = ['category' => $c, 'suppliers' => 0]; }
+			$out = array();
+			foreach ($cats as $c) { $out[] = array('category' => $c, 'suppliers' => 0); }
 			return $out;
 		}
 	}
