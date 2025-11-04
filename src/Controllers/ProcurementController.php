@@ -637,11 +637,12 @@ class ProcurementController extends BaseController
     /** POST: Send PR group to Admin for approval via message with PDF attachment */
     public function sendForAdminApproval(): void
     {
-        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager', 'procurement', 'admin'], true)) { header('Location: /login'); return; }
-        $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
-        if ($pr === '') { header('Location: /manager/requests'); return; }
-        $rows = $this->requests()->getGroupDetails($pr);
-        if (!$rows) { header('Location: /manager/requests'); return; }
+        try {
+            if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager', 'procurement', 'admin'], true)) { header('Location: /login'); return; }
+            $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
+            if ($pr === '') { header('Location: /manager/requests?error=No+PR+number'); return; }
+            $rows = $this->requests()->getGroupDetails($pr);
+            if (!$rows) { header('Location: /manager/requests?error=PR+not+found'); return; }
         // Build canonical PR PDF (same layout as Admin Assistant), include procurement meta
         $pdo = \App\Database\Connection::resolve();
         $justification = '';
@@ -716,6 +717,12 @@ class ProcurementController extends BaseController
             'attach_path' => $tmpFile,
         ]);
         header('Location: /admin/messages' . ($qs !== '' ? ('?' . $qs) : ''));
+            return;
+        } catch (\Throwable $e) {
+            $msg = rawurlencode($e->getMessage());
+            header('Location: /manager/requests?error=' . $msg);
+            return;
+        }
     }
 
     /**
