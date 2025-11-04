@@ -61,7 +61,7 @@
                 $first = isset($partsTmp[0]) && $partsTmp[0] !== '' ? (string)$partsTmp[0] : 'User';
             }
         }
-        $unread = (int)($unread_count ?? 0);
+    $unread = (int)(isset($unread_count) ? $unread_count : 0);
         $avatarData = '';
         if (!empty($avatar_path) && is_file($avatar_path)) {
             $bin = @file_get_contents($avatar_path);
@@ -93,10 +93,10 @@
         <div class="muted" style="margin-top:-6px; margin-bottom:12px;">Branch: <?= htmlspecialchars((string)$branch_name, ENT_QUOTES, 'UTF-8') ?></div>
     <?php endif; ?>
         <div class="cards">
-            <div class="card"><div class="muted" style="font-size:12px;">Good</div><div style="font-size:28px;font-weight:800;"><?= (int)($inventoryStats['good'] ?? 0) ?></div></div>
-            <div class="card"><div class="muted" style="font-size:12px;">For Repair</div><div style="font-size:28px;font-weight:800;"><?= (int)($inventoryStats['for_repair'] ?? 0) ?></div></div>
-            <div class="card"><div class="muted" style="font-size:12px;">For Replacement</div><div style="font-size:28px;font-weight:800;"><?= (int)($inventoryStats['for_replacement'] ?? 0) ?></div></div>
-            <div class="card"><div class="muted" style="font-size:12px;">Total Items</div><div style="font-size:28px;font-weight:800;"><?= (int)($inventoryStats['total'] ?? 0) ?></div></div>
+            <div class="card"><div class="muted" style="font-size:12px;">Good</div><div style="font-size:28px;font-weight:800;"><?= (int)(isset($inventoryStats['good']) ? $inventoryStats['good'] : 0) ?></div></div>
+            <div class="card"><div class="muted" style="font-size:12px;">For Repair</div><div style="font-size:28px;font-weight:800;"><?= (int)(isset($inventoryStats['for_repair']) ? $inventoryStats['for_repair'] : 0) ?></div></div>
+            <div class="card"><div class="muted" style="font-size:12px;">For Replacement</div><div style="font-size:28px;font-weight:800;"><?= (int)(isset($inventoryStats['for_replacement']) ? $inventoryStats['for_replacement'] : 0) ?></div></div>
+            <div class="card"><div class="muted" style="font-size:12px;">Total Items</div><div style="font-size:28px;font-weight:800;"><?= (int)(isset($inventoryStats['total']) ? $inventoryStats['total'] : 0) ?></div></div>
         </div>
 
     <?php $catStats = isset($categoryStats) ? $categoryStats : array(); if (!empty($catStats)): ?>
@@ -104,13 +104,13 @@
         <div class="grid">
             <?php foreach ($catStats as $row): ?>
                 <div class="card">
-                    <h3><?= htmlspecialchars((string)($row['category'] ?? 'Category'), ENT_QUOTES, 'UTF-8') ?></h3>
+                    <h3><?= htmlspecialchars((string)(isset($row['category']) ? $row['category'] : 'Category'), ENT_QUOTES, 'UTF-8') ?></h3>
                     <div class="stats">
-                        <span class="pill">Total: <?= (int)($row['total'] ?? 0) ?></span>
-                        <span class="pill">Good: <?= (int)($row['good'] ?? 0) ?></span>
-                        <span class="pill">For Repair: <?= (int)($row['for_repair'] ?? 0) ?></span>
-                        <span class="pill">For Replacement: <?= (int)($row['for_replacement'] ?? 0) ?></span>
-                        <span class="pill">Retired: <?= (int)($row['retired'] ?? 0) ?></span>
+                        <span class="pill">Total: <?= (int)(isset($row['total']) ? $row['total'] : 0) ?></span>
+                        <span class="pill">Good: <?= (int)(isset($row['good']) ? $row['good'] : 0) ?></span>
+                        <span class="pill">For Repair: <?= (int)(isset($row['for_repair']) ? $row['for_repair'] : 0) ?></span>
+                        <span class="pill">For Replacement: <?= (int)(isset($row['for_replacement']) ? $row['for_replacement'] : 0) ?></span>
+                        <span class="pill">Retired: <?= (int)(isset($row['retired']) ? $row['retired'] : 0) ?></span>
                     </div>
                 </div>
             <?php endforeach; ?>
@@ -129,12 +129,12 @@
             <tbody>
             <?php foreach ($catStats as $row): ?>
                 <tr>
-                    <td><?= htmlspecialchars((string)($row['category'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td style="text-align:right;"><span class="badge status-good"><?= (int)($row['good'] ?? 0) ?></span></td>
-                    <td style="text-align:right;"><span class="badge status-repair"><?= (int)($row['for_repair'] ?? 0) ?></span></td>
-                    <td style="text-align:right;"><span class="badge status-repl"><?= (int)($row['for_replacement'] ?? 0) ?></span></td>
-                    <td style="text-align:right;"><span class="badge"><?= (int)($row['retired'] ?? 0) ?></span></td>
-                    <td style="text-align:right;"><strong><?= (int)($row['total'] ?? 0) ?></strong></td>
+                    <td><?= htmlspecialchars((string)(isset($row['category']) ? $row['category'] : '—'), ENT_QUOTES, 'UTF-8') ?></td>
+                    <td style="text-align:right;"><span class="badge status-good"><?= (int)(isset($row['good']) ? $row['good'] : 0) ?></span></td>
+                    <td style="text-align:right;"><span class="badge status-repair"><?= (int)(isset($row['for_repair']) ? $row['for_repair'] : 0) ?></span></td>
+                    <td style="text-align:right;"><span class="badge status-repl"><?= (int)(isset($row['for_replacement']) ? $row['for_replacement'] : 0) ?></span></td>
+                    <td style="text-align:right;"><span class="badge"><?= (int)(isset($row['retired']) ? $row['retired'] : 0) ?></span></td>
+                    <td style="text-align:right;"><strong><?= (int)(isset($row['total']) ? $row['total'] : 0) ?></strong></td>
                 </tr>
             <?php endforeach; ?>
             </tbody>
@@ -154,10 +154,10 @@
             <tbody>
             <?php if (!empty($pendingRequests)): foreach ($pendingRequests as $r): ?>
                 <tr>
-                    <td><?= htmlspecialchars((string)($r['pr_number'] ?? $r['request_id']), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td><?= htmlspecialchars((string)($r['item_name'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td><?= htmlspecialchars((string)($r['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                    <td><?= htmlspecialchars((string)($r['created_at'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><?= htmlspecialchars((string)(isset($r['pr_number']) ? $r['pr_number'] : (isset($r['request_id']) ? $r['request_id'] : '')), ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><?= htmlspecialchars((string)(isset($r['item_name']) ? $r['item_name'] : '—'), ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><?= htmlspecialchars((string)(isset($r['status']) ? $r['status'] : ''), ENT_QUOTES, 'UTF-8') ?></td>
+                    <td><?= htmlspecialchars((string)(isset($r['created_at']) ? $r['created_at'] : ''), ENT_QUOTES, 'UTF-8') ?></td>
                 </tr>
             <?php endforeach; else: ?>
                 <tr><td colspan="4" class="muted">No pending requests.</td></tr>

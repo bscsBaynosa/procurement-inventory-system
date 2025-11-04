@@ -47,9 +47,9 @@
             <div class="grid">
                 <?php foreach ($supplierCatCounts as $row): ?>
                     <div class="card">
-                        <h3><?= htmlspecialchars((string)($row['category'] ?? 'Category'), ENT_QUOTES, 'UTF-8') ?></h3>
+                        <h3><?= htmlspecialchars((string)(isset($row['category']) ? $row['category'] : 'Category'), ENT_QUOTES, 'UTF-8') ?></h3>
                         <div class="stats">
-                            <span class="badge">Suppliers: <?= (int)($row['suppliers'] ?? 0) ?></span>
+                            <span class="badge">Suppliers: <?= (int)(isset($row['suppliers']) ? $row['suppliers'] : 0) ?></span>
                         </div>
                     </div>
                 <?php endforeach; ?>
@@ -59,13 +59,13 @@
             <div class="grid">
                 <?php foreach ($branchStats as $b): ?>
                     <div class="card">
-                        <h3><?= htmlspecialchars((string)($b['name'] ?? 'Branch'), ENT_QUOTES, 'UTF-8') ?></h3>
+                        <h3><?= htmlspecialchars((string)(isset($b['name']) ? $b['name'] : 'Branch'), ENT_QUOTES, 'UTF-8') ?></h3>
                         <div class="stats">
-                            <span class="badge">Total: <?= (int)($b['total'] ?? 0) ?></span>
-                            <span class="badge">Good: <?= (int)($b['good'] ?? 0) ?></span>
-                            <span class="badge">For Repair: <?= (int)($b['for_repair'] ?? 0) ?></span>
-                            <span class="badge">For Replacement: <?= (int)($b['for_replacement'] ?? 0) ?></span>
-                            <span class="badge">Retired: <?= (int)($b['retired'] ?? 0) ?></span>
+                            <span class="badge">Total: <?= (int)(isset($b['total']) ? $b['total'] : 0) ?></span>
+                            <span class="badge">Good: <?= (int)(isset($b['good']) ? $b['good'] : 0) ?></span>
+                            <span class="badge">For Repair: <?= (int)(isset($b['for_repair']) ? $b['for_repair'] : 0) ?></span>
+                            <span class="badge">For Replacement: <?= (int)(isset($b['for_replacement']) ? $b['for_replacement'] : 0) ?></span>
+                            <span class="badge">Retired: <?= (int)(isset($b['retired']) ? $b['retired'] : 0) ?></span>
                         </div>
                     </div>
                 <?php endforeach; ?>
@@ -95,7 +95,7 @@
                 <?php if (!empty($groups)): ?>
                     <?php foreach ($groups as $g): ?>
                         <?php 
-                            $status = (string)($g['status'] ?? 'pending');
+                            $status = (string)(isset($g['status']) ? $g['status'] : 'pending');
                             $labelMap = array(
                                 'pending' => 'For Admin Approval',
                                 'approved' => 'Approved',
@@ -107,14 +107,14 @@
                                 'completed' => 'Completed',
                                 'cancelled' => 'Cancelled'
                             );
-                            $statusLabel = $labelMap[$status] ?? $status;
+                            $statusLabel = isset($labelMap[$status]) ? $labelMap[$status] : $status;
                         ?>
                         <tr>
                             <td class="mono"><?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= htmlspecialchars((string)($g['branch_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><pre style="margin:0;white-space:pre-wrap;line-height:1.3;max-height:3.2em;overflow:hidden;"><?= htmlspecialchars((string)($g['items_summary'] ?? ''), ENT_QUOTES, 'UTF-8') ?></pre></td>
-                            <td class="nowrap"><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)($g['min_created_at'] ?? 'now'))), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><?= htmlspecialchars((string)($g['requested_by_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= htmlspecialchars((string)(isset($g['branch_name']) ? $g['branch_name'] : 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><pre style="margin:0;white-space:pre-wrap;line-height:1.3;max-height:3.2em;overflow:hidden;"><?= htmlspecialchars((string)(isset($g['items_summary']) ? $g['items_summary'] : ''), ENT_QUOTES, 'UTF-8') ?></pre></td>
+                            <td class="nowrap"><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)(isset($g['min_created_at']) ? $g['min_created_at'] : 'now'))), ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= htmlspecialchars((string)(isset($g['requested_by_name']) ? $g['requested_by_name'] : 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><span class="badge"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></span></td>
                             <td>
                                 <div class="actions">

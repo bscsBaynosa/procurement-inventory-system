@@ -64,8 +64,8 @@ try {
             </a>
         <?php elseif ($role === 'custodian'): ?>
         <?php elseif ($role === 'admin_assistant'): ?>
-            <a href="/admin-assistant/inventory" class="<?= nav_active_many(['/admin-assistant/inventory','/custodian/inventory'], $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm4 0h14v-2H7v2zM3 17h2v-2H3v2zm4 0h14v-2H7v2zM3 9h2V7H3v2zm4 0h14V7H7v2z"/></svg> Inventory</a>
-            <div class="nav-group <?= nav_active_many(['/admin-assistant/requests','/custodian/requests'], $path) ?> <?= strpos($path, '/admin-assistant/requests') === 0 ? 'open' : '' ?>" data-nav-group>
+            <a href="/admin-assistant/inventory" class="<?= nav_active_many(array('/admin-assistant/inventory','/custodian/inventory'), $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm4 0h14v-2H7v2zM3 17h2v-2H3v2zm4 0h14v-2H7v2zM3 9h2V7H3v2zm4 0h14V7H7v2z"/></svg> Inventory</a>
+            <div class="nav-group <?= nav_active_many(array('/admin-assistant/requests','/custodian/requests'), $path) ?> <?= strpos($path, '/admin-assistant/requests') === 0 ? 'open' : '' ?>" data-nav-group>
                 <button type="button" class="nav-toggle" data-nav-toggle style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;background:none;border:1px solid transparent;color:inherit;cursor:pointer;width:100%;text-align:left;outline:none;">
                     <svg viewBox="0 0 24 24"><path d="M3 3h18v14H6l-3 3V3z"/></svg>
                     <span>Purchase Request</span>
@@ -91,7 +91,7 @@ try {
             <a href="/supplier/pos" class="<?= nav_active('/supplier/pos', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Purchase Orders</a>
         <?php endif; ?>
         <?php if ($role !== 'guest'): ?>
-            <a href="/inbox" class="<?= nav_active_many(['/inbox','/notifications'], $path) ?>">
+            <a href="/inbox" class="<?= nav_active_many(array('/inbox','/notifications'), $path) ?>">
                 <svg viewBox="0 0 24 24"><path d="M12 22a2 2 0 0 0 2-2H10a2 2 0 0 0 2 2zm6-6v-5a6 6 0 1 0-12 0v5l-2 2v1h16v-1l-2-2z"/></svg>
                 Inbox
                 <?php if ($unreadCount > 0): ?>
