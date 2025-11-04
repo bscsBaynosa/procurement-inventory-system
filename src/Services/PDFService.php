@@ -168,20 +168,18 @@ class PDFService
 	 */
 	public function generatePurchaseRequisitionToFile(array $meta, array $items, string $filePath): void
 	{
-		// Redesigned to closely match the provided PR form template
+		// Compact, classic layout to keep single-page by default when items are few
 		$mpdf = $this->createMpdf();
-		// Footer page numbers
-		$mpdf->SetFooter('<div style="font-size:9px; color:#555; text-align:center;">Page {PAGENO} of {nbpg}</div>');
-		// Global CSS to apply modern look and Poppins fallback
+		// No footer by default to avoid reserving space that could trigger page 2
+		$mpdf->SetFooter('');
+		// Global CSS: classic compact styling, minimal padding, no rounded corners
 		$css = '<style>
-			body { font-family: Poppins, "DejaVu Sans", Arial, sans-serif; font-size: 10pt; }
-			.table { border:1px solid #000; border-radius:10px; overflow:hidden; }
-			th, td { font-size:10pt; }
-			thead th { background:#f0f0f0; font-weight:700; }
+			body { font-family: "DejaVu Sans", Arial, sans-serif; font-size: 10pt; }
+			table { border-collapse: collapse; }
+			th, td { font-size:10pt; padding: 4px; }
 			thead { display: table-header-group; }
-			tfoot { display: table-footer-group; }
-			.h1 { font-size:13pt; font-weight:800; }
-			.small { font-size:8.5pt; color:#333; }
+			tr { page-break-inside: avoid; }
+			.small { font-size:9pt; color:#333; }
 		</style>';
 		$mpdf->WriteHTML($css);
 		$pr = htmlspecialchars((string)($meta['pr_number'] ?? ''), ENT_QUOTES, 'UTF-8');
@@ -215,8 +213,8 @@ class PDFService
 			}
 		}
 
-		$topTitle = '<div style="text-align:center;font-size:16px;font-weight:700;">Philippine Oncology Center Corporation</div>'
-			. '<div style="height:2px;background:#000;margin:6px 0 8px 0;"></div>';
+		$topTitle = '<div style="text-align:center;font-size:14px;font-weight:700;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
+			. '<div style="height:1px;background:#000;margin:6px 0 8px 0;"></div>';
 
 		$revRow = '<table width="100%" border="0" cellspacing="0" cellpadding="2" style="font-size:9px;margin-bottom:6px;">'
 			. '<tr>'
@@ -230,7 +228,7 @@ class PDFService
 
 		$titleRow = '<div style="text-align:center;font-size:10px;font-style:italic;">PURCHASE REQUISITION NO. <span style="border-bottom:1px solid #444;padding:0 40px;">' . $pr . '</span></div>';
 
-		$reqMeta = '<table width="100%" border="0" cellspacing="0" cellpadding="4" style="margin-top:10px;font-size:10px;">'
+		$reqMeta = '<table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top:6px;font-size:10px;">'
 			. '<tr>'
 			. '<td style="width:20%;">Requesting Section:</td>'
 			. '<td style="width:35%;border-bottom:1px solid #444;">' . $branch . '</td>'
@@ -265,15 +263,8 @@ class PDFService
 				. '<td style="width:62%;">' . $desc . '</td>'
 				. '</tr>';
 		}
-		// Pad to a full page (approx 20-24 lines) so the form looks complete when printed
-		$target = 22;
-		$pad = $target - count($items);
-		for ($k = 0; $k < $pad; $k++) {
-			$rows .= '<tr>'
-				. '<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>'
-				. '</tr>';
-		}
-		$itemsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="5" class="table" style="margin-top:10px;">'
+		// Do not pad rows — keep content compact to stay on one page when possible
+		$itemsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="4" style="margin-top:6px;">'
 			. '<thead>'
 			. '<tr>'
 			. '<th colspan="4" style="text-align:center;">QUANTITY</th>'
@@ -291,23 +282,23 @@ class PDFService
 			. '</table>';
 
 		// Attachments / Additional instruction
-		$attachments = '<table width="100%" border="1" cellspacing="0" cellpadding="8" class="table" style="margin-top:8px;">'
+		$attachments = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
 			. '<tr><td style="width:18%;">Attachments / Additional instruction:</td><td>&nbsp;</td></tr>'
 			. '</table>';
 
 		// Signatures (bottom)
-		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="8" class="table" style="margin-top:8px;">'
+		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
 			. '<tr>'
-			. '<td style="width:60%;">Requisition By:<div style="height:28px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:6px;">' . $reqBy . '</div></td>'
-			. '<td style="width:40%;">Date:<div style="height:28px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:6px;">' . $prepAt . '</div></td>'
+			. '<td style="width:60%;">Requisition By:<div style="height:22px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:4px;">' . $reqBy . '</div></td>'
+			. '<td style="width:40%;">Date:<div style="height:22px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:4px;">' . $prepAt . '</div></td>'
 			. '</tr>'
 			. '<tr>'
-			. '<td>Noted By:<div style="height:28px;"></div><div style="border-top:1px solid #999; padding-top:6px; text-align:center;">' . htmlspecialchars((string)($meta['noted_by'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div></td>'
-			. '<td>Date:<div style="height:28px;"></div><div style="border-top:1px solid #999; padding-top:6px; text-align:center;">' . htmlspecialchars((string)($meta['date_received'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div></td>'
+			. '<td>Noted By:<div style="height:22px;"></div><div style="border-top:1px solid #999; padding-top:4px; text-align:center;">' . htmlspecialchars((string)($meta['noted_by'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div></td>'
+			. '<td>Date:<div style="height:22px;"></div><div style="border-top:1px solid #999; padding-top:4px; text-align:center;">' . htmlspecialchars((string)($meta['date_received'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div></td>'
 			. '</tr>'
 			. '</table>';
 
-		$distribution = '<div style="margin-top:10px;font-size:9px;display:flex;justify-content:space-between;">'
+		$distribution = '<div style="margin-top:6px;font-size:9px;display:flex;justify-content:space-between;">'
 			. '<div>Distribution: ORIGINAL – Administrator</div>'
 			. '<div>Duplicate: Requesting Section</div>'
 			. '</div>';
