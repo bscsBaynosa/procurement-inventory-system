@@ -11,8 +11,12 @@
     },
     "autoload": {
         "psr-4": {
-            "App\\": "src/"
-        }
+            "App\\": "src/",
+            "App\\Services\\": "src/services/"
+        },
+        "exclude-from-classmap": [
+            "src/Services/"
+        ]
     },
     "autoload-dev": {
         "psr-4": {
