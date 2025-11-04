@@ -661,11 +661,13 @@ class CustodianController extends BaseController
             if ($branchId) {
                 try { $sb = $pdo->prepare('SELECT name FROM branches WHERE branch_id = :b'); $sb->execute(['b' => $branchId]); $bn = $sb->fetchColumn(); if ($bn) { $branchName = (string)$bn; } } catch (\Throwable $e) {}
             }
+            // Default to current user, but prefer the original preparer (requested_by of the earliest PR line)
             $byName = (string)($_SESSION['full_name'] ?? ('User #' . $me));
             $itemLines = [];
             $effectiveDate = '';
             $neededBy = '';
             $justification = '';
+            $preparedById = 0;
             $first = true;
             foreach ($lines as $row) {
                 $itemLines[] = [
@@ -679,8 +681,19 @@ class CustodianController extends BaseController
                     if (!empty($row['created_at'])) { $effectiveDate = date('Y-m-d', strtotime((string)$row['created_at'])); }
                     if (!empty($row['needed_by'])) { $neededBy = date('Y-m-d', strtotime((string)$row['needed_by'])); }
                     if (!empty($row['justification'])) { $justification = (string)$row['justification']; }
+                    // Capture the original preparer user id
+                    if (!empty($row['requested_by'])) { $preparedById = (int)$row['requested_by']; }
                     $first = false;
                 }
+            }
+            // Resolve original preparer name when available
+            if ($preparedById > 0) {
+                try {
+                    $stU = $pdo->prepare('SELECT full_name FROM users WHERE user_id = :id');
+                    $stU->execute(['id' => $preparedById]);
+                    $nm = $stU->fetchColumn();
+                    if ($nm) { $byName = (string)$nm; }
+                } catch (\Throwable $ignored) {}
             }
             // Best-effort Noted By: pick a procurement manager (or any procurement user)
             $notedBy = '';
