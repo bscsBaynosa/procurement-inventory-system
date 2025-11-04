@@ -96,12 +96,17 @@ $safeRun = static function (callable $fn): void {
 		http_response_code(500);
 		header('Content-Type: text/html; charset=utf-8');
 		$msg = htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8');
+		$file = htmlspecialchars($e->getFile(), ENT_QUOTES, 'UTF-8');
+		$line = (int)$e->getLine();
+		// Also log to server error log for post-mortem
+		error_log('[app-error] ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
 		echo '<!doctype html><html><head><meta charset="utf-8"><title>Application Error</title>';
 		echo '<style>body{font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;padding:24px;background:#0b0b0b;color:#e5e7eb} .box{background:#111827;border:1px solid #1f2937;border-radius:12px;padding:18px;max-width:860px} code{background:#0b0b0b;padding:2px 6px;border-radius:6px} a{color:#22c55e;text-decoration:none}</style>';
 		echo '</head><body><div class="box">';
 		echo '<h2>Something went wrong</h2>';
 		echo '<p>An unexpected error occurred while rendering this page.</p>';
 		echo '<p><small>Reason: ' . $msg . '</small></p>';
+		echo '<p><small>Location: <code>' . $file . '</code> on line <code>' . $line . '</code></small></p>';
 		echo '<p>Diagnostics:</p><ul>';
 		echo '<li><a href="/setup/status">Setup Status</a> (DB connectivity)</li>';
 		echo '<li><a href="/inbox">Inbox</a> (if dashboard fails)</li>';
