@@ -253,7 +253,7 @@ class PDFService
 			$desc = htmlspecialchars((string)($i['description'] ?? ''), ENT_QUOTES, 'UTF-8');
 			$unit = htmlspecialchars((string)($i['unit'] ?? ''), ENT_QUOTES, 'UTF-8');
 			$qty = (int)($i['qty'] ?? 0);
-			$stock = isset($i['stock_on_hand']) ? (string)(int)$i['stock_on_hand'] : '&nbsp;';
+			$stock = isset($i['stock_on_hand']) ? (string)(int)$i['stock_on_hand'] : '0';
 			$usage = isset($i['usage_per_month']) ? (string)(int)$i['usage_per_month'] : '&nbsp;';
 			$rows .= '<tr>'
 				. '<td style="text-align:center;width:8%;">' . $stock . '</td>'

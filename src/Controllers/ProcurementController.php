@@ -694,6 +694,9 @@ class ProcurementController extends BaseController
                 if (!empty($cv0['approved_at'])) { $purchaseApprovedAt = date('Y-m-d', strtotime((string)$cv0['approved_at'])); }
             }
         } catch (\Throwable $ignored) {}
+        // Ensure supplier names are in the same order as chosen
+        $supNamesOrdered = [];
+        foreach ($chosen as $sid) { if (isset($map[$sid])) { $supNamesOrdered[] = $map[$sid]; } }
         $metaCan = [
             'pr_number' => $pr,
             'branch_name' => (string)($rows[0]['branch_name'] ?? 'N/A'),
@@ -704,8 +707,13 @@ class ProcurementController extends BaseController
             'needed_by' => $neededBy,
             'date_received' => $dateReceived,
             'noted_by' => $notedBy,
-            'canvassed_suppliers' => array_values($map),
+            'canvassed_suppliers' => $supNamesOrdered ?: array_values($map),
             'awarded_to' => (string)($awardedName ?? ''),
+            'canvass_totals' => (function() use ($totals, $chosen) {
+                $out = [];
+                for ($i=0;$i<3;$i++) { $sid = $chosen[$i] ?? 0; $out[$i] = ($sid && isset($totals[$sid])) ? (float)$totals[$sid] : null; }
+                return $out;
+            })(),
             'signature_variant' => 'purchase_approval',
             'purchase_approved_by' => $purchaseApprovedBy,
             'purchase_approved_at' => $purchaseApprovedAt,
