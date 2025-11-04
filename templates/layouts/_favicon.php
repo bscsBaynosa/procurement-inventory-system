@@ -1,10 +1,10 @@
 <?php
 $root = realpath(__DIR__ . '/../../');
-$candidates = [
+$candidates = array(
     $root . DIRECTORY_SEPARATOR . 'logo.png',
     $root . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'logo.png',
     $root . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'logo.png',
-];
+);
 $printed = false;
 foreach ($candidates as $cand) {
     if (is_file($cand)) {

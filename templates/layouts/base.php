@@ -2,11 +2,11 @@
     
     $root = realpath(__DIR__ . '/../../');
     $publicDir = $root . DIRECTORY_SEPARATOR . 'public';
-    $iconCandidates = [
+    $iconCandidates = array(
         $root . DIRECTORY_SEPARATOR . 'logo.png',
         $publicDir . DIRECTORY_SEPARATOR . 'logo.png',
         $publicDir . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'logo.png',
-    ];
+    );
     $faviconHref = null;
     foreach ($iconCandidates as $cand) {
         if (is_file($cand)) {
