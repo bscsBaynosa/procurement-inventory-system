@@ -37,6 +37,17 @@ spl_autoload_register(static function (string $class): void {
 	}
 });
 
+// On some hosts with case-sensitive filesystems and Composer classmaps, a stale
+// src/Services/* path can shadow the canonical src/services/* files. Preload
+// critical Services classes from the lowercase path to guarantee the correct
+// implementation is defined before Composer tries to autoload them.
+try {
+	if (!class_exists(\App\Services\InventoryService::class, false)) {
+		$svc = __DIR__ . '/../src/services/InventoryService.php';
+		if (is_file($svc)) { require_once $svc; }
+	}
+} catch (\Throwable $e) { /* ignore */ }
+
 // Fallback: if Composer autoload didn't register our controllers for any reason
 // (e.g., case sensitivity issues during deploy), explicitly require them.
 // This keeps the app online while we investigate autoload on the next deploy.
