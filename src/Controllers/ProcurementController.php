@@ -548,15 +548,7 @@ class ProcurementController extends BaseController
         $pr = isset($_GET['pr']) ? trim((string)$_GET['pr']) : '';
         if ($pr === '') { header('Location: /manager/requests'); return; }
         $rows = $this->requests()->getGroupDetails($pr);
-        $this->render('requests/show.php', ['request' => [
-            'request_id' => $rows[0]['request_id'] ?? null,
-            'pr_number' => $pr,
-            'branch_id' => $rows[0]['branch_id'] ?? null,
-            'created_at' => $rows[0]['created_at'] ?? null,
-            'requested_by' => $rows[0]['requested_by'] ?? null,
-            'justification' => null,
-            'status' => $rows[0]['status'] ?? null,
-        ], 'history' => $this->requests()->getRequestHistory((int)($rows[0]['request_id'] ?? 0))]);
+        $this->render('procurement/request_view.php', ['pr' => $pr, 'rows' => $rows]);
     }
 
     /** GET: Download PR PDF for a group */
@@ -567,17 +559,35 @@ class ProcurementController extends BaseController
         if ($pr === '') { header('Location: /manager/requests'); return; }
         $rows = $this->requests()->getGroupDetails($pr);
         if (!$rows) { header('Location: /manager/requests'); return; }
-        $items = [];
-        foreach ($rows as $r) { $items[] = ($r['item_name'] ?? 'Item') . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''); }
+        // Build canonical PR meta and item lines for the compact PR PDF
         $meta = [
-            'PR Number' => $pr,
-            'Branch' => (string)($rows[0]['branch_name'] ?? 'N/A'),
-            'Submitted By' => (string)($rows[0]['requested_by_name'] ?? 'N/A'),
-            'Submission Date' => (string)($rows[0]['created_at'] ?? ''),
-            'Items' => implode("\n", $items),
-            'Status' => (string)($rows[0]['status'] ?? ''),
+            'pr_number' => $pr,
+            'branch_name' => (string)($rows[0]['branch_name'] ?? 'N/A'),
+            // Requisition By should be the original preparer's full name
+            'requested_by' => (string)($rows[0]['requested_by_name'] ?? ''),
+            'prepared_at' => date('Y-m-d', strtotime((string)($rows[0]['created_at'] ?? date('Y-m-d')))),
+            'effective_date' => date('Y-m-d'),
+            'justification' => (string)($rows[0]['revision_notes'] ?? ''),
         ];
-        $this->pdf()->generatePurchaseRequestPDF($meta);
+        $items = [];
+        foreach ($rows as $r) {
+            $items[] = [
+                'description' => (string)($r['item_name'] ?? 'Item'),
+                'unit' => (string)($r['unit'] ?? ''),
+                'qty' => (int)($r['quantity'] ?? 0),
+            ];
+        }
+        // Generate to a temp file and stream inline
+        $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
+        if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+        $file = $dir . DIRECTORY_SEPARATOR . 'PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '.pdf';
+        $this->pdf()->generatePurchaseRequisitionToFile($meta, $items, $file);
+        if (!is_file($file)) { header('Location: /manager/requests'); return; }
+        $size = @filesize($file) ?: null;
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: inline; filename="' . rawurlencode('PR-' . $pr . '.pdf') . '"');
+        if ($size !== null) { header('Content-Length: ' . (string)$size); }
+        @readfile($file);
     }
 
     /** POST: Send PR group to Admin for approval via message with PDF attachment */
@@ -588,33 +598,32 @@ class ProcurementController extends BaseController
         if ($pr === '') { header('Location: /manager/requests'); return; }
         $rows = $this->requests()->getGroupDetails($pr);
         if (!$rows) { header('Location: /manager/requests'); return; }
-        // Generate a PDF file to storage and attach to messages to Admins
-        $items = [];
-        foreach ($rows as $r) { $items[] = ($r['item_name'] ?? 'Item') . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''); }
+        // Build canonical PR PDF (same layout as Admin Assistant)
         $meta = [
-            'PR Number' => $pr,
-            'Branch' => (string)($rows[0]['branch_name'] ?? 'N/A'),
-            'Submitted By' => (string)($rows[0]['requested_by_name'] ?? 'N/A'),
-            'Submission Date' => (string)($rows[0]['created_at'] ?? ''),
-            'Items' => implode("\n", $items),
-            'Status' => (string)($rows[0]['status'] ?? ''),
+            'pr_number' => $pr,
+            'branch_name' => (string)($rows[0]['branch_name'] ?? 'N/A'),
+            'requested_by' => (string)($rows[0]['requested_by_name'] ?? ''),
+            'prepared_at' => date('Y-m-d', strtotime((string)($rows[0]['created_at'] ?? date('Y-m-d')))),
+            'effective_date' => date('Y-m-d'),
+            'justification' => (string)($rows[0]['revision_notes'] ?? ''),
         ];
+        $items = [];
+        foreach ($rows as $r) {
+            $items[] = [
+                'description' => (string)($r['item_name'] ?? 'Item'),
+                'unit' => (string)($r['unit'] ?? ''),
+                'qty' => (int)($r['quantity'] ?? 0),
+            ];
+        }
+        // Render PDF to a storage file
+        $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
+        if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+        $tmpFile = $dir . DIRECTORY_SEPARATOR . 'PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '.pdf';
+        $this->pdf()->generatePurchaseRequisitionToFile($meta, $items, $tmpFile);
         // Ensure message attachments columns
         $pdo = \App\Database\Connection::resolve();
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
-        // Render PDF to a temp file
-        $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
-        if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
-        $tmpFile = $dir . DIRECTORY_SEPARATOR . 'PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '.pdf';
-        // Use PDFService but save to file
-        $mpdf = (new \Mpdf\Mpdf(['format'=>'A4','orientation'=>'P','margin_left'=>12,'margin_right'=>12,'margin_top'=>12,'margin_bottom'=>12]));
-        // Build minimal HTML
-        $html = '<h1 style="text-align:center">Purchase Request</h1><table width="100%" border="1" cellspacing="0" cellpadding="6">';
-        foreach ($meta as $k=>$v) { $html .= '<tr><td><strong>'.htmlspecialchars((string)$k).'</strong></td><td>'.nl2br(htmlspecialchars((string)$v)).'</td></tr>'; }
-        $html .= '</table>';
-        $mpdf->WriteHTML($html);
-        $mpdf->Output($tmpFile, 'F');
 
         // Send messages to Admin users
         $subject = 'For Admin Approval • PR ' . $pr;
@@ -633,6 +642,8 @@ class ProcurementController extends BaseController
                 ]);
             }
         }
+        // Update PR group status to mark forwarded for admin approval
+        try { $this->requests()->updateGroupStatus($pr, 'for_admin_approval', (int)($_SESSION['user_id'] ?? 0), 'Sent to Admin for Approval'); } catch (\Throwable $ignored) {}
         header('Location: /manager/requests?sent=1');
     }
 

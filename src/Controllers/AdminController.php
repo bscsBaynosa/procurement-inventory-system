@@ -986,9 +986,22 @@ class AdminController extends BaseController
         $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
         if ($me <= 0 || $id <= 0) { header('Location: /notifications'); return; }
         try {
-            $st = $this->pdo->prepare('SELECT m.id, m.subject, m.body, m.is_read, m.created_at, m.sender_id, m.attachment_name, m.attachment_path, u.full_name AS from_name
-                FROM messages m JOIN users u ON u.user_id = m.sender_id WHERE m.id = :id AND m.recipient_id = :me');
-            $st->execute(['id' => $id, 'me' => $me]);
+            // Attempt to select including optional attachment columns; add them on the fly if missing
+            try {
+                $st = $this->pdo->prepare('SELECT m.id, m.subject, m.body, m.is_read, m.created_at, m.sender_id, m.attachment_name, m.attachment_path, u.full_name AS from_name
+                    FROM messages m JOIN users u ON u.user_id = m.sender_id WHERE m.id = :id AND m.recipient_id = :me');
+                $st->execute(['id' => $id, 'me' => $me]);
+            } catch (\PDOException $e) {
+                if ($e->getCode() === '42703') { // undefined_column on legacy DB
+                    try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $ignored) {}
+                    try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $ignored) {}
+                    $st = $this->pdo->prepare('SELECT m.id, m.subject, m.body, m.is_read, m.created_at, m.sender_id, m.attachment_name, m.attachment_path, u.full_name AS from_name
+                        FROM messages m JOIN users u ON u.user_id = m.sender_id WHERE m.id = :id AND m.recipient_id = :me');
+                    $st->execute(['id' => $id, 'me' => $me]);
+                } else {
+                    throw $e;
+                }
+            }
             $msg = $st->fetch();
             if ($msg) { $msg['body'] = \App\Services\CryptoService::maybeDecrypt((string)$msg['body']); }
             if (!$msg) { header('Location: /notifications'); return; }
@@ -1132,6 +1145,8 @@ class AdminController extends BaseController
             'sort' => $sort,
             'order' => $order,
         ]);
+        // Visibility rule: hide raw 'pending' PRs from Admin until Procurement forwards for Admin Approval
+        $rows = array_values(array_filter($rows, static fn($r) => (string)($r['status'] ?? '') !== 'pending'));
         $this->render('admin/requests_list.php', [ 'groups' => $rows, 'filters' => [ 'branch' => $branchId, 'status' => $status, 'revision' => $revision, 'sort' => $sort, 'order' => $order ] ]);
     }
 
@@ -1247,8 +1262,17 @@ class AdminController extends BaseController
         if ($me <= 0 || $id <= 0) { http_response_code(403); echo 'Forbidden'; return; }
         try {
             // Prefer attachment stored on messages table (attachment_name/path)
-            $st = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id AND (recipient_id = :me OR sender_id = :me)');
-            $st->execute(['id' => $id, 'me' => $me]);
+            try {
+                $st = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id AND (recipient_id = :me OR sender_id = :me)');
+                $st->execute(['id' => $id, 'me' => $me]);
+            } catch (\PDOException $e) {
+                if ($e->getCode() === '42703') {
+                    try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $ignored) {}
+                    try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $ignored) {}
+                    $st = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id AND (recipient_id = :me OR sender_id = :me)');
+                    $st->execute(['id' => $id, 'me' => $me]);
+                } else { throw $e; }
+            }
             $row = $st->fetch();
             $name = (string)($row['attachment_name'] ?? 'attachment');
             $path = (string)($row['attachment_path'] ?? '');
@@ -1284,8 +1308,17 @@ class AdminController extends BaseController
         $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
         if ($me <= 0 || $id <= 0) { http_response_code(403); echo 'Forbidden'; return; }
         try {
-            $st = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id AND (recipient_id = :me OR sender_id = :me)');
-            $st->execute(['id' => $id, 'me' => $me]);
+            try {
+                $st = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id AND (recipient_id = :me OR sender_id = :me)');
+                $st->execute(['id' => $id, 'me' => $me]);
+            } catch (\PDOException $e) {
+                if ($e->getCode() === '42703') {
+                    try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $ignored) {}
+                    try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $ignored) {}
+                    $st = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id AND (recipient_id = :me OR sender_id = :me)');
+                    $st->execute(['id' => $id, 'me' => $me]);
+                } else { throw $e; }
+            }
             $row = $st->fetch();
             $name = (string)($row['attachment_name'] ?? 'attachment.pdf');
             $path = (string)($row['attachment_path'] ?? '');

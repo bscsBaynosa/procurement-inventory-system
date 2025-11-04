@@ -275,7 +275,7 @@ class RequestService
 	 */
 	/**
 	 * @param array $filters
-	 * @return array
+			$sql = "SELECT DISTINCT item_id FROM purchase_requests\n\t\t\t\tWHERE COALESCE(is_archived, FALSE) = FALSE\n\t\t\t\t  AND status IN ('pending','for_admin_approval','approved','canvassing_submitted','canvassing_approved','in_progress','po_submitted','po_admin_approved')\n\t\t\t\t  AND item_id IS NOT NULL";
 	 */
 	public function getRequestsGrouped($filters = array())
 	{
@@ -383,7 +383,7 @@ class RequestService
 	 */
 	public function updateGroupStatus($prNumber, $status, $performedBy, $notes = null)
 	{
-		$allowed = ['pending','approved','rejected','in_progress','completed','cancelled','canvassing_submitted','canvassing_approved','canvassing_rejected'];
+		$allowed = ['pending','for_admin_approval','approved','rejected','in_progress','completed','cancelled','canvassing_submitted','canvassing_approved','canvassing_rejected'];
 		if (!in_array($status, $allowed, true)) { return false; }
 		$this->ensureRequestStatusEnum();
 		$rows = $this->getGroupDetails($prNumber);
@@ -852,6 +852,16 @@ DO $$ BEGIN
 	IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'request_status') THEN
 		IF NOT EXISTS (
 			SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+			WHERE t.typname = 'request_status' AND e.enumlabel = 'for_admin_approval'
+		) THEN
+			BEGIN
+				ALTER TYPE request_status ADD VALUE 'for_admin_approval' AFTER 'pending';
+			EXCEPTION WHEN others THEN
+				ALTER TYPE request_status ADD VALUE 'for_admin_approval';
+			END;
+		END IF;
+		IF NOT EXISTS (
+			SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
 			WHERE t.typname = 'request_status' AND e.enumlabel = 'canvassing_submitted'
 		) THEN
 			BEGIN
@@ -888,7 +898,7 @@ SQL);
 			try {
 				$labelsStmt = $this->pdo->query("SELECT e.enumlabel FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid WHERE t.typname = 'request_status'");
 				$labels = $labelsStmt ? $labelsStmt->fetchAll(\PDO::FETCH_COLUMN) : array();
-				foreach (array('canvassing_submitted','canvassing_approved','canvassing_rejected') as $v) {
+				foreach (array('for_admin_approval','canvassing_submitted','canvassing_approved','canvassing_rejected') as $v) {
 					if (!in_array($v, $labels, true)) {
 						$this->pdo->exec("ALTER TYPE request_status ADD VALUE '" . $v . "'");
 					}
@@ -904,6 +914,7 @@ SQL);
 		try {
 			$this->pdo->exec("ALTER TABLE purchase_requests
 				ADD COLUMN IF NOT EXISTS revision_state VARCHAR(32),
+				'for_admin_approval' => 'Forwarded to Admin',
 				ADD COLUMN IF NOT EXISTS revision_notes TEXT");
 		} catch (\Throwable $e) {}
 	}
