@@ -300,41 +300,41 @@ class PDFService
 			$approvedDate = htmlspecialchars((string)($meta['approved_at'] ?? ''), ENT_QUOTES, 'UTF-8');
 			$approvedLabel = 'Approved By:';
 		}
+		$uniformRow = function(string $leftLabel, string $leftValue, string $rightDate): string {
+			return '<tr>'
+				. '<td style="width:60%;vertical-align:top;">' . $leftLabel . '<div style="height:22px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:4px;">' . $leftValue . '</div></td>'
+				. '<td style="width:40%;vertical-align:top;">Date:<div style="height:22px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:4px;">' . $rightDate . '</div></td>'
+				. '</tr>';
+		};
 		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
-			. '<tr>'
-			. '<td style="width:60%;">Requisition By:<div style="height:22px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:4px;">' . $reqBy . '</div></td>'
-			. '<td style="width:40%;">Date:<div style="height:22px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:4px;">' . $prepAt . '</div></td>'
-			. '</tr>'
-			. '<tr>'
-			. '<td>Noted By:<div style="height:22px;"></div><div style="border-top:1px solid #999; padding-top:4px; text-align:center;">' . htmlspecialchars((string)($meta['noted_by'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div></td>'
-			. '<td>Date:<div style="height:22px;"></div><div style="border-top:1px solid #999; padding-top:4px; text-align:center;">' . htmlspecialchars((string)($meta['date_received'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div></td>'
-			. '</tr>'
-			. '<tr>'
-			. '<td>' . $approvedLabel . '<div style="height:22px;"></div><div style="border-top:1px solid #999; padding-top:4px; text-align:center;">' . $approvedName . '</div></td>'
-			. '<td>Date:<div style="height:22px;"></div><div style="border-top:1px solid #999; padding-top:4px; text-align:center;">' . $approvedDate . '</div></td>'
-			. '</tr>'
+			. $uniformRow('Requisition By:', $reqBy, $prepAt)
+			. $uniformRow('Noted By:', htmlspecialchars((string)($meta['noted_by'] ?? ''), ENT_QUOTES, 'UTF-8'), htmlspecialchars((string)($meta['date_received'] ?? ''), ENT_QUOTES, 'UTF-8'))
+			. $uniformRow($approvedLabel, $approvedName, $approvedDate)
 			. '</table>';
 
-		// Optional Canvassed section (3 suppliers + Awarded) if provided — shown BEFORE attachments per client request
+		// Optional Canvassing section (3 suppliers + Awarded To), shown BEFORE attachments
 		$canvas = '';
 		$cv = isset($meta['canvassed_suppliers']) && is_array($meta['canvassed_suppliers']) ? array_values($meta['canvassed_suppliers']) : [];
 		$cv = array_slice($cv, 0, 3);
 		$awarded = isset($meta['awarded_to']) ? (string)$meta['awarded_to'] : '';
 		if (!empty($cv) || $awarded !== '') {
-			$labels = ['SUPPLIER 1','SUPPLIER 2','SUPPLIER 3'];
+			$labels = ['SUPPLIER 1','SUPPLIER 2','SUPPLIER 3','AWARDED TO'];
 			$cols = '';
-			for ($i=0; $i<3; $i++) { $name = isset($cv[$i]) ? htmlspecialchars((string)$cv[$i], ENT_QUOTES, 'UTF-8') : '&nbsp;'; $cols .= '<td style="text-align:center;">' . $name . '</td>'; }
-			$canvas = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
-				. '<tr>'
-				. '<th style="width:20%;text-align:left;">CANVASSED:</th>'
-				. '<th style="text-align:center;">' . $labels[0] . '</th>'
-				. '<th style="text-align:center;">' . $labels[1] . '</th>'
-				. '<th style="text-align:center;">' . $labels[2] . '</th>'
-				. '<th style="width:18%;text-align:center;">AWARDED</th>'
-				. '</tr>'
-				. '<tr>'
-				. '<td>&nbsp;</td>' . $cols . '<td style="text-align:center;">' . ($awarded !== '' ? htmlspecialchars($awarded, ENT_QUOTES, 'UTF-8') : '&nbsp;') . '</td>'
-				. '</tr>'
+			for ($i=0; $i<3; $i++) {
+				$name = isset($cv[$i]) ? htmlspecialchars((string)$cv[$i], ENT_QUOTES, 'UTF-8') : '&nbsp;';
+				$cols .= '<td style="text-align:center;vertical-align:top;height:40px;">' . $name . '</td>';
+			}
+			$awCell = '<td style="text-align:center;vertical-align:top;height:40px;">' . ($awarded !== '' ? htmlspecialchars($awarded, ENT_QUOTES, 'UTF-8') : '&nbsp;') . '</td>';
+			$head = '<div style="text-align:center;font-weight:700;margin:8px 0 4px;">CANVASSING</div>';
+			$canvas = $head
+				. '<table width="100%" border="1" cellspacing="0" cellpadding="6">'
+				. '<thead><tr>'
+				. '<th style="width:25%;text-align:center;">' . $labels[0] . '</th>'
+				. '<th style="width:25%;text-align:center;">' . $labels[1] . '</th>'
+				. '<th style="width:25%;text-align:center;">' . $labels[2] . '</th>'
+				. '<th style="width:25%;text-align:center;">' . $labels[3] . '</th>'
+				. '</tr></thead>'
+				. '<tbody><tr>' . $cols . $awCell . '</tr></tbody>'
 				. '</table>';
 		}
 

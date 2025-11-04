@@ -913,7 +913,26 @@ class ProcurementController extends BaseController
             'date_received' => $dateReceived,
             'noted_by' => $notedBy,
             'canvassed_suppliers' => array_values($map),
-            'awarded_to' => '',
+            // Prefer existing awarded_to if saved previously so preview shows it
+            'awarded_to' => (function() use ($pdo, $pr) {
+                try {
+                    $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
+                        pr_number VARCHAR(32) PRIMARY KEY,
+                        supplier1 VARCHAR(255),
+                        supplier2 VARCHAR(255),
+                        supplier3 VARCHAR(255),
+                        awarded_to VARCHAR(255),
+                        approved_by VARCHAR(255),
+                        approved_at TIMESTAMPTZ,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )");
+                    $st = $pdo->prepare('SELECT awarded_to FROM pr_canvassing WHERE pr_number = :pr');
+                    $st->execute(['pr' => $pr]);
+                    $v = $st->fetchColumn();
+                    return $v ? (string)$v : '';
+                } catch (\Throwable $e) { return ''; }
+            })(),
             'signature_variant' => 'purchase_approval',
             'purchase_approved_by' => $purchaseApprovedBy,
             'purchase_approved_at' => $purchaseApprovedAt,
