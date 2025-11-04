@@ -560,14 +560,47 @@ class ProcurementController extends BaseController
         $rows = $this->requests()->getGroupDetails($pr);
         if (!$rows) { header('Location: /manager/requests'); return; }
         // Build canonical PR meta and item lines for the compact PR PDF
+        $pdo = \App\Database\Connection::resolve();
+        $justification = '';
+        $neededBy = '';
+        // Try to derive justification (decrypt if needed) and earliest needed_by
+        foreach ($rows as $r) {
+            if ($justification === '' && isset($r['justification']) && $r['justification'] !== null && $r['justification'] !== '') {
+                $raw = (string)$r['justification'];
+                // Attempt decrypt with PR-number AAD, then request-id AAD
+                $pt = \App\Services\CryptoService::maybeDecrypt($raw, 'pr:' . $pr);
+                if ($pt === null || $pt === $raw || str_starts_with((string)$pt, 'v1:')) {
+                    $pt2 = \App\Services\CryptoService::maybeDecrypt($raw, 'pr:' . (string)($r['request_id'] ?? ''));
+                    if ($pt2 !== null && $pt2 !== '' && !str_starts_with((string)$pt2, 'v1:')) { $pt = $pt2; }
+                }
+                $justification = (string)($pt ?? $raw);
+            }
+            if ($neededBy === '' && !empty($r['needed_by'])) { $neededBy = date('Y-m-d', strtotime((string)$r['needed_by'])); }
+        }
+        // Noted by: pick a procurement manager (fallback any procurement)
+        $notedBy = '';
+        try {
+            $u = $pdo->query("SELECT full_name FROM users WHERE is_active = TRUE AND role IN ('procurement_manager','procurement') ORDER BY (role='procurement_manager') DESC, full_name ASC LIMIT 1");
+            $nb = $u ? $u->fetchColumn() : null; if ($nb) { $notedBy = (string)$nb; }
+        } catch (\Throwable $ignored) {}
+        // Date received: earliest message to a procurement user referencing this PR
+        $dateReceived = '';
+        try {
+            $stR = $pdo->prepare("SELECT m.created_at FROM messages m JOIN users u ON u.user_id = m.recipient_id WHERE u.role IN ('procurement_manager','procurement') AND (m.subject ILIKE :s OR m.attachment_name ILIKE :a) ORDER BY m.created_at ASC LIMIT 1");
+            $stR->execute(['s' => '%PR ' . $pr . '%', 'a' => 'pr_' . $pr . '%']);
+            $dr = $stR->fetchColumn(); if ($dr) { $dateReceived = date('Y-m-d', strtotime((string)$dr)); }
+        } catch (\Throwable $ignored) {}
+
         $meta = [
             'pr_number' => $pr,
             'branch_name' => (string)($rows[0]['branch_name'] ?? 'N/A'),
-            // Requisition By should be the original preparer's full name
             'requested_by' => (string)($rows[0]['requested_by_name'] ?? ''),
             'prepared_at' => date('Y-m-d', strtotime((string)($rows[0]['created_at'] ?? date('Y-m-d')))),
             'effective_date' => date('Y-m-d'),
-            'justification' => (string)($rows[0]['revision_notes'] ?? ''),
+            'justification' => $justification,
+            'needed_by' => $neededBy,
+            'date_received' => $dateReceived,
+            'noted_by' => $notedBy,
         ];
         $items = [];
         foreach ($rows as $r) {
@@ -609,14 +642,44 @@ class ProcurementController extends BaseController
         if ($pr === '') { header('Location: /manager/requests'); return; }
         $rows = $this->requests()->getGroupDetails($pr);
         if (!$rows) { header('Location: /manager/requests'); return; }
-        // Build canonical PR PDF (same layout as Admin Assistant)
+        // Build canonical PR PDF (same layout as Admin Assistant), include procurement meta
+        $pdo = \App\Database\Connection::resolve();
+        $justification = '';
+        $neededBy = '';
+        foreach ($rows as $r) {
+            if ($justification === '' && isset($r['justification']) && $r['justification'] !== null && $r['justification'] !== '') {
+                $raw = (string)$r['justification'];
+                $pt = \App\Services\CryptoService::maybeDecrypt($raw, 'pr:' . $pr);
+                if ($pt === null || $pt === $raw || str_starts_with((string)$pt, 'v1:')) {
+                    $pt2 = \App\Services\CryptoService::maybeDecrypt($raw, 'pr:' . (string)($r['request_id'] ?? ''));
+                    if ($pt2 !== null && $pt2 !== '' && !str_starts_with((string)$pt2, 'v1:')) { $pt = $pt2; }
+                }
+                $justification = (string)($pt ?? $raw);
+            }
+            if ($neededBy === '' && !empty($r['needed_by'])) { $neededBy = date('Y-m-d', strtotime((string)$r['needed_by'])); }
+        }
+        $notedBy = '';
+        try {
+            $u = $pdo->query("SELECT full_name FROM users WHERE is_active = TRUE AND role IN ('procurement_manager','procurement') ORDER BY (role='procurement_manager') DESC, full_name ASC LIMIT 1");
+            $nb = $u ? $u->fetchColumn() : null; if ($nb) { $notedBy = (string)$nb; }
+        } catch (\Throwable $ignored) {}
+        $dateReceived = '';
+        try {
+            $stR = $pdo->prepare("SELECT m.created_at FROM messages m JOIN users u ON u.user_id = m.recipient_id WHERE u.role IN ('procurement_manager','procurement') AND (m.subject ILIKE :s OR m.attachment_name ILIKE :a) ORDER BY m.created_at ASC LIMIT 1");
+            $stR->execute(['s' => '%PR ' . $pr . '%', 'a' => 'pr_' . $pr . '%']);
+            $dr = $stR->fetchColumn(); if ($dr) { $dateReceived = date('Y-m-d', strtotime((string)$dr)); }
+        } catch (\Throwable $ignored) {}
+
         $meta = [
             'pr_number' => $pr,
             'branch_name' => (string)($rows[0]['branch_name'] ?? 'N/A'),
             'requested_by' => (string)($rows[0]['requested_by_name'] ?? ''),
             'prepared_at' => date('Y-m-d', strtotime((string)($rows[0]['created_at'] ?? date('Y-m-d')))),
             'effective_date' => date('Y-m-d'),
-            'justification' => (string)($rows[0]['revision_notes'] ?? ''),
+            'justification' => $justification,
+            'needed_by' => $neededBy,
+            'date_received' => $dateReceived,
+            'noted_by' => $notedBy,
         ];
         $items = [];
         foreach ($rows as $r) {

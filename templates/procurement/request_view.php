@@ -39,27 +39,27 @@ $status = isset($rows[0]['status']) ? (string)$rows[0]['status'] : '';
 </head>
 <body>
   <div class="card">
-    <div style=\"display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;\">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <div>
         <div class="muted">Purchase Requisition No.</div>
         <div style="font-size:20px;font-weight:800;">PR <?= htmlspecialchars($pr) ?></div>
       </div>
-      <div class=\"actions\">
-        <a class=\"btn ghost\" href=\"/manager/requests\">← Back to Requests</a>
-        <a class=\"btn primary\" href=\"/manager/requests/download?pr=<?= rawurlencode($pr) ?>\" target=\"_blank\" rel=\"noopener\">Download PDF</a>
-        <form method=\"post\" action=\"/manager/requests/send-for-approval\" onsubmit=\"return confirm('Send this PR to Admin for approval?');\" style=\"margin:0;\">
-          <input type=\"hidden\" name=\"pr_number\" value=\"<?= htmlspecialchars($pr) ?>\">
-          <button type=\"submit\" class=\"btn secondary\">Send for Admin Approval</button>
+      <div class="actions">
+        <a class="btn ghost" href="/manager/requests">← Back to Requests</a>
+        <a class="btn primary" href="/manager/requests/download?pr=<?= rawurlencode($pr) ?>" target="_blank" rel="noopener">Download PDF</a>
+        <form method="post" action="/manager/requests/send-for-approval" onsubmit="return confirm('Send this PR to Admin for approval?');" style="margin:0;">
+          <input type="hidden" name="pr_number" value="<?= htmlspecialchars($pr) ?>">
+          <button type="submit" class="btn secondary">Send for Admin Approval</button>
         </form>
       </div>
     </div>
 
     <?php $preparedAtFmt = $preparedAt ? date('Y-m-d', strtotime($preparedAt)) : ''; ?>
-    <div class=\"grid\">
-      <div><div class=\"label\">Requesting Section</div><div class=\"value\"><?= htmlspecialchars($branch) ?></div></div>
-      <div><div class=\"label\">Prepared On</div><div class=\"value\"><?= htmlspecialchars($preparedAtFmt) ?></div></div>
+    <div class="grid">
+      <div><div class="label">Requesting Section</div><div class="value"><?= htmlspecialchars($branch) ?></div></div>
+      <div><div class="label">Prepared On</div><div class="value"><?= htmlspecialchars($preparedAtFmt) ?></div></div>
       <div><div class="label">Requisition By</div><div class="value"><?= htmlspecialchars($requestedBy) ?></div></div>
-      <div><div class=\"label\">Status</div><div class=\"value\"><?= htmlspecialchars(ucwords(str_replace('_',' ', $status))) ?></div></div>
+      <div><div class="label">Status</div><div class="value"><?= htmlspecialchars(ucwords(str_replace('_',' ', $status))) ?></div></div>
     </div>
 
     <table>
