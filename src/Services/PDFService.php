@@ -12,14 +12,50 @@ class PDFService
 	 */
 	private function createMpdf(): Mpdf
 	{
-		return new Mpdf([
-			'format' => 'A4',        // A4 bond paper size
-			'orientation' => 'P',    // Portrait
+		// Try to enable Poppins font if TTFs are available locally; fall back gracefully.
+		$root = @realpath(__DIR__ . '/../../');
+		$fontDirs = [];
+		$poppinsDir = null;
+		$tryDirs = [];
+		if ($root) {
+			$tryDirs[] = $root . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'fonts';
+			$tryDirs[] = $root . DIRECTORY_SEPARATOR . 'fonts';
+		}
+		foreach ($tryDirs as $d) {
+			if (@is_dir($d) && @is_file($d . DIRECTORY_SEPARATOR . 'Poppins-Regular.ttf')) { $poppinsDir = $d; break; }
+		}
+		$fontData = null; $defaultFont = null;
+		if ($poppinsDir) {
+			try {
+				$defaultConfig = (new \Mpdf\Config\ConfigVariables())->getDefaults();
+				$defaultFontConfig = (new \Mpdf\Config\FontVariables())->getDefaults();
+				$fontDirs = $defaultConfig['fontDir'];
+				$fontDirs[] = $poppinsDir;
+				$fontData = $defaultFontConfig['fontdata'] + [
+					'poppins' => [
+						'R' => 'Poppins-Regular.ttf',
+						'B' => @is_file($poppinsDir . DIRECTORY_SEPARATOR . 'Poppins-Bold.ttf') ? 'Poppins-Bold.ttf' : 'Poppins-Regular.ttf',
+						'I' => @is_file($poppinsDir . DIRECTORY_SEPARATOR . 'Poppins-Italic.ttf') ? 'Poppins-Italic.ttf' : 'Poppins-Regular.ttf',
+						'BI' => @is_file($poppinsDir . DIRECTORY_SEPARATOR . 'Poppins-BoldItalic.ttf') ? 'Poppins-BoldItalic.ttf' : (@is_file($poppinsDir . DIRECTORY_SEPARATOR . 'Poppins-Bold.ttf') ? 'Poppins-Bold.ttf' : 'Poppins-Regular.ttf'),
+					],
+				];
+				$defaultFont = 'poppins';
+			} catch (\Throwable $ignored) { $poppinsDir = null; }
+		}
+		$opts = [
+			'format' => 'A4',
+			'orientation' => 'P',
 			'margin_left' => 12,
 			'margin_right' => 12,
 			'margin_top' => 12,
 			'margin_bottom' => 12,
-		]);
+		];
+		if ($poppinsDir && $fontData) {
+			$opts['fontDir'] = $fontDirs;
+			$opts['fontdata'] = $fontData;
+			$opts['default_font'] = $defaultFont;
+		}
+		return new Mpdf($opts);
 	}
 
 	public function generatePurchaseRequestPDF(array $requestData): void
@@ -133,7 +169,19 @@ class PDFService
 	public function generatePurchaseRequisitionToFile(array $meta, array $items, string $filePath): void
 	{
 		// Redesigned to closely match the provided PR form template
-		$mpdf = new Mpdf(['format' => 'A4', 'orientation' => 'P', 'margin_left' => 10, 'margin_right' => 10, 'margin_top' => 12, 'margin_bottom' => 12]);
+		$mpdf = $this->createMpdf();
+		// Footer page numbers
+		$mpdf->SetFooter('<div style="font-size:9px; color:#555; text-align:center;">Page {PAGENO} of {nbpg}</div>');
+		// Global CSS to apply modern look and Poppins fallback
+		$css = '<style>
+			body { font-family: Poppins, "DejaVu Sans", Arial, sans-serif; font-size: 10pt; }
+			.table { border:1px solid #000; border-radius:10px; overflow:hidden; }
+			th, td { font-size:10pt; }
+			thead th { background:#f0f0f0; font-weight:700; }
+			.h1 { font-size:13pt; font-weight:800; }
+			.small { font-size:8.5pt; color:#333; }
+		</style>';
+		$mpdf->WriteHTML($css);
 		$pr = htmlspecialchars((string)($meta['pr_number'] ?? ''), ENT_QUOTES, 'UTF-8');
 		$branch = htmlspecialchars((string)($meta['branch_name'] ?? ''), ENT_QUOTES, 'UTF-8');
 		$reqBy = htmlspecialchars((string)($meta['requested_by'] ?? ''), ENT_QUOTES, 'UTF-8');
@@ -223,7 +271,7 @@ class PDFService
 				. '<td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td>'
 				. '</tr>';
 		}
-		$itemsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="5" style="margin-top:10px;font-size:10px;">'
+		$itemsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="5" class="table" style="margin-top:10px;">'
 			. '<thead>'
 			. '<tr>'
 			. '<th colspan="4" style="text-align:center;">QUANTITY</th>'
@@ -241,12 +289,12 @@ class PDFService
 			. '</table>';
 
 		// Attachments / Additional instruction
-		$attachments = '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="margin-top:8px;font-size:10px;">'
+		$attachments = '<table width="100%" border="1" cellspacing="0" cellpadding="8" class="table" style="margin-top:8px;">'
 			. '<tr><td style="width:18%;">Attachments / Additional instruction:</td><td>&nbsp;</td></tr>'
 			. '</table>';
 
 		// Signatures (bottom)
-		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="margin-top:8px;font-size:10px;">'
+		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="8" class="table" style="margin-top:8px;">'
 			. '<tr>'
 			. '<td style="width:60%;">Requisition By:<div style="height:28px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:6px;">' . $reqBy . '</div></td>'
 			. '<td style="width:40%;">Date:<div style="height:28px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:6px;">' . $prepAt . '</div></td>'
