@@ -690,11 +690,22 @@ class ProcurementController extends BaseController
                 'qty' => (int)($r['quantity'] ?? 0),
             ];
         }
-        // Render PDF to a storage file
-        $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
-        if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
-        $tmpFile = $dir . DIRECTORY_SEPARATOR . 'PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '.pdf';
-        $this->pdf()->generatePurchaseRequisitionToFile($meta, $items, $tmpFile);
+        // Render PDF to a writable folder with fallback to system temp (Heroku-compatible)
+        $root = realpath(__DIR__ . '/../../..');
+        $candidates = [];
+        if ($root) { $candidates[] = $root . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf'; }
+        $candidates[] = sys_get_temp_dir();
+        $tmpFile = null; $written = false;
+        foreach ($candidates as $base) {
+            if (!is_dir($base)) { @mkdir($base, 0777, true); }
+            if (!is_dir($base) || !is_writable($base)) { continue; }
+            $path = $base . DIRECTORY_SEPARATOR . 'PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '.pdf';
+            try {
+                $this->pdf()->generatePurchaseRequisitionToFile($meta, $items, $path);
+                if (@is_file($path) && (@filesize($path) ?: 0) > 0) { $tmpFile = $path; $written = true; break; }
+            } catch (\Throwable $ignored) { /* try next candidate */ }
+        }
+        if (!$written || $tmpFile === null) { throw new \RuntimeException('Failed to generate PR PDF'); }
         // Ensure message attachments columns (for prefill safety)
         $pdo = \App\Database\Connection::resolve();
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
@@ -717,11 +728,11 @@ class ProcurementController extends BaseController
             'attach_path' => $tmpFile,
         ]);
         header('Location: /admin/messages' . ($qs !== '' ? ('?' . $qs) : ''));
-            return;
+            exit; // Hard-exit to guarantee redirect even if any output was buffered
         } catch (\Throwable $e) {
             $msg = rawurlencode($e->getMessage());
             header('Location: /manager/requests?error=' . $msg);
-            return;
+            exit; // Ensure we don't fall through and risk sending stray output
         }
     }
 
