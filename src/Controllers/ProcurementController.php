@@ -642,13 +642,83 @@ class ProcurementController extends BaseController
                 }
             } catch (\Throwable $e) { /* ignore fallback errors */ }
         }
-    // Build PDF content (structured canvassing form)
+        // Build PR‑style PR-Canvass PDF (PR layout + Canvassing table inserted before Attachments)
         $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
         if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
-        $file = $dir . DIRECTORY_SEPARATOR . 'Canvassing-PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '.pdf';
-        $items = [];
-    foreach ($rows as $r) { $items[] = ($r['item_name'] ?? 'Item') . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''); }
-    $this->pdf()->generateCanvassingPDFToFile($pr, $items, array_values($map), $file);
+        $file = $dir . DIRECTORY_SEPARATOR . 'PR-Canvass-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '.pdf';
+        // PR meta
+        $justification = '';
+        $neededBy = '';
+        foreach ($rows as $r) {
+            if ($justification === '' && isset($r['justification']) && $r['justification'] !== null && $r['justification'] !== '') {
+                $raw = (string)$r['justification'];
+                $pt = \App\Services\CryptoService::maybeDecrypt($raw, 'pr:' . $pr);
+                if ($pt === null || $pt === $raw || str_starts_with((string)$pt, 'v1:')) {
+                    $pt2 = \App\Services\CryptoService::maybeDecrypt($raw, 'pr:' . (string)($r['request_id'] ?? ''));
+                    if ($pt2 !== null && $pt2 !== '' && !str_starts_with((string)$pt2, 'v1:')) { $pt = $pt2; }
+                }
+                $justification = (string)($pt ?? $raw);
+            }
+            if ($neededBy === '' && !empty($r['needed_by'])) { $neededBy = date('Y-m-d', strtotime((string)$r['needed_by'])); }
+        }
+        $notedBy = '';
+        try {
+            $u = $pdo->query("SELECT full_name FROM users WHERE is_active = TRUE AND role IN ('procurement_manager','procurement') ORDER BY (role='procurement_manager') DESC, full_name ASC LIMIT 1");
+            $nb = $u ? $u->fetchColumn() : null; if ($nb) { $notedBy = (string)$nb; }
+        } catch (\Throwable $ignored) {}
+        $dateReceived = '';
+        try {
+            $stR = $pdo->prepare("SELECT m.created_at FROM messages m JOIN users u ON u.user_id = m.recipient_id WHERE u.role IN ('procurement_manager','procurement') AND (m.subject ILIKE :s OR m.attachment_name ILIKE :a) ORDER BY m.created_at ASC LIMIT 1");
+            $stR->execute(['s' => '%PR ' . $pr . '%', 'a' => 'pr_' . $pr . '%']);
+            $dr = $stR->fetchColumn(); if ($dr) { $dateReceived = date('Y-m-d', strtotime((string)$dr)); }
+        } catch (\Throwable $ignored) {}
+        // Optional canvassing approval fields (blank until admin approves)
+        $purchaseApprovedBy = '';
+        $purchaseApprovedAt = '';
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
+                pr_number VARCHAR(32) PRIMARY KEY,
+                supplier1 VARCHAR(255),
+                supplier2 VARCHAR(255),
+                supplier3 VARCHAR(255),
+                awarded_to VARCHAR(255),
+                approved_by VARCHAR(255),
+                approved_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )");
+            $stC0 = $pdo->prepare('SELECT approved_by, approved_at FROM pr_canvassing WHERE pr_number = :pr');
+            $stC0->execute(['pr' => $pr]);
+            if ($cv0 = $stC0->fetch()) {
+                $purchaseApprovedBy = (string)($cv0['approved_by'] ?? '');
+                if (!empty($cv0['approved_at'])) { $purchaseApprovedAt = date('Y-m-d', strtotime((string)$cv0['approved_at'])); }
+            }
+        } catch (\Throwable $ignored) {}
+        $metaCan = [
+            'pr_number' => $pr,
+            'branch_name' => (string)($rows[0]['branch_name'] ?? 'N/A'),
+            'requested_by' => (string)($rows[0]['requested_by_name'] ?? ''),
+            'prepared_at' => date('Y-m-d', strtotime((string)($rows[0]['created_at'] ?? date('Y-m-d')))),
+            'effective_date' => date('Y-m-d'),
+            'justification' => $justification,
+            'needed_by' => $neededBy,
+            'date_received' => $dateReceived,
+            'noted_by' => $notedBy,
+            'canvassed_suppliers' => array_values($map),
+            'awarded_to' => (string)($awardedName ?? ''),
+            'signature_variant' => 'purchase_approval',
+            'purchase_approved_by' => $purchaseApprovedBy,
+            'purchase_approved_at' => $purchaseApprovedAt,
+        ];
+        $itemsCan = [];
+        foreach ($rows as $r) {
+            $itemsCan[] = [
+                'description' => (string)($r['item_name'] ?? 'Item'),
+                'unit' => (string)($r['unit'] ?? ''),
+                'qty' => (int)($r['quantity'] ?? 0),
+            ];
+        }
+        $this->pdf()->generatePurchaseRequisitionToFile($metaCan, $itemsCan, $file);
         // Persist selected suppliers for PR (for inclusion in PR PDF later)
         try {
             $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
@@ -782,13 +852,84 @@ class ProcurementController extends BaseController
         $st->execute($chosen);
         $map = [];
         foreach ($st->fetchAll() as $s) { $map[(int)$s['user_id']] = (string)$s['full_name']; }
-        // Build simple items array for PDF generator
+        // Build PR-style meta to generate a PR-Canvass PDF (PR layout + Canvassing table before Attachments)
+        $pdo = \App\Database\Connection::resolve();
+        $justification = '';
+        $neededBy = '';
+        foreach ($rows as $r) {
+            if ($justification === '' && isset($r['justification']) && $r['justification'] !== null && $r['justification'] !== '') {
+                $raw = (string)$r['justification'];
+                $pt = \App\Services\CryptoService::maybeDecrypt($raw, 'pr:' . $pr);
+                if ($pt === null || $pt === $raw || str_starts_with((string)$pt, 'v1:')) {
+                    $pt2 = \App\Services\CryptoService::maybeDecrypt($raw, 'pr:' . (string)($r['request_id'] ?? ''));
+                    if ($pt2 !== null && $pt2 !== '' && !str_starts_with((string)$pt2, 'v1:')) { $pt = $pt2; }
+                }
+                $justification = (string)($pt ?? $raw);
+            }
+            if ($neededBy === '' && !empty($r['needed_by'])) { $neededBy = date('Y-m-d', strtotime((string)$r['needed_by'])); }
+        }
+        // Noted by and date received for header completeness
+        $notedBy = '';
+        try {
+            $u = $pdo->query("SELECT full_name FROM users WHERE is_active = TRUE AND role IN ('procurement_manager','procurement') ORDER BY (role='procurement_manager') DESC, full_name ASC LIMIT 1");
+            $nb = $u ? $u->fetchColumn() : null; if ($nb) { $notedBy = (string)$nb; }
+        } catch (\Throwable $ignored) {}
+        $dateReceived = '';
+        try {
+            $stR = $pdo->prepare("SELECT m.created_at FROM messages m JOIN users u ON u.user_id = m.recipient_id WHERE u.role IN ('procurement_manager','procurement') AND (m.subject ILIKE :s OR m.attachment_name ILIKE :a) ORDER BY m.created_at ASC LIMIT 1");
+            $stR->execute(['s' => '%PR ' . $pr . '%', 'a' => 'pr_' . $pr . '%']);
+            $dr = $stR->fetchColumn(); if ($dr) { $dateReceived = date('Y-m-d', strtotime((string)$dr)); }
+        } catch (\Throwable $ignored) {}
+        // Optional canvassing approval fields if already approved (preview after approval)
+        $purchaseApprovedBy = '';
+        $purchaseApprovedAt = '';
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
+                pr_number VARCHAR(32) PRIMARY KEY,
+                supplier1 VARCHAR(255),
+                supplier2 VARCHAR(255),
+                supplier3 VARCHAR(255),
+                awarded_to VARCHAR(255),
+                approved_by VARCHAR(255),
+                approved_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )");
+            $stC = $pdo->prepare('SELECT approved_by, approved_at FROM pr_canvassing WHERE pr_number = :pr');
+            $stC->execute(['pr' => $pr]);
+            if ($row = $stC->fetch()) {
+                $purchaseApprovedBy = (string)($row['approved_by'] ?? '');
+                if (!empty($row['approved_at'])) { $purchaseApprovedAt = date('Y-m-d', strtotime((string)$row['approved_at'])); }
+            }
+        } catch (\Throwable $ignored) {}
+        $meta = [
+            'pr_number' => $pr,
+            'branch_name' => (string)($rows[0]['branch_name'] ?? 'N/A'),
+            'requested_by' => (string)($rows[0]['requested_by_name'] ?? ''),
+            'prepared_at' => date('Y-m-d', strtotime((string)($rows[0]['created_at'] ?? date('Y-m-d')))),
+            'effective_date' => date('Y-m-d'),
+            'justification' => $justification,
+            'needed_by' => $neededBy,
+            'date_received' => $dateReceived,
+            'noted_by' => $notedBy,
+            'canvassed_suppliers' => array_values($map),
+            'awarded_to' => '',
+            'signature_variant' => 'purchase_approval',
+            'purchase_approved_by' => $purchaseApprovedBy,
+            'purchase_approved_at' => $purchaseApprovedAt,
+        ];
         $items = [];
-        foreach ($rows as $r) { $items[] = ($r['item_name'] ?? 'Item') . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''); }
+        foreach ($rows as $r) {
+            $items[] = [
+                'description' => (string)($r['item_name'] ?? 'Item'),
+                'unit' => (string)($r['unit'] ?? ''),
+                'qty' => (int)($r['quantity'] ?? 0),
+            ];
+        }
         // Generate to temp and stream inline
         $dir = sys_get_temp_dir();
-        $file = rtrim($dir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'Canvassing-PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '-preview.pdf';
-        $this->pdf()->generateCanvassingPDFToFile($pr, $items, array_values($map), $file);
+        $file = rtrim($dir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'PR-Canvass-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '-preview.pdf';
+        $this->pdf()->generatePurchaseRequisitionToFile($meta, $items, $file);
         if (!is_file($file)) { header('Location: /manager/requests/canvass?pr=' . urlencode($pr) . '&error=Failed+to+generate+preview'); return; }
         // Set session flag to allow final send later
         if (!isset($_SESSION['canvass_previewed']) || !is_array($_SESSION['canvass_previewed'])) { $_SESSION['canvass_previewed'] = []; }

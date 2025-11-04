@@ -287,6 +287,19 @@ class PDFService
 			. '</table>';
 
 		// Signatures (bottom)
+		$signatureVariant = (string)($meta['signature_variant'] ?? 'pr');
+		$approvedName = '';
+		$approvedDate = '';
+		if ($signatureVariant === 'purchase_approval') {
+			// PR - Canvass variant: use canvassing approval fields and label "Approved for Purchase"
+			$approvedName = htmlspecialchars((string)($meta['purchase_approved_by'] ?? ''), ENT_QUOTES, 'UTF-8');
+			$approvedDate = htmlspecialchars((string)($meta['purchase_approved_at'] ?? ''), ENT_QUOTES, 'UTF-8');
+			$approvedLabel = 'Approved for Purchase:';
+		} else {
+			$approvedName = htmlspecialchars((string)($meta['approved_by'] ?? ''), ENT_QUOTES, 'UTF-8');
+			$approvedDate = htmlspecialchars((string)($meta['approved_at'] ?? ''), ENT_QUOTES, 'UTF-8');
+			$approvedLabel = 'Approved By:';
+		}
 		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
 			. '<tr>'
 			. '<td style="width:60%;">Requisition By:<div style="height:22px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:4px;">' . $reqBy . '</div></td>'
@@ -297,12 +310,12 @@ class PDFService
 			. '<td>Date:<div style="height:22px;"></div><div style="border-top:1px solid #999; padding-top:4px; text-align:center;">' . htmlspecialchars((string)($meta['date_received'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div></td>'
 			. '</tr>'
 			. '<tr>'
-			. '<td>Approved By:<div style="height:22px;"></div><div style="border-top:1px solid #999; padding-top:4px; text-align:center;">' . htmlspecialchars((string)($meta['approved_by'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div></td>'
-			. '<td>Date:<div style="height:22px;"></div><div style="border-top:1px solid #999; padding-top:4px; text-align:center;">' . htmlspecialchars((string)($meta['approved_at'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div></td>'
+			. '<td>' . $approvedLabel . '<div style="height:22px;"></div><div style="border-top:1px solid #999; padding-top:4px; text-align:center;">' . $approvedName . '</div></td>'
+			. '<td>Date:<div style="height:22px;"></div><div style="border-top:1px solid #999; padding-top:4px; text-align:center;">' . $approvedDate . '</div></td>'
 			. '</tr>'
 			. '</table>';
 
-		// Optional Canvassed section (3 suppliers + Awarded) if provided
+		// Optional Canvassed section (3 suppliers + Awarded) if provided — shown BEFORE attachments per client request
 		$canvas = '';
 		$cv = isset($meta['canvassed_suppliers']) && is_array($meta['canvassed_suppliers']) ? array_values($meta['canvassed_suppliers']) : [];
 		$cv = array_slice($cv, 0, 3);
@@ -322,10 +335,6 @@ class PDFService
 				. '<tr>'
 				. '<td>&nbsp;</td>' . $cols . '<td style="text-align:center;">' . ($awarded !== '' ? htmlspecialchars($awarded, ENT_QUOTES, 'UTF-8') : '&nbsp;') . '</td>'
 				. '</tr>'
-				. '<tr>'
-				. '<td colspan="3">Approved for Purchase:</td>'
-				. '<td colspan="2">Date:</td>'
-				. '</tr>'
 				. '</table>';
 		}
 
@@ -334,7 +343,10 @@ class PDFService
 			. '<div>Duplicate: Requesting Section</div>'
 			. '</div>';
 
-		$html = $logoHtml . $topTitle . $revRow . $titleRow . $reqMeta . $itemsTable . $attachments . $canvas . $sign . $distribution;
+		// Compose body with canvassing between the items list and attachments (if canvassing present)
+		$html = $logoHtml . $topTitle . $revRow . $titleRow . $reqMeta . $itemsTable
+			. ($canvas !== '' ? $canvas : '')
+			. $attachments . $sign . $distribution;
 		$mpdf->WriteHTML($html);
 		$mpdf->Output($filePath, 'F');
 	}

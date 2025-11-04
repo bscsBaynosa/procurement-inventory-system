@@ -1099,6 +1099,29 @@ class AdminController extends BaseController
                 } catch (\Throwable $ignored) {}
             }
             $this->requests()->updateGroupStatus($pr, 'canvassing_approved', (int)($_SESSION['user_id'] ?? 0), 'Canvassing approved by Admin');
+            // Record canvassing approver for PR-Canvass PDF signature
+            try {
+                $this->pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
+                        pr_number VARCHAR(32) PRIMARY KEY,
+                        supplier1 VARCHAR(255),
+                        supplier2 VARCHAR(255),
+                        supplier3 VARCHAR(255),
+                        awarded_to VARCHAR(255),
+                        approved_by VARCHAR(255),
+                        approved_at TIMESTAMPTZ,
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )");
+            } catch (\Throwable $ignored) {}
+            try {
+                $adminName = '';
+                $stN = $this->pdo->prepare('SELECT full_name FROM users WHERE user_id = :id');
+                $stN->execute(['id' => (int)($_SESSION['user_id'] ?? 0)]);
+                $nm = $stN->fetchColumn();
+                if ($nm) { $adminName = (string)$nm; }
+                $upC = $this->pdo->prepare('INSERT INTO pr_canvassing (pr_number, approved_by, approved_at) VALUES (:pr, :n, NOW()) ON CONFLICT (pr_number) DO UPDATE SET approved_by = EXCLUDED.approved_by, approved_at = NOW(), updated_at = NOW()');
+                $upC->execute(['pr' => $pr, 'n' => ($adminName !== '' ? ($adminName . ' - Admin') : 'Admin')]);
+            } catch (\Throwable $ignored) {}
             // Mark message read if provided
             if ($msgId > 0) {
                 $st = $this->pdo->prepare('UPDATE messages SET is_read = TRUE WHERE id = :id AND recipient_id = :me');
