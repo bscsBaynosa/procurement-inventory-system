@@ -688,7 +688,17 @@ class CustodianController extends BaseController
             try {
                 $this->requests()->sendMessage($me, $me, 'Copy: Purchase Request of ' . $branchName . ' • PR ' . $pr, 'Generated PDF copy for your records.', basename($fileBase), $abs);
             } catch (\Throwable $e) {}
-            header('Location: /admin-assistant/requests/history?ok=1');
+            // Stream inline to browser (new tab) so user immediately sees the PDF
+            if (is_file($abs)) {
+                header('Content-Type: application/pdf');
+                header('Content-Disposition: inline; filename="' . basename($fileBase) . '"');
+                $len = @filesize($abs);
+                if ($len && $len > 0) { header('Content-Length: ' . (string)$len); }
+                @readfile($abs);
+                return;
+            }
+            // Fallback: if file missing for any reason, go back with an error
+            header('Location: /admin-assistant/requests/history?error=file_missing');
         } catch (\Throwable $e) {
             header('Location: /admin-assistant/requests/history?error=' . rawurlencode($e->getMessage()));
         }
