@@ -75,8 +75,15 @@ class ProcurementController extends BaseController
         if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
         $pr = isset($_GET['pr']) ? trim((string)$_GET['pr']) : '';
         if ($pr === '') { header('Location: /manager/requests'); return; }
-        $rows = $this->requests()->getGroupDetails($pr);
-        if (!$rows) { header('Location: /manager/requests'); return; }
+    $rows = $this->requests()->getGroupDetails($pr);
+    if (!$rows) { header('Location: /manager/requests'); return; }
+    // Gate: allow canvassing only when group is Approved or Canvassing Rejected (to re-canvass)
+    $statuses = [];
+    foreach ($rows as $r) { $statuses[(string)($r['status'] ?? '')] = true; }
+    $allowedStates = ['approved','canvassing_rejected'];
+    $isAllowed = false;
+    foreach ($allowedStates as $as) { if (isset($statuses[$as])) { $isAllowed = true; break; } }
+    if (!$isAllowed) { header('Location: /manager/requests?error=' . rawurlencode('Canvassing allowed only for Approved PRs')); return; }
         // Require canvassing_approved to proceed
         $status = (string)($rows[0]['status'] ?? '');
         if ($status !== 'canvassing_approved' && $status !== 'po_rejected') { header('Location: /manager/requests?error=PO+allowed+only+after+canvassing+approval'); return; }
@@ -466,7 +473,7 @@ class ProcurementController extends BaseController
         $this->render('procurement/canvass_form.php', [ 'pr' => $pr, 'rows' => $rows, 'suppliers' => $suppliers, 'prices' => $prices ]);
     }
 
-    /** POST: Submit canvassing selection and generate a PDF, then send to Admin for approval */
+    /** POST: Submit canvassing selection and generate a PDF, then redirect to compose with PR + Canvass attachments */
     public function canvassSubmit(): void
     {
         if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager', 'procurement', 'admin'], true)) { header('Location: /login'); return; }
@@ -482,6 +489,12 @@ class ProcurementController extends BaseController
         $st->execute($chosen);
         $map = [];
         foreach ($st->fetchAll() as $s) { $map[(int)$s['user_id']] = (string)$s['full_name']; }
+        // Optional awarded vendor (must be among selected)
+        $awardedId = isset($_POST['awarded_to']) && $_POST['awarded_to'] !== '' ? (int)$_POST['awarded_to'] : null;
+        $awardedName = null;
+        if ($awardedId && in_array($awardedId, $chosen, true) && isset($map[$awardedId])) {
+            $awardedName = $map[$awardedId];
+        }
     // Build PDF content (structured canvassing form)
         $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
         if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
@@ -489,22 +502,119 @@ class ProcurementController extends BaseController
         $items = [];
     foreach ($rows as $r) { $items[] = ($r['item_name'] ?? 'Item') . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''); }
     $this->pdf()->generateCanvassingPDFToFile($pr, $items, array_values($map), $file);
-        // Ensure message attachments columns
+        // Persist selected suppliers for PR (for inclusion in PR PDF later)
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
+                pr_number VARCHAR(32) PRIMARY KEY,
+                supplier1 VARCHAR(255),
+                supplier2 VARCHAR(255),
+                supplier3 VARCHAR(255),
+                awarded_to VARCHAR(255),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )");
+            $names = array_values($map);
+            $s1 = $names[0] ?? null; $s2 = $names[1] ?? null; $s3 = $names[2] ?? null;
+            // Upsert
+            $pdo->prepare('INSERT INTO pr_canvassing (pr_number, supplier1, supplier2, supplier3, awarded_to) VALUES (:pr,:s1,:s2,:s3,:aw)
+                           ON CONFLICT (pr_number) DO UPDATE SET supplier1 = EXCLUDED.supplier1, supplier2 = EXCLUDED.supplier2, supplier3 = EXCLUDED.supplier3, awarded_to = EXCLUDED.awarded_to, updated_at = NOW()')
+                ->execute(['pr' => $pr, 's1' => $s1, 's2' => $s2, 's3' => $s3, 'aw' => $awardedName]);
+        } catch (\Throwable $ignored) {}
+
+        // Build PR PDF as second attachment (final PR with approval/canvassing info)
+        $justification = '';
+        $neededBy = '';
+        $approvedBy = '';
+        $approvedAt = '';
+        foreach ($rows as $r) {
+            if ($justification === '' && isset($r['justification']) && $r['justification'] !== null && $r['justification'] !== '') {
+                $raw = (string)$r['justification'];
+                $pt = \App\Services\CryptoService::maybeDecrypt($raw, 'pr:' . $pr);
+                if ($pt === null || $pt === $raw || str_starts_with((string)$pt, 'v1:')) {
+                    $pt2 = \App\Services\CryptoService::maybeDecrypt($raw, 'pr:' . (string)($r['request_id'] ?? ''));
+                    if ($pt2 !== null && $pt2 !== '' && !str_starts_with((string)$pt2, 'v1:')) { $pt = $pt2; }
+                }
+                $justification = (string)($pt ?? $raw);
+            }
+            if ($neededBy === '' && !empty($r['needed_by'])) { $neededBy = date('Y-m-d', strtotime((string)$r['needed_by'])); }
+            if ($approvedBy === '' && !empty($r['approved_by'])) { $approvedBy = (string)$r['approved_by']; }
+            if ($approvedAt === '' && !empty($r['approved_at'])) { $approvedAt = date('Y-m-d', strtotime((string)$r['approved_at'])); }
+        }
+        $notedBy = '';
+        try {
+            $u = $pdo->query("SELECT full_name FROM users WHERE is_active = TRUE AND role IN ('procurement_manager','procurement') ORDER BY (role='procurement_manager') DESC, full_name ASC LIMIT 1");
+            $nb = $u ? $u->fetchColumn() : null; if ($nb) { $notedBy = (string)$nb; }
+        } catch (\Throwable $ignored) {}
+        $dateReceived = '';
+        try {
+            $stR = $pdo->prepare("SELECT m.created_at FROM messages m JOIN users u ON u.user_id = m.recipient_id WHERE u.role IN ('procurement_manager','procurement') AND (m.subject ILIKE :s OR m.attachment_name ILIKE :a) ORDER BY m.created_at ASC LIMIT 1");
+            $stR->execute(['s' => '%PR ' . $pr . '%', 'a' => 'pr_' . $pr . '%']);
+            $dr = $stR->fetchColumn(); if ($dr) { $dateReceived = date('Y-m-d', strtotime((string)$dr)); }
+        } catch (\Throwable $ignored) {}
+        $meta = [
+            'pr_number' => $pr,
+            'branch_name' => (string)($rows[0]['branch_name'] ?? 'N/A'),
+            'requested_by' => (string)($rows[0]['requested_by_name'] ?? ''),
+            'prepared_at' => date('Y-m-d', strtotime((string)($rows[0]['created_at'] ?? date('Y-m-d')))),
+            'effective_date' => date('Y-m-d'),
+            'justification' => $justification,
+            'needed_by' => $neededBy,
+            'date_received' => $dateReceived,
+            'noted_by' => $notedBy,
+            'approved_by' => $approvedBy,
+            'approved_at' => $approvedAt,
+            'canvassed_suppliers' => array_values($map),
+            'awarded_to' => (string)($awardedName ?? ''),
+        ];
+        $items = [];
+        foreach ($rows as $r) {
+            $items[] = [
+                'description' => (string)($r['item_name'] ?? 'Item'),
+                'unit' => (string)($r['unit'] ?? ''),
+                'qty' => (int)($r['quantity'] ?? 0),
+            ];
+        }
+        $root = realpath(__DIR__ . '/../../..');
+        $candidates = [];
+        if ($root) { $candidates[] = $root . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf'; }
+        $candidates[] = sys_get_temp_dir();
+        $prPdf = null; $written = false;
+        foreach ($candidates as $base) {
+            if (!is_dir($base)) { @mkdir($base, 0777, true); }
+            if (!is_dir($base) || !is_writable($base)) { continue; }
+            $path = $base . DIRECTORY_SEPARATOR . 'PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '.pdf';
+            try {
+                $this->pdf()->generatePurchaseRequisitionToFile($meta, $items, $path);
+                if (@is_file($path) && (@filesize($path) ?: 0) > 0) { $prPdf = $path; $written = true; break; }
+            } catch (\Throwable $ignored) {}
+        }
+        if (!$written || $prPdf === null) { header('Location: /manager/requests?error=' . rawurlencode('PR+PDF+generation+failed')); return; }
+
+        // Mark the PR group as canvassing_submitted (awaiting admin approval)
+        try { $this->requests()->updateGroupStatus($pr, 'canvassing_submitted', (int)($_SESSION['user_id'] ?? 0), 'Canvassing submitted for admin approval'); } catch (\Throwable $ignored) {}
+
+        // Redirect to compose with Admin prefilled, subject, and two attachments (Canvass + PR)
+        // Ensure message columns exist (safety)
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
-        // Send to Admin for approval
-        $subject = 'Canvassing For Approval • PR ' . $pr;
-        $body = 'Please review the attached canvassing sheet for PR ' . $pr . ' and approve to proceed with PO.';
-        $recipients = $pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('admin')")->fetchAll();
-        if ($recipients) {
-            $ins = $pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)');
-            foreach ($recipients as $row) {
-                $ins->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$row['user_id'], 'j' => $subject, 'b' => $body, 'an' => basename($file), 'ap' => $file]);
-            }
-        }
-    // Mark the PR group as canvassing_submitted (awaiting admin approval)
-    try { $this->requests()->updateGroupStatus($pr, 'canvassing_submitted', (int)($_SESSION['user_id'] ?? 0), 'Canvassing submitted for admin approval'); } catch (\Throwable $ignored) {}
-        header('Location: /manager/requests?canvass=1');
+        $to = 0;
+        try {
+            $stAdm = $pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role = 'admin' ORDER BY user_id ASC LIMIT 1");
+            $to = (int)($stAdm ? ($stAdm->fetchColumn() ?: 0) : 0);
+        } catch (\Throwable $ignored) {}
+        $subject = 'PR ' . $pr . ' • PR - Canvass';
+        $qs = http_build_query([
+            'to' => $to > 0 ? $to : null,
+            'subject' => $subject,
+            // Primary attach: Canvassing PDF
+            'attach_name' => basename($file),
+            'attach_path' => $file,
+            // Second attach: PR PDF
+            'attach_name2' => basename($prPdf),
+            'attach_path2' => $prPdf,
+        ]);
+        header('Location: /admin/messages' . ($qs !== '' ? ('?' . $qs) : ''));
+        return;
     }
 
     /** POST: Update status for a PR group */
@@ -563,6 +673,8 @@ class ProcurementController extends BaseController
         $pdo = \App\Database\Connection::resolve();
         $justification = '';
         $neededBy = '';
+        $approvedBy = '';
+        $approvedAt = '';
         // Try to derive justification (decrypt if needed) and earliest needed_by
         foreach ($rows as $r) {
             if ($justification === '' && isset($r['justification']) && $r['justification'] !== null && $r['justification'] !== '') {
@@ -576,6 +688,8 @@ class ProcurementController extends BaseController
                 $justification = (string)($pt ?? $raw);
             }
             if ($neededBy === '' && !empty($r['needed_by'])) { $neededBy = date('Y-m-d', strtotime((string)$r['needed_by'])); }
+            if ($approvedBy === '' && !empty($r['approved_by'])) { $approvedBy = (string)$r['approved_by']; }
+            if ($approvedAt === '' && !empty($r['approved_at'])) { $approvedAt = date('Y-m-d', strtotime((string)$r['approved_at'])); }
         }
         // Noted by: pick a procurement manager (fallback any procurement)
         $notedBy = '';
@@ -591,6 +705,27 @@ class ProcurementController extends BaseController
             $dr = $stR->fetchColumn(); if ($dr) { $dateReceived = date('Y-m-d', strtotime((string)$dr)); }
         } catch (\Throwable $ignored) {}
 
+        // Optional canvassing info (persisted by canvassSubmit)
+        $canvasSup = [];
+        $awardedTo = '';
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
+                pr_number VARCHAR(32) PRIMARY KEY,
+                supplier1 VARCHAR(255),
+                supplier2 VARCHAR(255),
+                supplier3 VARCHAR(255),
+                awarded_to VARCHAR(255),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )");
+            $stC = $pdo->prepare('SELECT supplier1, supplier2, supplier3, awarded_to FROM pr_canvassing WHERE pr_number = :pr');
+            $stC->execute(['pr' => $pr]);
+            if ($cv = $stC->fetch()) {
+                foreach (['supplier1','supplier2','supplier3'] as $k) { if (!empty($cv[$k])) { $canvasSup[] = (string)$cv[$k]; } }
+                $awardedTo = (string)($cv['awarded_to'] ?? '');
+            }
+        } catch (\Throwable $ignored) {}
+
         $meta = [
             'pr_number' => $pr,
             'branch_name' => (string)($rows[0]['branch_name'] ?? 'N/A'),
@@ -601,6 +736,10 @@ class ProcurementController extends BaseController
             'needed_by' => $neededBy,
             'date_received' => $dateReceived,
             'noted_by' => $notedBy,
+            'approved_by' => $approvedBy,
+            'approved_at' => $approvedAt,
+            'canvassed_suppliers' => $canvasSup,
+            'awarded_to' => $awardedTo,
         ];
         $items = [];
         foreach ($rows as $r) {

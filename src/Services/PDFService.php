@@ -296,14 +296,45 @@ class PDFService
 			. '<td>Noted By:<div style="height:22px;"></div><div style="border-top:1px solid #999; padding-top:4px; text-align:center;">' . htmlspecialchars((string)($meta['noted_by'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div></td>'
 			. '<td>Date:<div style="height:22px;"></div><div style="border-top:1px solid #999; padding-top:4px; text-align:center;">' . htmlspecialchars((string)($meta['date_received'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div></td>'
 			. '</tr>'
+			. '<tr>'
+			. '<td>Approved By:<div style="height:22px;"></div><div style="border-top:1px solid #999; padding-top:4px; text-align:center;">' . htmlspecialchars((string)($meta['approved_by'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div></td>'
+			. '<td>Date:<div style="height:22px;"></div><div style="border-top:1px solid #999; padding-top:4px; text-align:center;">' . htmlspecialchars((string)($meta['approved_at'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div></td>'
+			. '</tr>'
 			. '</table>';
+
+		// Optional Canvassed section (3 suppliers + Awarded) if provided
+		$canvas = '';
+		$cv = isset($meta['canvassed_suppliers']) && is_array($meta['canvassed_suppliers']) ? array_values($meta['canvassed_suppliers']) : [];
+		$cv = array_slice($cv, 0, 3);
+		$awarded = isset($meta['awarded_to']) ? (string)$meta['awarded_to'] : '';
+		if (!empty($cv) || $awarded !== '') {
+			$labels = ['SUPPLIER 1','SUPPLIER 2','SUPPLIER 3'];
+			$cols = '';
+			for ($i=0; $i<3; $i++) { $name = isset($cv[$i]) ? htmlspecialchars((string)$cv[$i], ENT_QUOTES, 'UTF-8') : '&nbsp;'; $cols .= '<td style="text-align:center;">' . $name . '</td>'; }
+			$canvas = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
+				. '<tr>'
+				. '<th style="width:20%;text-align:left;">CANVASSED:</th>'
+				. '<th style="text-align:center;">' . $labels[0] . '</th>'
+				. '<th style="text-align:center;">' . $labels[1] . '</th>'
+				. '<th style="text-align:center;">' . $labels[2] . '</th>'
+				. '<th style="width:18%;text-align:center;">AWARDED</th>'
+				. '</tr>'
+				. '<tr>'
+				. '<td>&nbsp;</td>' . $cols . '<td style="text-align:center;">' . ($awarded !== '' ? htmlspecialchars($awarded, ENT_QUOTES, 'UTF-8') : '&nbsp;') . '</td>'
+				. '</tr>'
+				. '<tr>'
+				. '<td colspan="3">Approved for Purchase:</td>'
+				. '<td colspan="2">Date:</td>'
+				. '</tr>'
+				. '</table>';
+		}
 
 		$distribution = '<div style="margin-top:6px;font-size:9px;display:flex;justify-content:space-between;">'
 			. '<div>Distribution: ORIGINAL – Administrator</div>'
 			. '<div>Duplicate: Requesting Section</div>'
 			. '</div>';
 
-		$html = $logoHtml . $topTitle . $revRow . $titleRow . $reqMeta . $itemsTable . $attachments . $sign . $distribution;
+		$html = $logoHtml . $topTitle . $revRow . $titleRow . $reqMeta . $itemsTable . $attachments . $canvas . $sign . $distribution;
 		$mpdf->WriteHTML($html);
 		$mpdf->Output($filePath, 'F');
 	}
@@ -344,11 +375,11 @@ class PDFService
 			. '</td>'
 			. '<td style="vertical-align:top;">'
 			. '<table width="100%" border="0" cellspacing="0" cellpadding="4" style="font-size:11px;">'
-			. '<tr><td style="width:40%;border-bottom:1px solid #ccc;">PURCHASE ORDER</td><td style="text-align:right;border-bottom:1px solid #ccc;">' . $poNum . '</td></tr>'
-			. '<tr><td style="border-bottom:1px solid #ccc;">CENTER</td><td style="border-bottom:1px solid #ccc;">' . $center . '</td></tr>'
-			. '<tr><td style="border-bottom:1px solid #ccc;">DATE</td><td style="border-bottom:1px solid #ccc;">' . $date . '</td></tr>'
-			. '<tr><td style="border-bottom:1px solid #ccc;">REFERENCE:</td><td style="border-bottom:1px solid #ccc;">' . $ref . '</td></tr>'
-			. '<tr><td style="border-bottom:1px solid #ccc;">TERMS OF PAYMENT:</td><td style="border-bottom:1px solid #ccc;">' . $terms . '</td></tr>'
+			. '<tr><td style="width:55%;">PO NO:</td><td style="text-align:right;">' . $poNum . '</td></tr>'
+			. '<tr><td>DATE:</td><td style="text-align:right;">' . $date . '</td></tr>'
+			. '<tr><td>CENTER:</td><td style="text-align:right;">' . $center . '</td></tr>'
+			. '<tr><td>REFERENCE:</td><td style="text-align:right;">' . $ref . '</td></tr>'
+			. '<tr><td>TERMS OF PAYMENT:</td><td style="text-align:right;">' . $terms . '</td></tr>'
 			. '</table>'
 			. '</td>'
 			. '</tr>'

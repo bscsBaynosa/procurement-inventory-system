@@ -56,6 +56,7 @@
                             $status = (string)($g['status'] ?? 'pending');
                             $labelMap = [
                                 'pending'=>'For Admin Approval',
+                                'for_admin_approval'=>'For Admin Approval',
                                 'approved'=>'Approved',
                                 'canvassing_submitted'=>'Canvassing Submitted',
                                 'canvassing_approved'=>'Canvassing Approved',

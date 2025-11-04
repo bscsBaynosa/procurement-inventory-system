@@ -57,7 +57,7 @@
                 </select>
             </label>
             <label>Status
-                <?php $statuses = [''=>'All','pending'=>'For Admin Approval','approved'=>'Approved','canvassing_submitted'=>'Canvassing Submitted','canvassing_approved'=>'Canvassing Approved','canvassing_rejected'=>'Canvassing Rejected','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled']; ?>
+                <?php $statuses = [''=>'All','pending'=>'For Admin Approval','for_admin_approval'=>'For Admin Approval','approved'=>'Approved','canvassing_submitted'=>'Canvassing Submitted','canvassing_approved'=>'Canvassing Approved','canvassing_rejected'=>'Canvassing Rejected','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled']; ?>
                 <select name="status">
                     <?php foreach ($statuses as $val => $label): $sel = (string)($filters['status'] ?? '') === (string)$val; ?>
                         <option value="<?= htmlspecialchars((string)$val, ENT_QUOTES, 'UTF-8') ?>" <?= $sel ? 'selected' : '' ?>><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></option>
@@ -98,9 +98,9 @@
                     <?php foreach ($groups as $g): ?>
                         <?php 
                             $status = (string)($g['status'] ?? 'pending');
-                            $labelMap = ['pending'=>'For Admin Approval','approved'=>'Approved','canvassing_submitted'=>'Canvassing Submitted','canvassing_approved'=>'Canvassing Approved','canvassing_rejected'=>'Canvassing Rejected','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled'];
+                            $labelMap = ['pending'=>'For Admin Approval','for_admin_approval'=>'For Admin Approval','approved'=>'Approved','canvassing_submitted'=>'Canvassing Submitted','canvassing_approved'=>'Canvassing Approved','canvassing_rejected'=>'Canvassing Rejected','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled'];
                             $statusLabel = $labelMap[$status] ?? $status;
-                            $canProcess = ($status === 'approved');
+                            $canProcess = ($status === 'approved' || $status === 'canvassing_rejected');
                             $awaitingCanvass = ($status === 'canvassing_submitted');
                             $canCreatePo = ($status === 'canvassing_approved');
                         ?>
@@ -138,7 +138,7 @@
                                             <button class="btn primary" type="submit" title="Send to Admin for approval with attached PR PDF">Send for Admin Approval</button>
                                         </form>
                                     <?php else: ?>
-                                        <a class="btn primary" href="/manager/requests/canvass?pr=<?= urlencode((string)$g['pr_number']) ?>" title="Proceed with Canvassing (select 3–5 suppliers and generate form)">Proceed with Canvassing</a>
+                                        <a class="btn primary" href="/manager/requests/canvass?pr=<?= urlencode((string)$g['pr_number']) ?>" title="Select 3–5 suppliers and generate canvassing sheet">Select Suppliers</a>
                                     <?php endif; ?>
                                 </div>
                             </td>

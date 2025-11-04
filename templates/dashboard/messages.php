@@ -106,6 +106,18 @@
                             <input type="hidden" name="attach_path" value="<?= htmlspecialchars($prefAttPath, ENT_QUOTES, 'UTF-8') ?>" data-pref-att />
                         </div>
                     <?php endif; ?>
+                    <?php $prefAttName2 = isset($prefill_attachment_name2) ? (string)$prefill_attachment_name2 : ''; $prefAttPath2 = isset($prefill_attachment_path2) ? (string)$prefill_attachment_path2 : ''; ?>
+                    <?php if ($prefAttName2 !== '' && $prefAttPath2 !== ''): ?>
+                        <div>
+                            <label>Attachment 2</label>
+                            <div class="card" style="padding:10px; display:flex; align-items:center; justify-content:space-between; gap:10px;">
+                                <div><strong>Will attach:</strong> <span class="mono"><?= htmlspecialchars($prefAttName2, ENT_QUOTES, 'UTF-8') ?></span></div>
+                                <button type="button" class="btn muted" onclick="(function(f){ var n=f.querySelector('[name=attach_name2]'); var p=f.querySelector('[name=attach_path2]'); if(n) n.value=''; if(p) p.value=''; var el=f.querySelector('[data-pref-att2]'); if(el) el.remove(); })(this.closest('form'));"><span>Remove</span></button>
+                            </div>
+                            <input type="hidden" name="attach_name2" value="<?= htmlspecialchars($prefAttName2, ENT_QUOTES, 'UTF-8') ?>" data-pref-att2 />
+                            <input type="hidden" name="attach_path2" value="<?= htmlspecialchars($prefAttPath2, ENT_QUOTES, 'UTF-8') ?>" data-pref-att2 />
+                        </div>
+                    <?php endif; ?>
                     <div>
                         <label>Message</label>
                         <textarea name="body" rows="10" required placeholder="Write your message..."></textarea>

@@ -766,6 +766,9 @@ class AdminController extends BaseController
             $prefillSubject = isset($_GET['subject']) ? (string)$_GET['subject'] : '';
             $prefillAttachName = isset($_GET['attach_name']) ? (string)$_GET['attach_name'] : '';
             $prefillAttachPath = isset($_GET['attach_path']) ? (string)$_GET['attach_path'] : '';
+            // Optional second prefilled attachment
+            $prefillAttachName2 = isset($_GET['attach_name2']) ? (string)$_GET['attach_name2'] : '';
+            $prefillAttachPath2 = isset($_GET['attach_path2']) ? (string)$_GET['attach_path2'] : '';
             $this->render('dashboard/messages.php', [
                 'inbox' => $inbox,
                 'users' => $users,
@@ -773,6 +776,8 @@ class AdminController extends BaseController
                 'prefill_subject' => $prefillSubject,
                 'prefill_attachment_name' => $prefillAttachName,
                 'prefill_attachment_path' => $prefillAttachPath,
+                'prefill_attachment_name2' => $prefillAttachName2,
+                'prefill_attachment_path2' => $prefillAttachPath2,
             ]);
         } catch (\PDOException $e) {
             // If messages table doesn't exist yet, create it and retry once
@@ -823,6 +828,22 @@ class AdminController extends BaseController
                 } catch (\Throwable $e) {}
                 $up = $this->pdo->prepare('UPDATE messages SET attachment_name = :n, attachment_path = :p WHERE id = :id');
                 $up->execute(['n' => $autoName, 'p' => $autoPath, 'id' => $msgId]);
+            }
+            // Optional second prefilled attachment saved to messages_attachments
+            $autoName2 = isset($_POST['attach_name2']) ? trim((string)$_POST['attach_name2']) : '';
+            $autoPath2 = isset($_POST['attach_path2']) ? trim((string)$_POST['attach_path2']) : '';
+            if ($autoName2 !== '' && $autoPath2 !== '' && @is_file($autoPath2)) {
+                try {
+                    $this->pdo->exec('CREATE TABLE IF NOT EXISTS messages_attachments (
+                        id BIGSERIAL PRIMARY KEY,
+                        message_id BIGINT REFERENCES messages(id) ON DELETE CASCADE,
+                        file_name VARCHAR(255) NOT NULL,
+                        file_path TEXT NOT NULL,
+                        uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )');
+                } catch (\Throwable $e) {}
+                $insA0 = $this->pdo->prepare('INSERT INTO messages_attachments (message_id, file_name, file_path) VALUES (:m,:n,:p)');
+                $insA0->execute(['m' => $msgId, 'n' => basename($autoName2), 'p' => $autoPath2]);
             }
             // Handle optional attachment upload
             if (!empty($_FILES['attachment']) && is_uploaded_file($_FILES['attachment']['tmp_name'])) {
@@ -1005,7 +1026,46 @@ class AdminController extends BaseController
             $msg = $st->fetch();
             if ($msg) { $msg['body'] = \App\Services\CryptoService::maybeDecrypt((string)$msg['body']); }
             if (!$msg) { header('Location: /notifications'); return; }
-            $this->render('dashboard/notification_view.php', ['message' => $msg]);
+            // Load any additional attachments for this message
+            $attachments = [];
+            try {
+                $this->pdo->exec('CREATE TABLE IF NOT EXISTS messages_attachments (
+                    id BIGSERIAL PRIMARY KEY,
+                    message_id BIGINT REFERENCES messages(id) ON DELETE CASCADE,
+                    file_name VARCHAR(255) NOT NULL,
+                    file_path TEXT NOT NULL,
+                    uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )');
+                $stA = $this->pdo->prepare('SELECT id, file_name FROM messages_attachments WHERE message_id = :mid ORDER BY uploaded_at ASC');
+                $stA->execute(['mid' => (int)$msg['id']]);
+                $attachments = $stA->fetchAll() ?: [];
+            } catch (\Throwable $ignored) {}
+            // Optional canvassing suppliers for Admin edit (derive PR from subject)
+            $canvassing = null;
+            $subj = (string)($msg['subject'] ?? '');
+            $prNum = null;
+            if (preg_match('/PR\s*([0-9\-]+)/i', $subj, $mm)) { $prNum = $mm[1]; }
+            if ($prNum) {
+                try {
+                    $this->pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
+                        pr_number VARCHAR(32) PRIMARY KEY,
+                        supplier1 VARCHAR(255),
+                        supplier2 VARCHAR(255),
+                        supplier3 VARCHAR(255),
+                        awarded_to VARCHAR(255),
+                        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )");
+                    $stC = $this->pdo->prepare('SELECT supplier1, supplier2, supplier3, awarded_to FROM pr_canvassing WHERE pr_number = :pr');
+                    $stC->execute(['pr' => $prNum]);
+                    if ($row = $stC->fetch()) {
+                        $sup = [];
+                        foreach (['supplier1','supplier2','supplier3'] as $k) { if (!empty($row[$k])) { $sup[] = (string)$row[$k]; } }
+                        $canvassing = [ 'pr' => $prNum, 'suppliers' => $sup, 'awarded_to' => (string)($row['awarded_to'] ?? '') ];
+                    }
+                } catch (\Throwable $ignored) {}
+            }
+            $this->render('dashboard/notification_view.php', ['message' => $msg, 'attachments' => $attachments, 'canvassing' => $canvassing]);
         } catch (\Throwable $e) {
             http_response_code(500);
             header('Content-Type: text/plain');
@@ -1022,6 +1082,22 @@ class AdminController extends BaseController
         $msgId = isset($_POST['message_id']) ? (int)$_POST['message_id'] : 0;
         if ($pr === '') { header('Location: /inbox'); return; }
         try {
+            // Optional: Update awarded vendor if provided (must match one of the canvassed suppliers)
+            $awarded = isset($_POST['awarded_to']) ? trim((string)$_POST['awarded_to']) : '';
+            if ($awarded !== '') {
+                try {
+                    $stC = $this->pdo->prepare('SELECT supplier1, supplier2, supplier3 FROM pr_canvassing WHERE pr_number = :pr');
+                    $stC->execute(['pr' => $pr]);
+                    if ($cv = $stC->fetch()) {
+                        $allowed = [];
+                        foreach (['supplier1','supplier2','supplier3'] as $k) { if (!empty($cv[$k])) { $allowed[] = (string)$cv[$k]; } }
+                        if (in_array($awarded, $allowed, true)) {
+                            $upA = $this->pdo->prepare('UPDATE pr_canvassing SET awarded_to = :aw, updated_at = NOW() WHERE pr_number = :pr');
+                            $upA->execute(['aw' => $awarded, 'pr' => $pr]);
+                        }
+                    }
+                } catch (\Throwable $ignored) {}
+            }
             $this->requests()->updateGroupStatus($pr, 'canvassing_approved', (int)($_SESSION['user_id'] ?? 0), 'Canvassing approved by Admin');
             // Mark message read if provided
             if ($msgId > 0) {
@@ -1065,6 +1141,22 @@ class AdminController extends BaseController
         if ($pr === '') { header('Location: /inbox'); return; }
         try {
             $this->requests()->updateGroupStatus($pr, 'approved', (int)($_SESSION['user_id'] ?? 0), 'PR approved by Admin');
+            // Record approver and approval date on all rows of the PR group (for PDFs)
+            try {
+                $this->pdo->exec("ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS approved_by VARCHAR(255);");
+            } catch (\Throwable $ignored) {}
+            try {
+                $this->pdo->exec("ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;");
+            } catch (\Throwable $ignored) {}
+            try {
+                $adminName = '';
+                $stN = $this->pdo->prepare('SELECT full_name FROM users WHERE user_id = :id');
+                $stN->execute(['id' => (int)($_SESSION['user_id'] ?? 0)]);
+                $nm = $stN->fetchColumn();
+                if ($nm) { $adminName = (string)$nm; }
+                $up = $this->pdo->prepare('UPDATE purchase_requests SET approved_by = :n, approved_at = NOW() WHERE pr_number = :pr');
+                $up->execute(['n' => ($adminName !== '' ? ($adminName . ' - Admin') : 'Admin'), 'pr' => $pr]);
+            } catch (\Throwable $ignored) {}
             if ($msgId > 0) {
                 $st = $this->pdo->prepare('UPDATE messages SET is_read = TRUE WHERE id = :id AND recipient_id = :me');
                 $st->execute(['id' => $msgId, 'me' => (int)($_SESSION['user_id'] ?? 0)]);
@@ -1259,8 +1351,36 @@ class AdminController extends BaseController
         if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
         $me = (int)($_SESSION['user_id'] ?? 0);
         $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+        $aid = isset($_GET['aid']) ? (int)$_GET['aid'] : 0; // specific attachment id (optional)
         if ($me <= 0 || $id <= 0) { http_response_code(403); echo 'Forbidden'; return; }
         try {
+            // If a specific attachment id is provided, serve that file after verifying ownership
+            if ($aid > 0) {
+                try {
+                    $this->pdo->exec('CREATE TABLE IF NOT EXISTS messages_attachments (
+                        id BIGSERIAL PRIMARY KEY,
+                        message_id BIGINT REFERENCES messages(id) ON DELETE CASCADE,
+                        file_name VARCHAR(255) NOT NULL,
+                        file_path TEXT NOT NULL,
+                        uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )');
+                } catch (\Throwable $ignored) {}
+                $stA = $this->pdo->prepare('SELECT a.file_name, a.file_path FROM messages_attachments a JOIN messages m ON m.id = a.message_id WHERE a.id = :aid AND a.message_id = :mid AND (m.recipient_id = :me OR m.sender_id = :me)');
+                $stA->execute(['aid' => $aid, 'mid' => $id, 'me' => $me]);
+                $row = $stA->fetch();
+                if ($row && !empty($row['file_path']) && is_file((string)$row['file_path'])) {
+                    $name = (string)($row['file_name'] ?? 'attachment');
+                    $path = (string)$row['file_path'];
+                    $size = @filesize($path) ?: null;
+                    $isPdf = preg_match('/\.pdf$/i', $name) === 1;
+                    header('Content-Type: ' . ($isPdf ? 'application/pdf' : 'application/octet-stream'));
+                    header('Content-Disposition: attachment; filename="' . rawurlencode($name) . '"');
+                    if ($size !== null) { header('Content-Length: ' . (string)$size); }
+                    @readfile($path);
+                    return;
+                }
+                // fallthrough to legacy behavior if not found
+            }
             // Prefer attachment stored on messages table (attachment_name/path)
             try {
                 $st = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id AND (recipient_id = :me OR sender_id = :me)');

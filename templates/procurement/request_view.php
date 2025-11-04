@@ -48,10 +48,14 @@ $status = isset($rows[0]['status']) ? (string)$rows[0]['status'] : '';
       <div class="actions">
         <a class="btn ghost" href="/manager/requests">← Back to Requests</a>
         <a class="btn primary" href="/manager/requests/download?pr=<?= rawurlencode($pr) ?>" target="_blank" rel="noopener">Download PDF</a>
-  <form method="post" action="/manager/requests/send-for-approval" onsubmit="return (function(f){ if(!confirm('Send this PR to Admin for approval?')){ return false; } var btn=f.querySelector('button[type=submit]'); if(btn){ btn.disabled=true; btn.textContent='Preparing…'; } return true; })(this);" style="margin:0;">
+        <?php if (in_array($status, ['approved','canvassing_rejected'], true)): ?>
+          <a class="btn secondary" href="/manager/requests/canvass?pr=<?= rawurlencode($pr) ?>">Select Suppliers</a>
+        <?php else: ?>
+        <form method="post" action="/manager/requests/send-for-approval" onsubmit="return (function(f){ if(!confirm('Send this PR to Admin for approval?')){ return false; } var btn=f.querySelector('button[type=submit]'); if(btn){ btn.disabled=true; btn.textContent='Preparing…'; } return true; })(this);" style="margin:0;">
           <input type="hidden" name="pr_number" value="<?= htmlspecialchars($pr) ?>">
           <button type="submit" class="btn secondary">Send for Admin Approval</button>
         </form>
+        <?php endif; ?>
       </div>
     </div>
 

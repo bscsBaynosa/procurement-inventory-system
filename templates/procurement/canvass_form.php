@@ -56,6 +56,19 @@
                 <?php endforeach; ?>
             </div>
 
+            <div style="margin-top:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                <label style="display:flex; gap:8px; align-items:center;">
+                    <span style="min-width:120px;">Awarded Vendor (optional)</span>
+                    <select name="awarded_to" id="awardedSelect">
+                        <option value="">— Select —</option>
+                        <?php foreach ($suppliers as $s): ?>
+                            <option value="<?= (int)$s['user_id'] ?>"><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></option>
+                        <?php endforeach; ?>
+                    </select>
+                </label>
+                <small class="muted">Tip: pick among the selected suppliers. Unselected vendors are disabled automatically.</small>
+            </div>
+
             <?php
                 // Build a supplier id -> name map for headers
                 $supMap = [];
@@ -136,6 +149,19 @@
                             });
                         }
                     });
+                    // Disable unselected options in Awarded select
+                    const awardSel = document.getElementById('awardedSelect');
+                    if (awardSel) {
+                        Array.from(awardSel.options).forEach(opt => {
+                            const val = opt.value;
+                            if (!val) { opt.disabled = false; return; }
+                            opt.disabled = (selected.size > 0 && !selected.has(val));
+                        });
+                        // If currently selected option is disabled (no longer selected as supplier), clear it
+                        if (awardSel.value && awardSel.options[awardSel.selectedIndex] && awardSel.options[awardSel.selectedIndex].disabled) {
+                            awardSel.value = '';
+                        }
+                    }
                 }
                 document.querySelectorAll('.supplier-choice').forEach(cb => cb.addEventListener('change', recalc));
                 recalc();
@@ -144,6 +170,17 @@
                     if (checked < 3 || checked > 5) {
                         e.preventDefault();
                         alert('Please select 3–5 suppliers.');
+                        return;
+                    }
+                    // Validate awarded_to is among selected if provided
+                    const awardSel = document.getElementById('awardedSelect');
+                    if (awardSel && awardSel.value) {
+                        const selSet = new Set(Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.value));
+                        if (!selSet.has(awardSel.value)) {
+                            e.preventDefault();
+                            alert('Awarded vendor must be one of the selected suppliers.');
+                            return;
+                        }
                     }
                 });
             })();

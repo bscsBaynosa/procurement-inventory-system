@@ -361,7 +361,8 @@ class RequestService
 			"SELECT pr.request_id, pr.pr_number, pr.item_id, i.name AS item_name, pr.quantity, pr.unit, pr.status, pr.created_at,
 				pr.branch_id, b.name AS branch_name, pr.requested_by, u.full_name AS requested_by_name,
 				pr.revision_state, pr.revision_notes,
-				pr.needed_by, pr.justification
+				pr.needed_by, pr.justification,
+				pr.approved_by, pr.approved_at
 			 FROM purchase_requests pr
 			 LEFT JOIN inventory_items i ON i.item_id = pr.item_id
 			 LEFT JOIN branches b ON b.branch_id = pr.branch_id
@@ -813,7 +814,9 @@ class RequestService
 				ADD COLUMN IF NOT EXISTS pr_number VARCHAR(32),
 				ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE,
 				ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ,
-				ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL
+				ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+				ADD COLUMN IF NOT EXISTS approved_by VARCHAR(255),
+				ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ
 			");
 			// Drop legacy unique constraint if present to allow multiple rows per PR number
 			$this->pdo->exec("ALTER TABLE purchase_requests DROP CONSTRAINT IF EXISTS purchase_requests_pr_number_key");

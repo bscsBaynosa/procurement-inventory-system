@@ -53,7 +53,7 @@
                 </select>
             </label>
             <label>Status
-                <?php $statuses = [''=>'All','pending'=>'For Admin Approval','approved'=>'Approved','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled']; ?>
+                <?php $statuses = [''=>'All','pending'=>'For Admin Approval','for_admin_approval'=>'For Admin Approval','approved'=>'Approved','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled']; ?>
                 <select name="status">
                     <?php foreach ($statuses as $val => $label): $sel = (string)($filters['status'] ?? '') === (string)$val; ?>
                         <option value="<?= htmlspecialchars((string)$val, ENT_QUOTES, 'UTF-8') ?>" <?= $sel ? 'selected' : '' ?>><?= htmlspecialchars($label, ENT_QUOTES, 'UTF-8') ?></option>
@@ -94,7 +94,7 @@
                     <?php foreach ($groups as $g): ?>
                         <?php 
                             $status = (string)($g['status'] ?? 'pending');
-                            $labelMap = ['pending'=>'For Admin Approval','approved'=>'Approved','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled'];
+                            $labelMap = ['pending'=>'For Admin Approval','for_admin_approval'=>'For Admin Approval','approved'=>'Approved','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled'];
                             $statusLabel = $labelMap[$status] ?? $status;
                         ?>
                         <tr>
