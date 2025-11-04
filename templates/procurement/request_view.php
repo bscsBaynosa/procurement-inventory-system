@@ -48,7 +48,7 @@ $status = isset($rows[0]['status']) ? (string)$rows[0]['status'] : '';
       <div class="actions">
         <a class="btn ghost" href="/manager/requests">← Back to Requests</a>
         <a class="btn primary" href="/manager/requests/download?pr=<?= rawurlencode($pr) ?>" target="_blank" rel="noopener">Download PDF</a>
-        <form method="post" action="/manager/requests/send-for-approval" onsubmit="return confirm('Send this PR to Admin for approval?');" style="margin:0;">
+        <form method="post" action="/manager/requests/send-for-approval" onsubmit="(function(btn){ if(!confirm('Send this PR to Admin for approval?')){return false;} btn.disabled=true; btn.textContent='Preparing…'; })(this.querySelector('button[type=submit]'));" style="margin:0;">
           <input type="hidden" name="pr_number" value="<?= htmlspecialchars($pr) ?>">
           <button type="submit" class="btn secondary">Send for Admin Approval</button>
         </form>

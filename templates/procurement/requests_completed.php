@@ -92,7 +92,7 @@
                             <td>
                                 <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                                     <a class="btn" href="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>">View</a>
-                                    <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>">Download PDF</a>
+                                    <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">Download PDF</a>
                                 </div>
                             </td>
                         </tr>

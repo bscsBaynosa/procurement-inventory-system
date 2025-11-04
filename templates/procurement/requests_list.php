@@ -123,7 +123,7 @@
                                         <button class="btn" type="submit">Update</button>
                                     </form>
                                     <a class="btn" href="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>">View</a>
-                                    <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>">Download PDF</a>
+                                    <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">Download PDF</a>
                                     <form action="/manager/requests/archive" method="POST" onsubmit="return confirm('Archive this Purchase Request?');" style="display:inline;">
                                         <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
                                         <button class="btn" type="submit">Archive</button>
@@ -133,7 +133,7 @@
                                     <?php elseif ($awaitingCanvass): ?>
                                         <span class="muted">Awaiting Canvassing Approval</span>
                                     <?php elseif (!$canProcess): ?>
-                                        <form action="/manager/requests/send-for-approval" method="POST" style="display:inline;">
+                                        <form action="/manager/requests/send-for-approval" method="POST" style="display:inline;" onsubmit="(function(f){ var b=f.querySelector('button[type=submit]'); if(b){ b.disabled=true; b.textContent='Preparing…'; } })(this)">
                                             <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
                                             <button class="btn primary" type="submit" title="Send to Admin for approval with attached PR PDF">Send for Admin Approval</button>
                                         </form>

@@ -694,31 +694,28 @@ class ProcurementController extends BaseController
         if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
         $tmpFile = $dir . DIRECTORY_SEPARATOR . 'PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '.pdf';
         $this->pdf()->generatePurchaseRequisitionToFile($meta, $items, $tmpFile);
-        // Ensure message attachments columns
+        // Ensure message attachments columns (for prefill safety)
         $pdo = \App\Database\Connection::resolve();
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
 
-        // Send messages to Admin users
-        $subject = 'For Admin Approval • PR ' . $pr;
-        $body = 'Please review and approve the attached Purchase Request to begin procurement processing.';
-        $recipients = $pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('admin')")->fetchAll();
-        if ($recipients) {
-            $ins = $pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)');
-            foreach ($recipients as $row) {
-                $ins->execute([
-                    's' => (int)($_SESSION['user_id'] ?? 0),
-                    'r' => (int)$row['user_id'],
-                    'j' => $subject,
-                    'b' => $body,
-                    'an' => basename($tmpFile),
-                    'ap' => $tmpFile,
-                ]);
-            }
-        }
-        // Update PR group status to mark forwarded for admin approval
+        // Update PR group status to mark forwarded for admin approval immediately
         try { $this->requests()->updateGroupStatus($pr, 'for_admin_approval', (int)($_SESSION['user_id'] ?? 0), 'Sent to Admin for Approval'); } catch (\Throwable $ignored) {}
-        header('Location: /manager/requests?sent=1');
+
+        // Redirect user to the compose screen with prefilled recipient, subject, and auto-attachment
+        $to = 0;
+        try {
+            $stAdm = $pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role = 'admin' ORDER BY user_id ASC LIMIT 1");
+            $to = (int)($stAdm ? ($stAdm->fetchColumn() ?: 0) : 0);
+        } catch (\Throwable $ignored) {}
+        $subject = 'PR ' . $pr . ' • For Approval';
+        $qs = http_build_query([
+            'to' => $to > 0 ? $to : null,
+            'subject' => $subject,
+            'attach_name' => basename($tmpFile),
+            'attach_path' => $tmpFile,
+        ]);
+        header('Location: /admin/messages' . ($qs !== '' ? ('?' . $qs) : ''));
     }
 
     /**

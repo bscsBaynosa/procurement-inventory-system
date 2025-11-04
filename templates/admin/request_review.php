@@ -38,7 +38,7 @@
             <span>Admin • Review PR <?= htmlspecialchars((string)$pr, ENT_QUOTES, 'UTF-8') ?></span>
             <span class="row">
                 <a class="btn" href="/admin/requests">Back to Requests</a>
-                <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$pr) ?>">Download PDF</a>
+                <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$pr) ?>" target="_blank" rel="noopener">Download PDF</a>
             </span>
         </div>
 
