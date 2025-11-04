@@ -3,16 +3,19 @@
 namespace App\Services;
 
 use App\Database\Connection;
-use JsonException;
 use PDO;
 
 class RequestService
 {
-	private PDO $pdo;
+	/** @var PDO */
+	private $pdo;
 
-	public function __construct(?PDO $pdo = null)
+	/**
+	 * @param PDO|null $pdo
+	 */
+	public function __construct($pdo = null)
 	{
-		$this->pdo = $pdo ?? Connection::resolve();
+		$this->pdo = $pdo ? $pdo : Connection::resolve();
 		// Best-effort: ensure new columns exist so read paths don't fail on older schemas
 		$this->ensurePrColumns();
 		// Ensure enum values used by canvassing gate exist (safe to call often)
@@ -21,7 +24,12 @@ class RequestService
 		$this->ensureRevisionColumns();
 	}
 
-	public function createPurchaseRequest(array $payload, int $userId): array
+	/**
+	 * @param array $payload
+	 * @param int $userId
+	 * @return array
+	 */
+	public function createPurchaseRequest(array $payload, $userId)
 	{
 		// Ensure archive-related columns exist (idempotent)
 		try {
@@ -57,26 +65,26 @@ class RequestService
 			 RETURNING request_id, status, pr_number'
 		);
 
-		$status = $payload['status'] ?? 'pending';
+		$status = isset($payload['status']) ? $payload['status'] : 'pending';
 
 		// Encrypt justification if configured
-		$encJustification = \App\Services\CryptoService::encrypt($payload['justification'] ?? null, 'pr:' . $prNumber);
+		$encJustification = \App\Services\CryptoService::encrypt(isset($payload['justification']) ? $payload['justification'] : null, 'pr:' . $prNumber);
 
-		$stmt->execute([
-			'item_id' => $payload['item_id'] ?? null,
-			'branch_id' => $payload['branch_id'] ?? null,
-			'requested_by' => $payload['requested_by'] ?? $userId,
-			'request_type' => $payload['request_type'] ?? 'purchase_order',
-			'quantity' => $payload['quantity'] ?? 1,
-			'unit' => $payload['unit'] ?? 'pcs',
+		$stmt->execute(array(
+			'item_id' => isset($payload['item_id']) ? $payload['item_id'] : null,
+			'branch_id' => isset($payload['branch_id']) ? $payload['branch_id'] : null,
+			'requested_by' => isset($payload['requested_by']) ? $payload['requested_by'] : $userId,
+			'request_type' => isset($payload['request_type']) ? $payload['request_type'] : 'purchase_order',
+			'quantity' => isset($payload['quantity']) ? $payload['quantity'] : 1,
+			'unit' => isset($payload['unit']) ? $payload['unit'] : 'pcs',
 			'justification' => $encJustification,
 			'status' => $status,
-			'priority' => $payload['priority'] ?? 3,
-			'needed_by' => $payload['needed_by'] ?? null,
+			'priority' => isset($payload['priority']) ? $payload['priority'] : 3,
+			'needed_by' => isset($payload['needed_by']) ? $payload['needed_by'] : null,
 			'created_by' => $userId,
 			'updated_by' => $userId,
 			'pr_number' => $prNumber,
-		]);
+		));
 
 		$request = $stmt->fetch();
 
@@ -86,14 +94,19 @@ class RequestService
 		return $request;
 	}
 
-	private function generatePrNumber(): string
+	/** @return string */
+	private function generatePrNumber()
 	{
 		$year = (int)date('Y');
 		return $this->generatePrNumberForYear($year);
 	}
 
 	/** Generate PR number for a specific calendar year using per-year sequence. */
-	private function generatePrNumberForYear(int $year): string
+	/**
+	 * @param int $year
+	 * @return string
+	 */
+	private function generatePrNumberForYear($year)
 	{
 		// Upsert year row and increment counter atomically
 		$this->pdo->beginTransaction();
@@ -116,7 +129,8 @@ class RequestService
 	 * Preview the next PR number without incrementing the counter.
 	 * Returns formatted as YYYY + 3-digit count (e.g., 2025001).
 	 */
-	public function getNextPrNumberPreview(): string
+	/** @return string */
+	public function getNextPrNumberPreview()
 	{
 		$year = (int)date('Y');
 		try {
@@ -137,20 +151,29 @@ class RequestService
 		}
 	}
 
-	public function generateNewPrNumber(): string
+	/** @return string */
+	public function generateNewPrNumber()
 	{
 		return $this->generatePrNumber();
 	}
 
-	public function getPendingRequests(?int $branchId = null): array
+	/**
+	 * @param int|null $branchId
+	 * @return array
+	 */
+	public function getPendingRequests($branchId = null)
 	{
-		return $this->getAllRequests([
+		return $this->getAllRequests(array(
 			'status' => 'pending',
 			'branch_id' => $branchId,
-		]);
+		));
 	}
 
-	public function getAllRequests(array $filters = []): array
+	/**
+	 * @param array $filters
+	 * @return array
+	 */
+	public function getAllRequests($filters = array())
 	{
 		// Ensure columns exist before selecting them
 		$this->ensurePrColumns();
@@ -165,8 +188,8 @@ class RequestService
 			LEFT JOIN users ru ON ru.user_id = pr.requested_by
 			LEFT JOIN users au ON au.user_id = pr.assigned_to';
 
-		$conditions = [];
-		$params = [];
+		$conditions = array();
+		$params = array();
 
 		if (!empty($filters['status'])) {
 			$conditions[] = 'pr.status = :status';
@@ -194,7 +217,12 @@ class RequestService
 	 * Check if there's an existing active (not-archived) PR for the same item and branch
 	 * in a status that implies it's still in progress (prevents duplicates).
 	 */
-	public function hasActiveRequestForItemBranch(int $itemId, int $branchId): bool
+	/**
+	 * @param int $itemId
+	 * @param int $branchId
+	 * @return bool
+	 */
+	public function hasActiveRequestForItemBranch($itemId, $branchId)
 	{
 		try {
 			$this->ensurePrColumns();
@@ -216,7 +244,11 @@ class RequestService
 	 * Return DISTINCT item_ids that currently have an active (not-archived) PR in-progress for a branch.
 	 * Active statuses: pending, approved, canvassing_submitted, canvassing_approved, in_progress
 	 */
-	public function getActiveRequestItemIdsForBranch(?int $branchId = null): array
+	/**
+	 * @param int|null $branchId
+	 * @return array
+	 */
+	public function getActiveRequestItemIdsForBranch($branchId = null)
 	{
 		try {
 			$this->ensurePrColumns();
@@ -228,10 +260,12 @@ class RequestService
 			}
 			$st = $this->pdo->prepare($sql);
 			$st->execute($params);
-			$ids = array_map(static fn($r) => (int)$r['item_id'], $st->fetchAll() ?: []);
+			$ids = array();
+			$rows = $st->fetchAll() ?: array();
+			foreach ($rows as $r) { $ids[] = (int)$r['item_id']; }
 			return $ids;
 		} catch (\Throwable $e) {
-			return [];
+			return array();
 		}
 	}
 
@@ -239,15 +273,19 @@ class RequestService
 	 * Grouped list of purchase requests by PR Number, with basic aggregates and sorting/filtering.
 	 * filters: branch_id, status, include_archived (bool), sort ('branch'|'date'|'status'), order ('asc'|'desc')
 	 */
-	public function getRequestsGrouped(array $filters = []): array
+	/**
+	 * @param array $filters
+	 * @return array
+	 */
+	public function getRequestsGrouped($filters = array())
 	{
 		// Ensure columns for grouping exist (pr_number, is_archived)
 		$this->ensurePrColumns();
 		$this->ensureRevisionColumns();
 
-		$includeArchived = (bool)($filters['include_archived'] ?? false);
-		$sort = (string)($filters['sort'] ?? 'date');
-		$order = strtolower((string)($filters['order'] ?? 'desc')) === 'asc' ? 'ASC' : 'DESC';
+		$includeArchived = (bool)(isset($filters['include_archived']) ? $filters['include_archived'] : false);
+		$sort = (string)(isset($filters['sort']) ? $filters['sort'] : 'date');
+		$order = strtolower((string)(isset($filters['order']) ? $filters['order'] : 'desc')) === 'asc' ? 'ASC' : 'DESC';
 
 		$sortExpr = 'min_created_at';
 		if ($sort === 'branch') { $sortExpr = 'branch_name'; }
@@ -295,9 +333,9 @@ class RequestService
 		)
 		SELECT * FROM grouped";
 
-		$conditions = [];
-		$params = [];
-	if (!empty($filters['branch_id'])) { $conditions[] = '(branch_id = :branch_id OR branch_id IS NULL)'; $params['branch_id'] = (int)$filters['branch_id']; }
+		$conditions = array();
+		$params = array();
+		if (!empty($filters['branch_id'])) { $conditions[] = '(branch_id = :branch_id OR branch_id IS NULL)'; $params['branch_id'] = (int)$filters['branch_id']; }
 		if (!empty($filters['status'])) { $conditions[] = 'status = :status'; $params['status'] = (string)$filters['status']; }
 		if (!empty($filters['revision'])) { $conditions[] = 'revision_state = :revision'; $params['revision'] = (string)$filters['revision']; }
 		if (!$includeArchived) { $conditions[] = 'is_archived = FALSE'; }
@@ -307,11 +345,15 @@ class RequestService
 		$st = $this->pdo->prepare($sql);
 		$st->execute($params);
 		$rows = $st->fetchAll();
-		return $rows ?: [];
+		return $rows ?: array();
 	}
 
 	/** Get full details for a PR group (by pr_number) including item rows. */
-	public function getGroupDetails(string $prNumber): array
+	/**
+	 * @param string $prNumber
+	 * @return array
+	 */
+	public function getGroupDetails($prNumber)
 	{
 		$this->ensurePrColumns();
 		$this->ensureRevisionColumns();
@@ -326,13 +368,20 @@ class RequestService
 			 WHERE pr.pr_number = :pr
 			 ORDER BY pr.created_at ASC"
 		);
-		$stmt->execute(['pr' => $prNumber]);
+		$stmt->execute(array('pr' => $prNumber));
 		$rows = $stmt->fetchAll();
-		return $rows ?: [];
+		return $rows ?: array();
 	}
 
 	/** Update status for all requests under the same PR number. */
-	public function updateGroupStatus(string $prNumber, string $status, int $performedBy, ?string $notes = null): bool
+	/**
+	 * @param string $prNumber
+	 * @param string $status
+	 * @param int $performedBy
+	 * @param string|null $notes
+	 * @return bool
+	 */
+	public function updateGroupStatus($prNumber, $status, $performedBy, $notes = null)
 	{
 		$allowed = ['pending','approved','rejected','in_progress','completed','cancelled','canvassing_submitted','canvassing_approved','canvassing_rejected'];
 		if (!in_array($status, $allowed, true)) { return false; }
@@ -357,18 +406,24 @@ class RequestService
 	}
 
 	/** Archive all requests under a PR number. */
-	public function archiveGroup(string $prNumber, int $performedBy, ?string $reason = null): bool
+	/**
+	 * @param string $prNumber
+	 * @param int $performedBy
+	 * @param string|null $reason
+	 * @return bool
+	 */
+	public function archiveGroup($prNumber, $performedBy, $reason = null)
 	{
 		$this->ensurePrColumns();
 		try {
 			$st = $this->pdo->prepare("UPDATE purchase_requests SET is_archived = TRUE, archived_at = NOW(), archived_by = :by WHERE pr_number = :pr");
-			$ok = $st->execute(['by' => $performedBy, 'pr' => $prNumber]);
+			$ok = $st->execute(array('by' => $performedBy, 'pr' => $prNumber));
 			if ($ok) {
 				// Record a single audit entry for the group leader (arbitrary pick: newest)
 				$rid = (int)$this->pdo->query("SELECT request_id FROM purchase_requests WHERE pr_number = '" . str_replace("'", "''", $prNumber) . "' ORDER BY updated_at DESC LIMIT 1")->fetchColumn();
 				if ($rid > 0) {
 					$this->recordEvent($rid, null, null, $performedBy, $reason ? ('Archived: ' . $reason) : 'Archived');
-					$this->recordAudit('purchase_requests', $rid, 'update', $performedBy, ['archived' => true, 'pr_number' => $prNumber, 'reason' => $reason]);
+					$this->recordAudit('purchase_requests', $rid, 'update', $performedBy, array('archived' => true, 'pr_number' => $prNumber, 'reason' => $reason));
 				}
 			}
 			return $ok;
@@ -376,44 +431,61 @@ class RequestService
 	}
 
 	/** Restore archived PR group. */
-	public function restoreGroup(string $prNumber, int $performedBy): bool
+	/**
+	 * @param string $prNumber
+	 * @param int $performedBy
+	 * @return bool
+	 */
+	public function restoreGroup($prNumber, $performedBy)
 	{
 		$this->ensurePrColumns();
 		try {
 			$st = $this->pdo->prepare("UPDATE purchase_requests SET is_archived = FALSE WHERE pr_number = :pr");
-			$ok = $st->execute(['pr' => $prNumber]);
+			$ok = $st->execute(array('pr' => $prNumber));
 			if ($ok) {
 				$rid = (int)$this->pdo->query("SELECT request_id FROM purchase_requests WHERE pr_number = '" . str_replace("'", "''", $prNumber) . "' ORDER BY updated_at DESC LIMIT 1")->fetchColumn();
 				if ($rid > 0) {
 					$this->recordEvent($rid, null, null, $performedBy, 'Restored from archive');
-					$this->recordAudit('purchase_requests', $rid, 'update', $performedBy, ['archived' => false, 'pr_number' => $prNumber]);
+					$this->recordAudit('purchase_requests', $rid, 'update', $performedBy, array('archived' => false, 'pr_number' => $prNumber));
 				}
 			}
 			return $ok;
 		} catch (\Throwable $e) { return false; }
 	}
 
-	public function getRequestById(int $requestId): ?array
+	/**
+	 * @param int $requestId
+	 * @return array|null
+	 */
+	public function getRequestById($requestId)
 	{
 			$this->ensurePrColumns();
 			$stmt = $this->pdo->prepare(
-				'OPENAI_REDACTED SELECT request_id, item_id, branch_id, requested_by, assigned_to, request_type, quantity, unit, justification, status, priority, needed_by, created_at, updated_at, pr_number FROM purchase_requests WHERE request_id = :request_id LIMIT 1'
+				'SELECT request_id, item_id, branch_id, requested_by, assigned_to, request_type, quantity, unit, justification, status, priority, needed_by, created_at, updated_at, pr_number FROM purchase_requests WHERE request_id = :request_id LIMIT 1'
 			);
-		$stmt->execute(['request_id' => $requestId]);
+		$stmt->execute(array('request_id' => $requestId));
 
 		$row = $stmt->fetch();
 
 		if ($row) {
-			$row['justification'] = \App\Services\CryptoService::maybeDecrypt($row['justification'] ?? null, 'pr:' . (string)($row['pr_number'] ?? ''));
+			$just = isset($row['justification']) ? $row['justification'] : null;
+			$prn = isset($row['pr_number']) ? (string)$row['pr_number'] : '';
+			$row['justification'] = \App\Services\CryptoService::maybeDecrypt($just, 'pr:' . $prn);
 		}
 		return $row ?: null;
 	}
 
-	public function updateRequest(int $requestId, array $payload, int $performedBy): bool
+	/**
+	 * @param int $requestId
+	 * @param array $payload
+	 * @param int $performedBy
+	 * @return bool
+	 */
+	public function updateRequest($requestId, array $payload, $performedBy)
 	{
-		$columns = [];
-		$params = ['request_id' => $requestId, 'updated_by' => $performedBy];
-		$allowed = ['assigned_to', 'quantity', 'unit', 'justification', 'priority', 'needed_by'];
+		$columns = array();
+		$params = array('request_id' => $requestId, 'updated_by' => $performedBy);
+		$allowed = array('assigned_to', 'quantity', 'unit', 'justification', 'priority', 'needed_by');
 
 		foreach ($allowed as $field) {
 			if (array_key_exists($field, $payload)) {
@@ -429,7 +501,7 @@ class RequestService
 		}
 
 		if (isset($payload['status'])) {
-			return $this->updateRequestStatus($requestId, $payload['status'], $performedBy, $payload['notes'] ?? null);
+			return $this->updateRequestStatus($requestId, $payload['status'], $performedBy, isset($payload['notes']) ? $payload['notes'] : null);
 		}
 
 		if (!$columns) {
@@ -449,7 +521,15 @@ class RequestService
 		return $result;
 	}
 
-	public function updateRequestStatus(int $requestId, string $status, int $performedBy, ?string $notes = null, bool $suppressRequesterNotify = false): bool
+	/**
+	 * @param int $requestId
+	 * @param string $status
+	 * @param int $performedBy
+	 * @param string|null $notes
+	 * @param bool $suppressRequesterNotify
+	 * @return bool
+	 */
+	public function updateRequestStatus($requestId, $status, $performedBy, $notes = null, $suppressRequesterNotify = false)
 	{
 		$this->ensureRequestStatusEnum();
 		$current = $this->getRequestById($requestId);
@@ -461,11 +541,11 @@ class RequestService
 			'UPDATE purchase_requests SET status = :status, updated_by = :updated_by WHERE request_id = :request_id'
 		);
 
-		$result = $stmt->execute([
+		$result = $stmt->execute(array(
 			'status' => $status,
 			'updated_by' => $performedBy,
 			'request_id' => $requestId,
-		]);
+		));
 
 		if ($result) {
 			$this->recordEvent($requestId, $current['status'], $status, $performedBy, $notes);
@@ -490,7 +570,7 @@ class RequestService
 					// Send a message to all procurement roles
 					$recipients = $this->pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('procurement','procurement_manager')")->fetchAll();
 					$subject = ($status === 'canvassing_approved')
-						? ('PR ' . (string)($current['pr_number'] ?? (string)$requestId) . ' • Canvassing Approved')
+						? ('PR ' . (string)(isset($current['pr_number']) ? $current['pr_number'] : (string)$requestId) . ' • Canvassing Approved')
 						: ('Purchase Request #' . (string)$requestId . ' approved');
 					$body = ($status === 'canvassing_approved')
 						? 'Canvassing has been approved by Admin. You may proceed to create the PO.'
@@ -515,11 +595,11 @@ class RequestService
 				try {
 					$this->ensureMessagesTable();
 					$label = $this->statusLabel($status);
-					$pr = (string)($current['pr_number'] ?? (string)$requestId);
+					$pr = (string)(isset($current['pr_number']) ? $current['pr_number'] : (string)$requestId);
 					$items = $this->buildItemsSummaryForPr($pr);
 					$subject = 'PR ' . $pr . ' • ' . $label;
 					$body = 'PR ' . $pr . ' status update: ' . $label . ".\n\nItems Requested:\n" . $items . ($notes ? "\n\nNotes: " . $notes : '');
-					$this->sendMessage((int)$performedBy, (int)($current['requested_by'] ?? 0), $subject, $body);
+					$this->sendMessage((int)$performedBy, (int)(isset($current['requested_by']) ? $current['requested_by'] : 0), $subject, $body);
 				} catch (\Throwable $ignored) {}
 			}
 		}
@@ -527,7 +607,13 @@ class RequestService
 		return $result;
 	}
 
-	public function followUpRequest(int $requestId, int $performedBy, ?string $notes = null): bool
+	/**
+	 * @param int $requestId
+	 * @param int $performedBy
+	 * @param string|null $notes
+	 * @return bool
+	 */
+	public function followUpRequest($requestId, $performedBy, $notes = null)
 	{
 		$request = $this->getRequestById($requestId);
 		if (!$request) {
@@ -536,71 +622,94 @@ class RequestService
 
 		$message = $notes ?: 'Follow-up submitted by admin assistant';
 
-		$this->recordAudit('purchase_requests', $requestId, 'update', $performedBy, ['follow_up' => $message]);
+		$this->recordAudit('purchase_requests', $requestId, 'update', $performedBy, array('follow_up' => $message));
 
 		return $this->recordEvent($requestId, $request['status'], $request['status'], $performedBy, $message);
 	}
 
-	public function getRequestHistory(int $requestId): array
+	/**
+	 * @param int $requestId
+	 * @return array
+	 */
+	public function getRequestHistory($requestId)
 	{
 		$stmt = $this->pdo->prepare(
-			'OPENAI_REDACTED SELECT event_id, old_status, new_status, notes, performed_by, performed_at FROM purchase_request_events WHERE request_id = :request_id ORDER BY performed_at DESC'
+			'SELECT event_id, old_status, new_status, notes, performed_by, performed_at FROM purchase_request_events WHERE request_id = :request_id ORDER BY performed_at DESC'
 		);
 
-		$stmt->execute(['request_id' => $requestId]);
+		$stmt->execute(array('request_id' => $requestId));
 
 		return $stmt->fetchAll();
 	}
 
-	private function recordEvent(int $requestId, ?string $oldStatus, ?string $newStatus, int $performedBy, ?string $notes): bool
+	/**
+	 * @param int $requestId
+	 * @param string|null $oldStatus
+	 * @param string|null $newStatus
+	 * @param int $performedBy
+	 * @param string|null $notes
+	 * @return bool
+	 */
+	private function recordEvent($requestId, $oldStatus, $newStatus, $performedBy, $notes)
 	{
 		$stmt = $this->pdo->prepare(
-			'OPENAI_REDACTED INSERT INTO purchase_request_events (request_id, old_status, new_status, notes, performed_by) VALUES (:request_id, :old_status, :new_status, :notes, :performed_by)'
+			'INSERT INTO purchase_request_events (request_id, old_status, new_status, notes, performed_by) VALUES (:request_id, :old_status, :new_status, :notes, :performed_by)'
 		);
 
-		return $stmt->execute([
+		return $stmt->execute(array(
 			'request_id' => $requestId,
 			'old_status' => $oldStatus,
 			'new_status' => $newStatus,
 			'notes' => $notes,
 			'performed_by' => $performedBy,
-		]);
+		));
 	}
 
-	private function recordAudit(string $tableName, int $recordId, string $action, int $performedBy, array $payload = []): void
+	/**
+	 * @param string $tableName
+	 * @param int $recordId
+	 * @param string $action
+	 * @param int $performedBy
+	 * @param array $payload
+	 * @return void
+	 */
+	private function recordAudit($tableName, $recordId, $action, $performedBy, $payload = array())
 	{
 		$jsonPayload = null;
 		if (!empty($payload)) {
-			try {
-				$jsonPayload = json_encode($payload, JSON_THROW_ON_ERROR);
-			} catch (JsonException $exception) {
-				$jsonPayload = json_encode([
-					'serialization_error' => $exception->getMessage(),
-				]);
-			}
+			$jsonPayload = json_encode($payload);
 		}
 
 		$stmt = $this->pdo->prepare(
-			'OPENAI_REDACTED INSERT INTO audit_logs (table_name, record_id, action, payload, performed_by) VALUES (:table_name, :record_id, :action, :payload, :performed_by)'
+			'INSERT INTO audit_logs (table_name, record_id, action, payload, performed_by) VALUES (:table_name, :record_id, :action, :payload, :performed_by)'
 		);
 
-		$stmt->execute([
+		$stmt->execute(array(
 			'table_name' => $tableName,
 			'record_id' => $recordId,
 			'action' => $action,
 			'payload' => $jsonPayload,
 			'performed_by' => $performedBy,
-		]);
+		));
 	}
 
 	/** Consolidated notify for all requesters of a PR group after a group status update. */
-	private function notifyRequestersForGroup(string $prNumber, string $status, ?string $notes, int $performedBy): void
+	/**
+	 * @param string $prNumber
+	 * @param string $status
+	 * @param string|null $notes
+	 * @param int $performedBy
+	 * @return void
+	 */
+	private function notifyRequestersForGroup($prNumber, $status, $notes, $performedBy)
 	{
 		try {
 			$this->ensureMessagesTable();
 			$st = $this->pdo->prepare("SELECT DISTINCT requested_by FROM purchase_requests WHERE pr_number = :pr");
-			$st->execute(['pr' => $prNumber]);
-			$recipients = array_map(static fn($r) => (int)$r['requested_by'], $st->fetchAll() ?: []);
+			$st->execute(array('pr' => $prNumber));
+			$recipients = array();
+			$rows = $st->fetchAll() ?: array();
+			foreach ($rows as $r) { $recipients[] = (int)$r['requested_by']; }
 			if (!$recipients) { return; }
 			$label = $this->statusLabel($status);
 			$items = $this->buildItemsSummaryForPr($prNumber);
@@ -613,7 +722,8 @@ class RequestService
 	}
 
 	/** Create messages table if needed (with attachment columns). */
-	private function ensureMessagesTable(): void
+	/** @return void */
+	private function ensureMessagesTable()
 	{
 		try {
 			$this->pdo->exec('CREATE TABLE IF NOT EXISTS messages (
@@ -631,33 +741,55 @@ class RequestService
 	}
 
 	/** Send a message (best-effort). */
-	public function sendMessage(int $senderId, int $recipientId, string $subject, string $body, ?string $attachmentName = null, ?string $attachmentPath = null): void
+	/**
+	 * @param int $senderId
+	 * @param int $recipientId
+	 * @param string $subject
+	 * @param string $body
+	 * @param string|null $attachmentName
+	 * @param string|null $attachmentPath
+	 * @return void
+	 */
+	public function sendMessage($senderId, $recipientId, $subject, $body, $attachmentName = null, $attachmentPath = null)
 	{
 		if ($recipientId <= 0) { return; }
 		try {
 			$this->ensureMessagesTable();
 			$sql = 'INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)';
 			$st = $this->pdo->prepare($sql);
-			$st->execute(['s' => $senderId ?: null, 'r' => $recipientId, 'j' => $subject, 'b' => $body, 'an' => $attachmentName, 'ap' => $attachmentPath]);
+			$st->execute(array('s' => $senderId ?: null, 'r' => $recipientId, 'j' => $subject, 'b' => $body, 'an' => $attachmentName, 'ap' => $attachmentPath));
 		} catch (\Throwable $ignored) {}
 	}
 
 	/** Build items summary string for a PR group. */
-	private function buildItemsSummaryForPr(string $prNumber): string
+	/**
+	 * @param string $prNumber
+	 * @return string
+	 */
+	private function buildItemsSummaryForPr($prNumber)
 	{
 		try {
 			$st = $this->pdo->prepare("SELECT i.name AS item_name, pr.quantity, pr.unit FROM purchase_requests pr LEFT JOIN inventory_items i ON i.item_id = pr.item_id WHERE pr.pr_number = :pr ORDER BY pr.created_at ASC");
-			$st->execute(['pr' => $prNumber]);
-			$lines = [];
-			foreach ($st->fetchAll() as $r) { $lines[] = ((string)($r['item_name'] ?? 'Item')) . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''); }
+			$st->execute(array('pr' => $prNumber));
+			$lines = array();
+			foreach ($st->fetchAll() as $r) {
+				$itemName = isset($r['item_name']) ? (string)$r['item_name'] : 'Item';
+				$qty = isset($r['quantity']) ? (string)$r['quantity'] : '0';
+				$unit = isset($r['unit']) ? (string)$r['unit'] : '';
+				$lines[] = $itemName . ' × ' . $qty . ' ' . $unit;
+			}
 			return implode("\n", $lines);
 		} catch (\Throwable $e) { return ''; }
 	}
 
 	/** Map status codes to human-friendly labels used in UI. */
-	private function statusLabel(string $status): string
+	/**
+	 * @param string $status
+	 * @return string
+	 */
+	private function statusLabel($status)
 	{
-		$labelMap = [
+		$labelMap = array(
 			'pending' => 'For Admin Approval',
 			'approved' => 'Approved',
 			'canvassing_submitted' => 'Canvassing Submitted',
@@ -667,12 +799,13 @@ class RequestService
 			'in_progress' => 'In Progress',
 			'completed' => 'Completed',
 			'cancelled' => 'Cancelled',
-		];
-		return $labelMap[$status] ?? $status;
+		);
+		return isset($labelMap[$status]) ? $labelMap[$status] : $status;
 	}
 
 	/** Ensure new columns used by grouped PRs exist. Safe to call often. */
-	private function ensurePrColumns(): void
+	/** @return void */
+	private function ensurePrColumns()
 	{
 		try {
 			$this->pdo->exec("ALTER TABLE purchase_requests
@@ -693,13 +826,13 @@ class RequestService
 			$count = (int)$this->pdo->query("SELECT COUNT(*) FROM purchase_requests WHERE pr_number IS NULL")->fetchColumn();
 			if ($count > 0) {
 				$stmt = $this->pdo->query("SELECT request_id, COALESCE(created_at, NOW()) AS created_at FROM purchase_requests WHERE pr_number IS NULL ORDER BY created_at ASC LIMIT 500");
-				$rows = $stmt ? $stmt->fetchAll() : [];
+				$rows = $stmt ? $stmt->fetchAll() : array();
 				if ($rows) {
 					$upd = $this->pdo->prepare("UPDATE purchase_requests SET pr_number = :pr WHERE request_id = :id");
 					foreach ($rows as $r) {
 						$year = (int)date('Y', strtotime((string)$r['created_at']));
 						$prNum = $this->generatePrNumberForYear($year);
-						try { $upd->execute(['pr' => $prNum, 'id' => (int)$r['request_id']]); } catch (\Throwable $ignored) {}
+						try { $upd->execute(array('pr' => $prNum, 'id' => (int)$r['request_id'])); } catch (\Throwable $ignored) {}
 					}
 				}
 			}
@@ -709,7 +842,8 @@ class RequestService
 	}
 
 	/** Ensure canvassing-related enum values exist in request_status (idempotent best-effort). */
-	private function ensureRequestStatusEnum(): void
+	/** @return void */
+	private function ensureRequestStatusEnum()
 	{
 		try {
 			// Fast path using DO block with IF checks and AFTER placement when supported
@@ -752,8 +886,9 @@ SQL);
 		} catch (\Throwable $e) {
 			// Fallback for environments where DO/AFTER may not be available
 			try {
-				$labels = $this->pdo->query("SELECT e.enumlabel FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid WHERE t.typname = 'request_status'")?->fetchAll(\PDO::FETCH_COLUMN) ?: [];
-				foreach (['canvassing_submitted','canvassing_approved','canvassing_rejected'] as $v) {
+				$labelsStmt = $this->pdo->query("SELECT e.enumlabel FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid WHERE t.typname = 'request_status'");
+				$labels = $labelsStmt ? $labelsStmt->fetchAll(\PDO::FETCH_COLUMN) : array();
+				foreach (array('canvassing_submitted','canvassing_approved','canvassing_rejected') as $v) {
 					if (!in_array($v, $labels, true)) {
 						$this->pdo->exec("ALTER TYPE request_status ADD VALUE '" . $v . "'");
 					}
@@ -763,7 +898,8 @@ SQL);
 	}
 
 	/** Ensure revision-related columns exist for grouped PR flow. */
-	private function ensureRevisionColumns(): void
+	/** @return void */
+	private function ensureRevisionColumns()
 	{
 		try {
 			$this->pdo->exec("ALTER TABLE purchase_requests
