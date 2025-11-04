@@ -623,43 +623,117 @@ class PDFService
 	 */
 	public function generateCanvassingPDFToFile(string $prNumber, array $items, array $supplierNames, string $filePath): void
 	{
-		$mpdf = new Mpdf(['format' => 'A4', 'orientation' => 'L', 'margin_left' => 10, 'margin_right' => 10, 'margin_top' => 10, 'margin_bottom' => 10]);
-		$colCount = max(3, min(5, count($supplierNames)));
-		$names = array_slice(array_values($supplierNames), 0, $colCount);
-		// Header
-		$html = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">'
-			. '<div style="font-size:20px;font-weight:700;">Canvassing Form</div>'
-			. '<div style="font-size:12px;color:#64748b;">PR: ' . htmlspecialchars($prNumber) . '</div>'
-			. '</div>';
-		// Build table header
-		$html .= '<table width="100%" border="1" cellspacing="0" cellpadding="6">';
-		$html .= '<thead><tr>'
-			. '<th style="width:35%;text-align:left;">Specification</th>';
-		foreach ($names as $n) {
-			$html .= '<th style="text-align:left;">' . htmlspecialchars((string)$n) . '</th>';
+		// Match the PR look & structure (portrait) with the same header and sectioning
+		$mpdf = new Mpdf(['format' => 'A4', 'orientation' => 'P', 'margin_left' => 10, 'margin_right' => 10, 'margin_top' => 10, 'margin_bottom' => 10]);
+
+		// Try to embed the same logo as PR
+		$root = @realpath(__DIR__ . '/../../');
+		$public = $root ? ($root . DIRECTORY_SEPARATOR . 'public') : null;
+		$cand = [];
+		if ($root) { $cand[] = $root . DIRECTORY_SEPARATOR . 'logo.png'; }
+		if ($public) {
+			$cand[] = $public . DIRECTORY_SEPARATOR . 'logo.png';
+			$cand[] = $public . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'logo.png';
 		}
-		// Pad to consistent 5 columns visually
-		for ($i = count($names); $i < 5; $i++) { $html .= '<th style="text-align:left;">&nbsp;</th>'; }
-		$html .= '</tr></thead><tbody>';
-		// Item rows
+		$cand[] = ($public ? $public : (__DIR__ . '/../../public')) . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'pocc-logo.svg';
+		$logoHtml = '';
+		foreach ($cand as $p) {
+			if (@is_file($p)) {
+				$data = @file_get_contents($p);
+				if ($data !== false) {
+					$mime = (strtolower(substr($p, -4)) === '.svg') ? 'image/svg+xml' : 'image/png';
+					$src = 'data:' . $mime . ';base64,' . base64_encode($data);
+					$logoHtml = '<div style="text-align:center;margin-bottom:6px;"><img src="' . $src . '" width="56" height="56" /></div>';
+					break;
+				}
+			}
+		}
+
+		$topTitle = '<div style="text-align:center;font-size:14px;font-weight:700;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
+			. '<div style="height:1px;background:#000;margin:6px 0 8px 0;"></div>';
+		$revRow = '<table width="100%" border="0" cellspacing="0" cellpadding="2" style="font-size:9px;margin-bottom:6px;">'
+			. '<tr>'
+			. '<td style="width:15%;">Rev. No.</td>'
+			. '<td style="width:25%;border-bottom:1px solid #444;">&nbsp;</td>'
+			. '<td style="width:10%;"></td>'
+			. '<td style="width:15%;">Effective Date:</td>'
+			. '<td style="width:25%;border-bottom:1px solid #444;">' . htmlspecialchars(date('Y-m-d')) . '</td>'
+			. '</tr>'
+			. '</table>';
+		$titleRow = '<div style="text-align:center;font-size:11px;font-weight:700;">CANVASSING</div>'
+			. '<div style="text-align:center;font-size:11px;font-style:italic;margin-top:2px;">PURCHASE REQUISITION NO. <span style="font-size:14px;font-weight:700;border-bottom:1px solid #444;padding:0 48px;">' . htmlspecialchars($prNumber) . '</span></div>';
+
+		// Items table (QUANTITY / SPECIFICATION) — same as PR
+		$rows = '';
 		foreach ($items as $it) {
-			$html .= '<tr>'
-				. '<td>' . htmlspecialchars((string)$it) . '</td>';
-			for ($i = 0; $i < max($colCount, 5); $i++) { $html .= '<td>&nbsp;</td>'; }
-			$html .= '</tr>';
+			// Items come as simple strings "Name × Qty Unit"; split best-effort
+			$label = (string)$it;
+			$desc = htmlspecialchars($label, ENT_QUOTES, 'UTF-8');
+			$rows .= '<tr>'
+				. '<td style="text-align:center;width:8%;">&nbsp;</td>'
+				. '<td style="text-align:center;width:10%;">&nbsp;</td>'
+				. '<td style="text-align:center;width:10%;">&nbsp;</td>'
+				. '<td style="text-align:center;width:10%;">&nbsp;</td>'
+				. '<td style="width:62%;">' . $desc . '</td>'
+				. '</tr>';
 		}
-		// Awarded section
-		$html .= '<tr>'
-			. '<td style="font-weight:700;">AWARDED TO:</td>'
-			. '<td colspan="' . max($colCount, 5) . '">&nbsp;</td>'
-			. '</tr>';
-		$html .= '</tbody></table>';
-		// Signatures
-		$html .= '<div style="display:flex;justify-content:space-between;margin-top:12px;">'
-			. '<div style="width:32%;text-align:center;"><div style="height:48px;"></div><div style="border-top:1px solid #999;padding-top:6px;">Prepared by</div></div>'
-			. '<div style="width:32%;text-align:center;"><div style="height:48px;"></div><div style="border-top:1px solid #999;padding-top:6px;">Checked by</div></div>'
-			. '<div style="width:32%;text-align:center;"><div style="height:48px;"></div><div style="border-top:1px solid #999;padding-top:6px;">Approved by</div></div>'
+		$itemsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="4" style="margin-top:6px;">'
+			. '<thead>'
+			. '<tr>'
+			. '<th colspan="4" style="text-align:center;">QUANTITY</th>'
+			. '<th style="text-align:center;">SPECIFICATION</th>'
+			. '</tr>'
+			. '<tr>'
+			. '<th style="text-align:center;">Stock on hand</th>'
+			. '<th style="text-align:center;">Usage per Month</th>'
+			. '<th style="text-align:center;">Qty. Needed</th>'
+			. '<th style="text-align:center;">Unit</th>'
+			. '<th style="text-align:center;">DESCRIPTION</th>'
+			. '</tr>'
+			. '</thead>'
+			. '<tbody>' . $rows . '</tbody>'
+			. '</table>';
+
+		// CANVASSING block with Supplier 1..3 and Awarded To — large space for quotes
+		$labels = ['SUPPLIER 1', 'SUPPLIER 2', 'SUPPLIER 3'];
+		$colHeads = '';
+		for ($i = 0; $i < 3; $i++) { $colHeads .= '<th style="text-align:center;">' . $labels[$i] . '</th>'; }
+		$cells = '';
+		for ($i = 0; $i < 3; $i++) {
+			$nm = isset($supplierNames[$i]) ? htmlspecialchars((string)$supplierNames[$i], ENT_QUOTES, 'UTF-8') : '&nbsp;';
+			$cells .= '<td style="vertical-align:top;"><div style="font-weight:700;margin-bottom:4px;text-align:center;">' . $nm . '</div><div style="height:120px;">&nbsp;</div></td>';
+		}
+		$canvassing = '<div style="text-align:center;font-weight:700;margin:8px 0 4px;">CANVASSING</div>'
+			. '<table width="100%" border="1" cellspacing="0" cellpadding="6">'
+			. '<thead><tr>' . $colHeads . '<th style="text-align:center;">AWARDED TO</th></tr></thead>'
+			. '<tbody><tr>' . $cells . '<td style="vertical-align:top;"><div style="height:120px;">&nbsp;</div></td></tr></tbody>'
+			. '</table>';
+
+		// Attachments / Additional instruction (same as PR)
+		$attachments = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
+			. '<tr><td style="width:18%;">Attachments / Additional instruction:</td><td>&nbsp;</td></tr>'
+			. '</table>';
+
+		// Signatures similar to PR (Requisition / Noted / Approved for Purchase)
+		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="10" style="margin-top:6px;">'
+			. '<tr>'
+			. '<td style="width:33%;vertical-align:bottom;"><div style="height:38px;"></div><div style="border-top:1px solid #999;text-align:center;padding-top:6px;">Requisition By:</div></td>'
+			. '<td style="width:33%;vertical-align:bottom;"><div style="height:38px;"></div><div style="border-top:1px solid #999;text-align:center;padding-top:6px;">Noted By:</div></td>'
+			. '<td style="width:34%;vertical-align:bottom;"><div style="height:38px;"></div><div style="border-top:1px solid #999;text-align:center;padding-top:6px;">Approved for Purchase:</div></td>'
+			. '</tr>'
+			. '<tr>'
+			. '<td style="text-align:center;">Date</td>'
+			. '<td style="text-align:center;">Date</td>'
+			. '<td style="text-align:center;">Date</td>'
+			. '</tr>'
+			. '</table>';
+
+		$distribution = '<div style="margin-top:6px;font-size:9px;display:flex;justify-content:space-between;">'
+			. '<div>Distribution: ORIGINAL - Administrator</div>'
+			. '<div>Duplicate: Requesting Section</div>'
 			. '</div>';
+
+		$html = $logoHtml . $topTitle . $revRow . $titleRow . $itemsTable . $canvassing . $attachments . $sign . $distribution;
 		$mpdf->WriteHTML($html);
 		$mpdf->Output($filePath, 'F');
 	}
