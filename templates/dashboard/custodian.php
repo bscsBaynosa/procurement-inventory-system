@@ -50,7 +50,17 @@
     <?php require __DIR__ . '/../layouts/_sidebar.php'; ?>
     <main class="content">
     <?php
-        $first = isset($me_first) && $me_first !== '' ? $me_first : (isset($_SESSION['full_name']) ? explode(' ', (string)$_SESSION['full_name'])[0] : 'User');
+        // Derive first name safely without direct array-dereferencing on function call for broader PHP compatibility
+        $first = 'User';
+        if (isset($me_first) && $me_first !== '') {
+            $first = (string)$me_first;
+        } else {
+            $fullNameTmp = isset($_SESSION['full_name']) ? (string)$_SESSION['full_name'] : '';
+            if ($fullNameTmp !== '') {
+                $partsTmp = explode(' ', $fullNameTmp);
+                $first = isset($partsTmp[0]) && $partsTmp[0] !== '' ? (string)$partsTmp[0] : 'User';
+            }
+        }
         $unread = (int)($unread_count ?? 0);
         $avatarData = '';
         if (!empty($avatar_path) && is_file($avatar_path)) {
