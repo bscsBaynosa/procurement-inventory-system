@@ -178,6 +178,8 @@ class PDFService
 			.table { border:1px solid #000; border-radius:10px; overflow:hidden; }
 			th, td { font-size:10pt; }
 			thead th { background:#f0f0f0; font-weight:700; }
+			thead { display: table-header-group; }
+			tfoot { display: table-footer-group; }
 			.h1 { font-size:13pt; font-weight:800; }
 			.small { font-size:8.5pt; color:#333; }
 		</style>';
