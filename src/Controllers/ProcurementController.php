@@ -416,6 +416,7 @@ class ProcurementController extends BaseController
         $suppliers = $pdo->query("SELECT user_id, full_name FROM users WHERE is_active = TRUE AND role = 'supplier' ORDER BY full_name ASC")->fetchAll();
         // Optional: price matrix from supplier_items matched by item name (case-insensitive)
         $prices = [];
+            $prices = [];
         try {
             // Collect distinct, non-empty item names and required quantities per item
             $byNameQty = [];
@@ -436,8 +437,8 @@ class ProcurementController extends BaseController
                 $sql = 'SELECT id, supplier_id, LOWER(name) AS lname, price, unit, package_label, pieces_per_package FROM supplier_items WHERE supplier_id IN (' . $inSup . ') AND LOWER(name) IN (' . $inNames . ')';
                 $st = $pdo->prepare($sql);
                 $st->execute($params);
-                $itemsById = [];
-                $ids = [];
+                    $itemsById = [];
+                    $ids = [];
                 foreach ($st->fetchAll() as $row) {
                     $itemsById[(int)$row['id']] = $row;
                     $ids[] = (int)$row['id'];
@@ -468,6 +469,50 @@ class ProcurementController extends BaseController
                     if (!isset($prices[$sid])) { $prices[$sid] = []; }
                     if (!isset($prices[$sid][$lname]) || $best < $prices[$sid][$lname]) { $prices[$sid][$lname] = $best; }
                 }
+                    // Fuzzy fallback: for items not found by exact match, try token-based ILIKE queries
+                    $foundNames = [];
+                    foreach ($prices as $sid0 => $map0) { foreach ($map0 as $nm0 => $_) { $foundNames[$nm0] = true; } }
+                    $toFind = array_values(array_filter($names, static fn($nm) => !isset($foundNames[$nm])));
+                    foreach ($toFind as $nm) {
+                        // Build up to 3 significant tokens (length>=3)
+                        $tokens = preg_split('/[^a-z0-9]+/i', (string)$nm) ?: [];
+                        $tokens = array_values(array_filter(array_map('strtolower', $tokens), static fn($t) => strlen($t) >= 3));
+                        if (!$tokens) { continue; }
+                        $tokens = array_slice($tokens, 0, 3);
+                        $cond = [];
+                        $params2 = [];
+                        // supplier filter first
+                        $cond[] = 'supplier_id IN (' . $inSup . ')';
+                        foreach ($suppliers as $s) { $params2[] = (int)$s['user_id']; }
+                        foreach ($tokens as $t) { $cond[] = 'LOWER(name) ILIKE ?'; $params2[] = '%' . $t . '%'; }
+                        $sql2 = 'SELECT id, supplier_id, LOWER(name) AS lname, price, unit, package_label, pieces_per_package FROM supplier_items WHERE ' . implode(' AND ', $cond);
+                        $st2 = $pdo->prepare($sql2);
+                        $st2->execute($params2);
+                        foreach ($st2->fetchAll() as $it) {
+                            $sid = (int)$it['supplier_id'];
+                            $basePrice = (float)($it['price'] ?? 0);
+                            $piecesPerPkg = max(1, (int)($it['pieces_per_package'] ?? 1));
+                            $neededPieces = max(0, (int)($byNameQty[$nm] ?? 0));
+                            $neededPkgs = $piecesPerPkg > 0 ? (int)ceil($neededPieces / $piecesPerPkg) : 0;
+                            $best = $basePrice;
+                            if ($neededPkgs > 0) {
+                                try {
+                                    $tq = $pdo->prepare('SELECT min_packages, max_packages, price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC');
+                                    $tq->execute(['id' => (int)$it['id']]);
+                                    foreach ($tq->fetchAll() as $t) {
+                                        $min = (int)$t['min_packages'];
+                                        $max = $t['max_packages'] !== null ? (int)$t['max_packages'] : null;
+                                        if ($neededPkgs >= $min && ($max === null || $neededPkgs <= $max)) {
+                                            $best = min($best, (float)$t['price_per_package']);
+                                        }
+                                    }
+                                } catch (\Throwable $e) {}
+                            }
+                            if (!isset($prices[$sid])) { $prices[$sid] = []; }
+                            // Map this fuzzy match under the canonical item name key ($nm)
+                            if (!isset($prices[$sid][$nm]) || $best < $prices[$sid][$nm]) { $prices[$sid][$nm] = $best; }
+                        }
+                    }
             }
         } catch (\Throwable $ignored) { /* supplier_items may not exist yet; ignore */ }
         $this->render('procurement/canvass_form.php', [ 'pr' => $pr, 'rows' => $rows, 'suppliers' => $suppliers, 'prices' => $prices ]);

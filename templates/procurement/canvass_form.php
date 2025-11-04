@@ -20,14 +20,20 @@
         .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:0 12px; height:var(--control-h); min-width:120px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); text-decoration:none; font-size:12px; cursor:pointer; }
         .btn.primary{ border-color: color-mix(in oklab, var(--accent) 35%, var(--border)); background: color-mix(in oklab, var(--accent) 10%, transparent); }
         select{ padding:0 10px; height:var(--control-h); border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); }
-        .grid{ display:grid; grid-template-columns: repeat(auto-fill,minmax(240px,1fr)); gap:10px; }
+        .grid{ display:grid; grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); gap:14px; }
         ul{ margin:4px 0 0 18px; }
         pre{ margin:0; white-space:pre-wrap; }
-        table{ width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
-        th, td{ padding:10px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
-        th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); position:sticky; top:0; }
+        table{ width:100%; border-collapse:separate; border-spacing:0; background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
+        th, td{ padding:12px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
+        th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); position:sticky; top:0; z-index:1; }
+        thead th:first-child, tbody td:first-child{ position:sticky; left:0; background:color-mix(in oklab, var(--card) 96%, var(--bg)); z-index:2; }
+        thead th:first-child{ z-index:3; }
+        tbody tr:nth-child(odd) td{ background:color-mix(in oklab, var(--card) 98%, var(--bg)); }
         .dim{ opacity:0.45; }
         .best{ background:color-mix(in oklab, var(--accent) 12%, transparent); border-left:3px solid var(--accent); }
+        .totals{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
+        .total-pill{ padding:8px 10px; border:1px solid var(--border); border-radius:999px; background:color-mix(in oklab, var(--card) 96%, var(--bg)); font-size:13px; }
+        .total-pill.best{ border-color:color-mix(in oklab, var(--accent) 40%, var(--border)); background:color-mix(in oklab, var(--accent) 10%, transparent); }
     </style>
 </head>
 <body>
@@ -88,9 +94,9 @@
                     <table id="priceMatrix">
                         <thead>
                             <tr>
-                                <th style="min-width:260px;">Item</th>
+                                <th style="min-width:320px;">Item</th>
                                 <?php foreach ($supMap as $sid => $name): ?>
-                                    <th data-supplier-id="<?= (int)$sid ?>"><?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?></th>
+                                    <th style="min-width:140px;" data-supplier-id="<?= (int)$sid ?>"><?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?></th>
                                 <?php endforeach; ?>
                             </tr>
                         </thead>
@@ -108,6 +114,7 @@
                         </tbody>
                     </table>
                 </div>
+                <div id="totalsSummary" class="totals"></div>
             </div>
             <div style="margin-top:12px; display:flex; gap:8px;">
                 <button class="btn primary" type="submit">Generate and Send for Admin Approval</button>
@@ -116,6 +123,10 @@
         </form>
         <script>
             (function(){
+                const awardSel = document.getElementById('awardedSelect');
+                if (awardSel) {
+                    awardSel.addEventListener('change', function(){ this.dataset.userSet = '1'; });
+                }
                 function recalc() {
                     const selected = new Set(Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.getAttribute('data-supplier-id')));
                     const table = document.getElementById('priceMatrix');
@@ -127,6 +138,7 @@
                         if (selected.size === 0 || !selected.has(sid)) th.classList.add('dim'); else th.classList.remove('dim');
                     });
                     const rows = table.querySelectorAll('tbody tr');
+                    const totals = {};
                     rows.forEach(tr => {
                         // Clear previous best/dim
                         tr.querySelectorAll('td[data-supplier-id]').forEach(td => { td.classList.remove('best'); td.classList.remove('dim'); });
@@ -139,6 +151,7 @@
                             const price = priceStr === '' ? NaN : parseFloat(priceStr);
                             if (selected.size > 0 && !selected.has(sid)) { td.classList.add('dim'); }
                             if (selected.size > 0 && selected.has(sid) && !isNaN(price)) { if (price < min) min = price; }
+                            if (selected.size > 0 && selected.has(sid) && !isNaN(price)) { totals[sid] = (totals[sid] || 0) + price; }
                         });
                         if (min !== Infinity) {
                             tds.forEach(td => {
@@ -150,7 +163,6 @@
                         }
                     });
                     // Disable unselected options in Awarded select
-                    const awardSel = document.getElementById('awardedSelect');
                     if (awardSel) {
                         Array.from(awardSel.options).forEach(opt => {
                             const val = opt.value;
@@ -161,6 +173,28 @@
                         if (awardSel.value && awardSel.options[awardSel.selectedIndex] && awardSel.options[awardSel.selectedIndex].disabled) {
                             awardSel.value = '';
                         }
+                        // Auto-pick cheapest total if user hasn't set manually
+                        let cheapestSid = null, cheapestTotal = Infinity;
+                        Object.keys(totals).forEach(sid => { if (totals[sid] < cheapestTotal) { cheapestTotal = totals[sid]; cheapestSid = sid; } });
+                        if (cheapestSid && (!awardSel.dataset.userSet || awardSel.value === '' || !selected.has(awardSel.value))) {
+                            awardSel.value = cheapestSid;
+                        }
+                    }
+                    // Render totals summary pills
+                    const sumEl = document.getElementById('totalsSummary');
+                    if (sumEl) {
+                        sumEl.innerHTML = '';
+                        // find min among selected
+                        let minVal = Infinity; Object.values(totals).forEach(v => { if (v < minVal) minVal = v; });
+                        const headerMap = {}; // supplier id -> name from table headers
+                        headers.forEach(th => { headerMap[th.getAttribute('data-supplier-id')] = th.textContent.trim(); });
+                        Object.keys(totals).sort((a,b)=>totals[a]-totals[b]).forEach(sid => {
+                            const val = totals[sid];
+                            const pill = document.createElement('span');
+                            pill.className = 'total-pill' + (Math.abs(val - minVal) < 1e-9 ? ' best' : '');
+                            pill.textContent = (headerMap[sid] || ('Supplier ' + sid)) + ': ₱ ' + val.toLocaleString(undefined, {minimumFractionDigits:2, maximumFractionDigits:2});
+                            sumEl.appendChild(pill);
+                        });
                     }
                 }
                 document.querySelectorAll('.supplier-choice').forEach(cb => cb.addEventListener('change', recalc));
@@ -173,7 +207,6 @@
                         return;
                     }
                     // Validate awarded_to is among selected if provided
-                    const awardSel = document.getElementById('awardedSelect');
                     if (awardSel && awardSel.value) {
                         const selSet = new Set(Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.value));
                         if (!selSet.has(awardSel.value)) {
