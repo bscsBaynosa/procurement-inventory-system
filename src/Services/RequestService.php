@@ -772,34 +772,11 @@ SQL);
 		} catch (\Throwable $e) {}
 	}
 }
-?>
 <?php
-
-namespace App\Services;
-
-use App\Database\Connection;
-use JsonException;
-use PDO;
-
-class RequestService
-{
-	private PDO $pdo;
-
-	public function __construct(?PDO $pdo = null)
-	{
-		$this->pdo = $pdo ?? Connection::resolve();
-		// Best-effort: ensure new columns exist so read paths don't fail on older schemas
-		$this->ensurePrColumns();
-		// Ensure enum values used by canvassing gate exist (safe to call often)
-		$this->ensureRequestStatusEnum();
-		// Ensure revision columns exist
-		$this->ensureRevisionColumns();
-	}
-
-	public function createPurchaseRequest(array $payload, int $userId): array
-	{
-		// Ensure archive-related columns exist (idempotent)
-		try {
+// Stub file: canonical Services live in src/services/*. This file intentionally declares no classes.
+// Left in repo only to avoid autoload surprises on case-sensitive deploys.
+// If included accidentally, it does nothing.
+return;
 			$this->pdo->exec("ALTER TABLE purchase_requests
 				ADD COLUMN IF NOT EXISTS pr_number VARCHAR(32),
 				ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE,

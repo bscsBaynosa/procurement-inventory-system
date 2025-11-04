@@ -17,8 +17,20 @@ spl_autoload_register(static function (string $class): void {
 	if (strpos($class, 'App\\') !== 0) {
 		return;
 	}
-	$relative = str_replace('App\\', '', $class);
-	$relative = str_replace('\\', '/', $relative);
+	// Prefer lowercase services path explicitly to avoid case conflicts
+	$ns = substr($class, 4); // strip 'App\'
+	$parts = explode('\\', $ns);
+	if (isset($parts[0]) && strtolower($parts[0]) === 'services') {
+		$tail = implode('/', array_slice($parts, 1));
+		$candidateLower = __DIR__ . '/../src/services/' . $tail . '.php';
+		if (is_file($candidateLower)) {
+			require_once $candidateLower;
+			return;
+		}
+		// Intentionally do NOT load src/Services/* to prevent duplicate class conflicts
+	}
+	// Default fallback for other namespaces (Controllers, Models, etc.)
+	$relative = str_replace('\\', '/', $ns);
 	$candidate = __DIR__ . '/../src/' . $relative . '.php';
 	if (is_file($candidate)) {
 		require_once $candidate;

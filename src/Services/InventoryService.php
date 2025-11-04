@@ -245,34 +245,11 @@ class InventoryService
 			GROUP BY 1
 		)
 		SELECT cats.category, COALESCE(agg.suppliers, 0) AS suppliers
-		FROM cats
-		LEFT JOIN agg ON agg.category = cats.category
-		ORDER BY cats.category ASC";
-		try {
-			$st = $this->pdo->prepare($sql);
-			$st->execute($params);
-			return $st->fetchAll(PDO::FETCH_ASSOC);
-		} catch (\Throwable $e) {
-			// If supplier_items table doesn't exist yet, return zeros
-			$out = [];
-			foreach ($cats as $c) { $out[] = ['category' => $c, 'suppliers' => 0]; }
-			return $out;
-		}
-	}
-
-	private function hasMaintainingColumn(): bool
-	{
-		if (self::$hasMaintaining !== null) { return self::$hasMaintaining; }
-		try {
-			$sql = "SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'inventory_items' AND column_name = 'maintaining_quantity'";
-			$stmt = $this->pdo->query($sql);
-			self::$hasMaintaining = (bool)$stmt->fetchColumn();
-		} catch (\Throwable $e) {
-			self::$hasMaintaining = false;
-		}
-		return self::$hasMaintaining;
-	}
-}
+		<?php
+		// Stub file: canonical Services live in src/services/*. This file intentionally declares no classes.
+		// Left in repo only to avoid autoload surprises on case-sensitive deploys.
+		// If included accidentally, it does nothing.
+		return;
 ?>
 <?php
 
