@@ -1,6 +1,6 @@
 <?php
 if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
-$role = $_SESSION['role'] ?? 'guest';
+$role = isset($_SESSION['role']) ? $_SESSION['role'] : 'guest';
 // Normalize legacy roles to new naming
 function norm_role($r){
     if ($r === 'custodian') return 'admin_assistant';
@@ -8,8 +8,10 @@ function norm_role($r){
     return $r;
 }
 $role = norm_role($role);
-$meName = $_SESSION['full_name'] ?? null;
-$path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+$meName = isset($_SESSION['full_name']) ? $_SESSION['full_name'] : null;
+$__req_uri = isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '/';
+$path = parse_url($__req_uri, PHP_URL_PATH);
+if (!$path) { $path = '/'; }
 
 $brand = 'Dashboard';
 if ($role === 'admin') { $brand = 'Administrator'; }
