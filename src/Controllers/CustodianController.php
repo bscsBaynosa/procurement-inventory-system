@@ -669,9 +669,23 @@ class CustodianController extends BaseController
                     'stock_on_hand' => isset($row['stock_on_hand']) ? (int)$row['stock_on_hand'] : null,
                 ];
             }
-            // Generate PDF
-            $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
-            if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+            // Generate PDF to a writable directory (prefer app storage; fallback to system temp like /tmp)
+            $candidates = [];
+            $appRootReal = @realpath(__DIR__ . '/../../..');
+            if (is_string($appRootReal) && $appRootReal !== '') {
+                $candidates[] = $appRootReal . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
+            }
+            // Non-realpath fallback (in case realpath fails on certain hosts)
+            $candidates[] = __DIR__ . '/../../..' . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
+            // System temp directory (always writable on Heroku: /tmp)
+            $candidates[] = sys_get_temp_dir();
+
+            $dir = null;
+            foreach ($candidates as $cand) {
+                if (!is_dir($cand)) { @mkdir($cand, 0777, true); }
+                if (@is_dir($cand) && @is_writable($cand)) { $dir = $cand; break; }
+            }
+            if ($dir === null) { $dir = sys_get_temp_dir(); }
             $fileBase = 'pr_' . $pr . '_' . date('Ymd_His') . '.pdf';
             $abs = $dir . DIRECTORY_SEPARATOR . $fileBase;
             $pdf = new \App\Services\PDFService();
@@ -689,7 +703,7 @@ class CustodianController extends BaseController
                 $this->requests()->sendMessage($me, $me, 'Copy: Purchase Request of ' . $branchName . ' • PR ' . $pr, 'Generated PDF copy for your records.', basename($fileBase), $abs);
             } catch (\Throwable $e) {}
             // Stream inline to browser (new tab) so user immediately sees the PDF
-            if (is_file($abs)) {
+            if (is_file($abs) && (int)@filesize($abs) > 0) {
                 header('Content-Type: application/pdf');
                 header('Content-Disposition: inline; filename="' . basename($fileBase) . '"');
                 $len = @filesize($abs);
