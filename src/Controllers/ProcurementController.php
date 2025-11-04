@@ -577,12 +577,23 @@ class ProcurementController extends BaseController
                 'qty' => (int)($r['quantity'] ?? 0),
             ];
         }
-        // Generate to a temp file and stream inline
-        $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
-        if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
-        $file = $dir . DIRECTORY_SEPARATOR . 'PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '.pdf';
-        $this->pdf()->generatePurchaseRequisitionToFile($meta, $items, $file);
-        if (!is_file($file)) { header('Location: /manager/requests'); return; }
+        // Generate to a writable folder and stream inline (storage/pdf with fallback to system temp)
+        $root = realpath(__DIR__ . '/../../..');
+        $priorities = [];
+        if ($root) { $priorities[] = $root . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf'; }
+        $priorities[] = sys_get_temp_dir();
+        $file = null; $ok = false;
+        foreach ($priorities as $d) {
+            if (!is_dir($d)) { @mkdir($d, 0777, true); }
+            if (is_dir($d) && is_writable($d)) {
+                $candidate = $d . DIRECTORY_SEPARATOR . 'PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '.pdf';
+                try {
+                    $this->pdf()->generatePurchaseRequisitionToFile($meta, $items, $candidate);
+                    if (@is_file($candidate) && (@filesize($candidate) ?: 0) > 0) { $file = $candidate; $ok = true; break; }
+                } catch (\Throwable $ignored) {}
+            }
+        }
+        if (!$ok || $file === null) { header('Location: /manager/requests?error=' . rawurlencode('PDF+generation+failed')); return; }
         $size = @filesize($file) ?: null;
         header('Content-Type: application/pdf');
         header('Content-Disposition: inline; filename="' . rawurlencode('PR-' . $pr . '.pdf') . '"');
