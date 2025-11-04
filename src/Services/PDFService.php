@@ -142,11 +142,27 @@ class PDFService
 		$just = nl2br(htmlspecialchars($justRaw, ENT_QUOTES, 'UTF-8'));
 		$need = htmlspecialchars((string)($meta['needed_by'] ?? ''), ENT_QUOTES, 'UTF-8');
 
-		// Try to include the hospital logo if available
-		$logoPath = realpath(__DIR__ . '/../../public/img/pocc-logo.svg');
+		// Try to include the same logo used for favicon (logo.png in root/public or public/img), fallback to pocc-logo.svg
+		$root = @realpath(__DIR__ . '/../../');
+		$public = $root ? ($root . DIRECTORY_SEPARATOR . 'public') : null;
+		$cand = array();
+		if ($root) { $cand[] = $root . DIRECTORY_SEPARATOR . 'logo.png'; }
+		if ($public) {
+			$cand[] = $public . DIRECTORY_SEPARATOR . 'logo.png';
+			$cand[] = $public . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'logo.png';
+		}
+		$cand[] = ($public ? $public : (__DIR__ . '/../../public')) . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'pocc-logo.svg';
 		$logoHtml = '';
-		if ($logoPath && is_file($logoPath)) {
-			$logoHtml = '<div style="text-align:center;margin-bottom:6px;"><img src="' . $logoPath . '" width="48" height="48" /></div>';
+		foreach ($cand as $p) {
+			if (@is_file($p)) {
+				$data = @file_get_contents($p);
+				if ($data !== false) {
+					$mime = (strtolower(substr($p, -4)) === '.svg') ? 'image/svg+xml' : 'image/png';
+					$src = 'data:' . $mime . ';base64,' . base64_encode($data);
+					$logoHtml = '<div style="text-align:center;margin-bottom:6px;"><img src="' . $src . '" width="56" height="56" /></div>';
+					break;
+				}
+			}
 		}
 
 		$topTitle = '<div style="text-align:center;font-size:16px;font-weight:700;">Philippine Oncology Center Corporation</div>'
@@ -158,7 +174,7 @@ class PDFService
 			. '<td style="width:25%;border-bottom:1px solid #444;">&nbsp;</td>'
 			. '<td style="width:10%;"></td>'
 			. '<td style="width:15%;">Effective Date:</td>'
-			. '<td style="width:25%;border-bottom:1px solid #444;">&nbsp;</td>'
+			. '<td style="width:25%;border-bottom:1px solid #444;">' . htmlspecialchars((string)($meta['effective_date'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
 			. '</tr>'
 			. '</table>';
 
@@ -179,7 +195,7 @@ class PDFService
 			. '<td>Date Needed:</td>'
 			. '<td style="border-bottom:1px solid #444;">' . ($need !== '' ? $need : '&nbsp;') . '</td>'
 			. '<td style="text-align:right;">Date Received:</td>'
-			. '<td style="border-bottom:1px solid #444;">&nbsp;</td>'
+			. '<td style="border-bottom:1px solid #444;">' . htmlspecialchars((string)($meta['date_received'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
 			. '</tr>'
 			. '</table>';
 
@@ -236,8 +252,8 @@ class PDFService
 			. '<td style="width:40%;">Date:<div style="height:28px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:6px;">' . $prepAt . '</div></td>'
 			. '</tr>'
 			. '<tr>'
-			. '<td>Noted By:<div style="height:28px;"></div><div style="border-top:1px solid #999; padding-top:6px;">&nbsp;</div></td>'
-			. '<td>Date:<div style="height:28px;"></div><div style="border-top:1px solid #999; padding-top:6px;">&nbsp;</div></td>'
+			. '<td>Noted By:<div style="height:28px;"></div><div style="border-top:1px solid #999; padding-top:6px; text-align:center;">' . htmlspecialchars((string)($meta['noted_by'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div></td>'
+			. '<td>Date:<div style="height:28px;"></div><div style="border-top:1px solid #999; padding-top:6px; text-align:center;">' . htmlspecialchars((string)($meta['date_received'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div></td>'
 			. '</tr>'
 			. '</table>';
 

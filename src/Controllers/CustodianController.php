@@ -645,7 +645,9 @@ class CustodianController extends BaseController
         try {
             $pdo = \App\Database\Connection::resolve();
             // Load PR lines for this branch only
-            $st = $pdo->prepare('SELECT pr.item_id, pr.quantity, pr.unit, pr.branch_id, pr.requested_by, i.name AS item_name, i.unit AS default_unit, i.quantity AS stock_on_hand
+            $st = $pdo->prepare('SELECT pr.item_id, pr.quantity, pr.unit, pr.branch_id, pr.requested_by,
+                                         pr.created_at, pr.needed_by, pr.justification,
+                                         i.name AS item_name, i.unit AS default_unit, i.quantity AS stock_on_hand
                                  FROM purchase_requests pr 
                                  LEFT JOIN inventory_items i ON i.item_id = pr.item_id
                                  WHERE pr.pr_number = :pr AND (:b = 0 OR pr.branch_id = :b)
@@ -661,6 +663,10 @@ class CustodianController extends BaseController
             }
             $byName = (string)($_SESSION['full_name'] ?? ('User #' . $me));
             $itemLines = [];
+            $effectiveDate = '';
+            $neededBy = '';
+            $justification = '';
+            $first = true;
             foreach ($lines as $row) {
                 $itemLines[] = [
                     'description' => (string)($row['item_name'] ?? 'Item'),
@@ -668,7 +674,32 @@ class CustodianController extends BaseController
                     'qty' => (int)($row['quantity'] ?? 0),
                     'stock_on_hand' => isset($row['stock_on_hand']) ? (int)$row['stock_on_hand'] : null,
                 ];
+                if ($first) {
+                    // Use earliest created_at as Effective Date
+                    if (!empty($row['created_at'])) { $effectiveDate = date('Y-m-d', strtotime((string)$row['created_at'])); }
+                    if (!empty($row['needed_by'])) { $neededBy = date('Y-m-d', strtotime((string)$row['needed_by'])); }
+                    if (!empty($row['justification'])) { $justification = (string)$row['justification']; }
+                    $first = false;
+                }
             }
+            // Best-effort Noted By: pick a procurement manager (or any procurement user)
+            $notedBy = '';
+            $dateReceived = '';
+            try {
+                $u = $pdo->query("SELECT full_name FROM users WHERE is_active = TRUE AND role IN ('procurement_manager','procurement') ORDER BY (role='procurement_manager') DESC, full_name ASC LIMIT 1");
+                $nb = $u ? $u->fetchColumn() : null; if ($nb) { $notedBy = (string)$nb; }
+            } catch (\Throwable $ignored) {}
+            // Best-effort Date Received: earliest message to a procurement user about this PR
+            try {
+                $stR = $pdo->prepare("SELECT m.created_at
+                                       FROM messages m
+                                       JOIN users u ON u.user_id = m.recipient_id
+                                       WHERE u.role IN ('procurement_manager','procurement')
+                                         AND (m.subject ILIKE :s OR m.attachment_name ILIKE :a)
+                                       ORDER BY m.created_at ASC LIMIT 1");
+                $stR->execute(['s' => '%PR ' . $pr . '%', 'a' => 'pr_' . $pr . '%']);
+                $dr = $stR->fetchColumn(); if ($dr) { $dateReceived = date('Y-m-d', strtotime((string)$dr)); }
+            } catch (\Throwable $ignored) {}
             // Generate PDF to a writable directory (prefer app storage; fallback to system temp like /tmp)
             $candidates = [];
             $appRootReal = @realpath(__DIR__ . '/../../..');
@@ -694,8 +725,11 @@ class CustodianController extends BaseController
                 'branch_name' => $branchName,
                 'requested_by' => $byName,
                 'prepared_at' => date('Y-m-d H:i'),
-                'justification' => '',
-                'needed_by' => '',
+                'effective_date' => $effectiveDate,
+                'justification' => $justification,
+                'needed_by' => $neededBy,
+                'noted_by' => $notedBy,
+                'date_received' => $dateReceived,
             ], $itemLines, $abs);
 
             // Self-copy so it appears in History
