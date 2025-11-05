@@ -642,6 +642,27 @@ class ProcurementController extends BaseController
                 }
             } catch (\Throwable $e) { /* ignore fallback errors */ }
         }
+        // If still no awarded vendor, try saved awarded_to on pr_canvassing; else default to first chosen supplier to avoid blank
+        if (!$awardedName) {
+            try {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
+                    pr_number VARCHAR(32) PRIMARY KEY,
+                    supplier1 VARCHAR(255),
+                    supplier2 VARCHAR(255),
+                    supplier3 VARCHAR(255),
+                    awarded_to VARCHAR(255),
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )");
+                $stA = $pdo->prepare('SELECT awarded_to FROM pr_canvassing WHERE pr_number = :pr');
+                $stA->execute(['pr' => $pr]);
+                $saved = (string)($stA->fetchColumn() ?: '');
+                if ($saved !== '') { $awardedName = $saved; }
+            } catch (\Throwable $ignored) {}
+        }
+        if (!$awardedName && $chosen) {
+            $first = $chosen[0]; if (isset($map[$first])) { $awardedName = $map[$first]; }
+        }
         // Build PR‑style PR-Canvass PDF (PR layout + Canvassing table inserted before Attachments)
         $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
         if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
@@ -777,6 +798,9 @@ class ProcurementController extends BaseController
             $stR->execute(['s' => '%PR ' . $pr . '%', 'a' => 'pr_' . $pr . '%']);
             $dr = $stR->fetchColumn(); if ($dr) { $dateReceived = date('Y-m-d', strtotime((string)$dr)); }
         } catch (\Throwable $ignored) {}
+        // Keep supplier display order aligned with the chosen IDs
+        $supNamesOrdered2 = [];
+        foreach ($chosen as $sid) { if (isset($map[$sid])) { $supNamesOrdered2[] = $map[$sid]; } }
         $meta = [
             'pr_number' => $pr,
             'branch_name' => (string)($rows[0]['branch_name'] ?? 'N/A'),
@@ -787,9 +811,26 @@ class ProcurementController extends BaseController
             'needed_by' => $neededBy,
             'date_received' => $dateReceived,
             'noted_by' => $notedBy,
-            'approved_by' => $approvedBy,
-            'approved_at' => $approvedAt,
-            'canvassed_suppliers' => array_values($map),
+            // If PR approval fields are blank, fallback to canvassing approval (so PR shows Admin name/date post-canvassing)
+            'approved_by' => (function() use ($pdo, $pr, $approvedBy) {
+                if ($approvedBy !== '') { return $approvedBy; }
+                try {
+                    $st = $pdo->prepare('SELECT approved_by FROM pr_canvassing WHERE pr_number = :pr');
+                    $st->execute(['pr' => $pr]);
+                    $v = (string)($st->fetchColumn() ?: '');
+                    return $v;
+                } catch (\Throwable $e) { return ''; }
+            })(),
+            'approved_at' => (function() use ($pdo, $pr, $approvedAt) {
+                if ($approvedAt !== '') { return $approvedAt; }
+                try {
+                    $st = $pdo->prepare('SELECT approved_at FROM pr_canvassing WHERE pr_number = :pr');
+                    $st->execute(['pr' => $pr]);
+                    $v = $st->fetchColumn();
+                    return $v ? date('Y-m-d', strtotime((string)$v)) : '';
+                } catch (\Throwable $e) { return ''; }
+            })(),
+            'canvassed_suppliers' => $supNamesOrdered2 ?: array_values($map),
             'awarded_to' => (string)($awardedName ?? ''),
             'canvass_totals' => (function() use ($totals, $chosen) {
                 $out = [];

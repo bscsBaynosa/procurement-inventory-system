@@ -358,14 +358,15 @@ class RequestService
 		$this->ensurePrColumns();
 		$this->ensureRevisionColumns();
 		$stmt = $this->pdo->prepare(
-			"SELECT pr.request_id, pr.pr_number, pr.item_id, i.name AS item_name, pr.quantity, pr.unit, pr.status, pr.created_at,
+			"SELECT pr.request_id, pr.pr_number, pr.item_id, ig.name AS item_name, pr.quantity, pr.unit, pr.status, pr.created_at,
 				pr.branch_id, b.name AS branch_name, pr.requested_by, u.full_name AS requested_by_name,
 				pr.revision_state, pr.revision_notes,
 				pr.needed_by, pr.justification,
 				pr.approved_by, pr.approved_at,
-				i.quantity AS stock_on_hand
+				COALESCE(ib.quantity, ig.quantity) AS stock_on_hand
 			 FROM purchase_requests pr
-			 LEFT JOIN inventory_items i ON i.item_id = pr.item_id
+			 LEFT JOIN inventory_items ig ON ig.item_id = pr.item_id AND (ig.branch_id IS NULL OR ig.branch_id = 0)
+			 LEFT JOIN inventory_items ib ON ib.item_id = pr.item_id AND ib.branch_id = pr.branch_id
 			 LEFT JOIN branches b ON b.branch_id = pr.branch_id
 			 LEFT JOIN users u ON u.user_id = pr.requested_by
 			 WHERE pr.pr_number = :pr

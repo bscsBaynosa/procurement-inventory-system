@@ -330,9 +330,9 @@ class PDFService
 			$totCells = '';
 			for ($i=0; $i<3; $i++) {
 				$val = isset($tot[$i]) ? (float)$tot[$i] : null;
-				$totCells .= '<td style="text-align:center;vertical-align:top;height:24px;">' . ($val !== null ? ('₱ ' . number_format($val, 2)) : '&nbsp;') . '</td>';
+				$totCells .= '<td style="text-align:center;vertical-align:top;height:24px; font-weight:600;">' . ($val !== null ? ('₱ ' . number_format($val, 2)) : 'N/A') . '</td>';
 			}
-			$totAward = '<td style="text-align:center;vertical-align:top;height:24px;">&nbsp;</td>';
+			$totAward = '<td style="text-align:center;vertical-align:top;height:24px; font-weight:600;">Totals</td>';
 			$head = '<div style="text-align:center;font-weight:700;margin:8px 0 4px;">CANVASSING</div>';
 			$canvas = $head
 				. '<table width="100%" border="1" cellspacing="0" cellpadding="6">'
