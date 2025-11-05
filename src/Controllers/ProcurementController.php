@@ -1213,10 +1213,18 @@ class ProcurementController extends BaseController
             $dr = $stR->fetchColumn(); if ($dr) { $dateReceived = date('Y-m-d', strtotime((string)$dr)); }
         } catch (\Throwable $ignored) {}
 
-        // Optional canvassing info (persisted by canvassSubmit)
+        // Optional canvassing info
+        // Priority: 1) session preview (mirror canvassing page), 2) persisted pr_canvassing, 3) recompute fallback
         $canvasSup = [];
         $awardedTo = '';
         $canvassTotals = [];
+        // 1) Always try to seed from preview first so PR mirrors the Canvassing page exactly
+        if (isset($_SESSION['canvass_preview_data'][$pr]) && is_array($_SESSION['canvass_preview_data'][$pr])) {
+            $pv0 = $_SESSION['canvass_preview_data'][$pr];
+            $canvasSup = array_slice((array)($pv0['supplier_names'] ?? []), 0, 3);
+            $awardedTo = (string)($pv0['awarded_to'] ?? '');
+            $canvassTotals = array_slice((array)($pv0['totals'] ?? []), 0, 3);
+        }
         try {
             $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
                 pr_number VARCHAR(32) PRIMARY KEY,
@@ -1243,36 +1251,27 @@ class ProcurementController extends BaseController
             $stC = $pdo->prepare('SELECT supplier1, supplier2, supplier3, total1, total2, total3, awarded_to FROM pr_canvassing WHERE pr_number = :pr');
             $stC->execute(['pr' => $pr]);
             if ($cv = $stC->fetch()) {
-                foreach (['supplier1','supplier2','supplier3'] as $k) { if (!empty($cv[$k])) { $canvasSup[] = (string)$cv[$k]; } }
-                // Use persisted totals if present
-                $canvassTotals = [ isset($cv['total1']) ? (float)$cv['total1'] : null,
-                                   isset($cv['total2']) ? (float)$cv['total2'] : null,
-                                   isset($cv['total3']) ? (float)$cv['total3'] : null, ];
-                $awardedTo = (string)($cv['awarded_to'] ?? '');
+                // Only overlay values that are still missing to keep preview as primary source of truth
+                if (empty($canvasSup)) {
+                    foreach (['supplier1','supplier2','supplier3'] as $k) { if (!empty($cv[$k])) { $canvasSup[] = (string)$cv[$k]; } }
+                }
+                if (empty(array_filter((array)$canvassTotals, static fn($v)=>$v!==null && $v!==''))) {
+                    $canvassTotals = [ isset($cv['total1']) ? (float)$cv['total1'] : null,
+                                       isset($cv['total2']) ? (float)$cv['total2'] : null,
+                                       isset($cv['total3']) ? (float)$cv['total3'] : null, ];
+                }
+                if ($awardedTo === '' && !empty($cv['awarded_to'])) { $awardedTo = (string)$cv['awarded_to']; }
             }
         } catch (\Throwable $ignored) {}
-
-        // If nothing persisted yet, use the latest canvass preview data from session (mirrors the Canvassing page)
-        if (empty($canvasSup) && isset($_SESSION['canvass_preview_data'][$pr]) && is_array($_SESSION['canvass_preview_data'][$pr])) {
-            $pv = $_SESSION['canvass_preview_data'][$pr];
-            $canvasSup = array_slice((array)($pv['supplier_names'] ?? []), 0, 3);
-            if ($awardedTo === '' && !empty($pv['awarded_to'])) { $awardedTo = (string)$pv['awarded_to']; }
-            $canvassTotals = array_slice((array)($pv['totals'] ?? []), 0, 3);
-        }
         // If we have supplier names but totals are all nulls, try session preview totals/award as well
         if (!empty($canvasSup) && isset($_SESSION['canvass_preview_data'][$pr]) && is_array($_SESSION['canvass_preview_data'][$pr])) {
-            $nonNull = 0;
-            foreach ((array)$canvassTotals as $v) { if ($v !== null && $v !== '') { $nonNull++; }
-            }
+            $nonNull = 0; foreach ((array)$canvassTotals as $v) { if ($v !== null && $v !== '') { $nonNull++; } }
             if ($nonNull === 0) {
                 $pv = $_SESSION['canvass_preview_data'][$pr];
                 $tmp = array_slice((array)($pv['totals'] ?? []), 0, 3);
-                // Only adopt if preview actually had something
                 $tmpHas = 0; foreach ($tmp as $t) { if ($t !== null && $t !== '') { $tmpHas++; } }
-                if ($tmpHas > 0) {
-                    $canvassTotals = $tmp;
-                    if ($awardedTo === '' && !empty($pv['awarded_to'])) { $awardedTo = (string)$pv['awarded_to']; }
-                }
+                if ($tmpHas > 0) { $canvassTotals = $tmp; }
+                if ($awardedTo === '' && !empty($pv['awarded_to'])) { $awardedTo = (string)$pv['awarded_to']; }
             }
         }
 
@@ -1414,10 +1413,7 @@ class ProcurementController extends BaseController
             } catch (\Throwable $ignored) {}
         }
 
-        // Absolute last-resort: if Awarded To is still blank but we have supplier names, default to the first supplier
-        if ($awardedTo === '' && !empty($canvasSup)) {
-            $awardedTo = (string)$canvasSup[0];
-        }
+        // Do not auto-default Awarded To here; leave selection to preview/DB or computed cheapest later in PDF layer
 
         // If PR approval is blank, fallback to canvassing approvals (so PR shows Admin name/date after canvassing approval)
         if ($approvedBy === '' || $approvedAt === '') {

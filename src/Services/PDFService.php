@@ -320,19 +320,31 @@ class PDFService
 				. '</td>'
 				. '</tr>';
 		};
-		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
+		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;font-size:10px;">'
 			. $uniformRow('Requisition By:', $reqBy, $prepAt)
 			. $uniformRow('Noted By:', htmlspecialchars((string)($meta['noted_by'] ?? ''), ENT_QUOTES, 'UTF-8'), htmlspecialchars((string)($meta['date_received'] ?? ''), ENT_QUOTES, 'UTF-8'))
 			. $uniformRow($approvedLabel, $approvedName, $approvedDate)
 			. '</table>';
 
 		// Optional Canvassing section (3 suppliers + Awarded To), shown BEFORE attachments
-	$canvas = '';
-	$cv = isset($meta['canvassed_suppliers']) && is_array($meta['canvassed_suppliers']) ? array_values($meta['canvassed_suppliers']) : [];
-	$cv = array_slice($cv, 0, 3);
-	$awarded = isset($meta['awarded_to']) ? trim((string)$meta['awarded_to']) : '';
-	// Absolute display fallback: if Awarded To is blank but suppliers exist, default to Supplier 1 to avoid empty cell
-	if ($awarded === '' && !empty($cv)) { $awarded = (string)$cv[0]; }
+		$canvas = '';
+		$cv = isset($meta['canvassed_suppliers']) && is_array($meta['canvassed_suppliers']) ? array_values($meta['canvassed_suppliers']) : [];
+		$cv = array_slice($cv, 0, 3);
+		$awarded = isset($meta['awarded_to']) ? trim((string)$meta['awarded_to']) : '';
+		// Prefer the cheapest among provided totals when award is blank to mirror highlighted cheapest on Canvassing page
+		$tot = isset($meta['canvass_totals']) && is_array($meta['canvass_totals']) ? array_values($meta['canvass_totals']) : [];
+		if ($awarded === '' && !empty($cv)) {
+			// Find index of minimum non-null total
+			$minIdx = -1; $minVal = null;
+			for ($i=0;$i<min(3,count($cv));$i++) {
+				if (isset($tot[$i]) && $tot[$i] !== null) {
+					$v = (float)$tot[$i];
+					if ($minVal === null || $v < $minVal) { $minVal = $v; $minIdx = $i; }
+				}
+			}
+			if ($minIdx >= 0) { $awarded = (string)$cv[$minIdx]; }
+			elseif (!empty($cv)) { $awarded = (string)$cv[0]; }
+		}
 		if (!empty($cv) || $awarded !== '') {
 			$labels = ['SUPPLIER 1','SUPPLIER 2','SUPPLIER 3','AWARDED TO'];
 			$cols = '';
@@ -342,7 +354,6 @@ class PDFService
 			}
 			$awCell = '<td style="text-align:center;vertical-align:top;height:40px;">' . ($awarded !== '' ? htmlspecialchars($awarded, ENT_QUOTES, 'UTF-8') : '&nbsp;') . '</td>';
 			// Optional totals row to justify award (expects meta[canvass_totals] = [t1,t2,t3])
-			$tot = isset($meta['canvass_totals']) && is_array($meta['canvass_totals']) ? array_values($meta['canvass_totals']) : [];
 			$totCells = '';
 			for ($i=0; $i<3; $i++) {
 				$val = isset($tot[$i]) ? (float)$tot[$i] : null;
