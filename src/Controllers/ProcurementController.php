@@ -1188,6 +1188,84 @@ class ProcurementController extends BaseController
             }
         } catch (\Throwable $ignored) {}
 
+        // Compute supplier totals aligned to stored supplier order to mirror the Canvassing page
+        $canvassTotals = [];
+        if (!empty($canvasSup)) {
+            try {
+                // Map supplier names to IDs
+                $names = array_slice(array_values($canvasSup), 0, 3);
+                $lowers = array_map(static fn($s) => strtolower(trim((string)$s)), $names);
+                $inNames = implode(',', array_fill(0, count($lowers), '?'));
+                $stS = $pdo->prepare('SELECT user_id, LOWER(full_name) AS lname FROM users WHERE LOWER(full_name) IN (' . $inNames . ')');
+                $stS->execute($lowers);
+                $idByName = [];
+                foreach ($stS->fetchAll() as $row) { $idByName[(string)$row['lname']] = (int)$row['user_id']; }
+                $supplierIds = [];
+                foreach ($lowers as $ln) { $supplierIds[] = $idByName[$ln] ?? 0; }
+                // Build item name->qty map
+                $byNameQty = [];
+                foreach ($rows as $r) {
+                    $n = strtolower(trim((string)($r['item_name'] ?? '')));
+                    if ($n === '') { continue; }
+                    $qty = (int)($r['quantity'] ?? 0);
+                    $byNameQty[$n] = ($byNameQty[$n] ?? 0) + max(0, $qty);
+                }
+                $itemNames = array_keys($byNameQty);
+                if ($itemNames && array_filter($supplierIds)) {
+                    $inSup = implode(',', array_fill(0, count($supplierIds), '?'));
+                    $inItems = implode(',', array_fill(0, count($itemNames), '?'));
+                    $params = [];
+                    foreach ($supplierIds as $sid) { $params[] = (int)$sid; }
+                    foreach ($itemNames as $nm) { $params[] = $nm; }
+                    $sql = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE supplier_id IN (' . $inSup . ') AND LOWER(name) IN (' . $inItems . ')';
+                    $stI = $pdo->prepare($sql);
+                    $stI->execute($params);
+                    $prices = [];
+                    foreach ($stI->fetchAll() as $it) {
+                        $sid = (int)$it['supplier_id'];
+                        $lname = (string)$it['lname'];
+                        $base = (float)($it['price'] ?? 0);
+                        $ppp = max(1, (int)($it['pieces_per_package'] ?? 1));
+                        $needPk = $ppp > 0 ? (int)ceil((int)($byNameQty[$lname] ?? 0) / $ppp) : 0;
+                        $best = $base;
+                        if ($needPk > 0) {
+                            try {
+                                $tq = $pdo->prepare('SELECT min_packages, max_packages, price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC');
+                                $tq->execute(['id' => (int)$it['id']]);
+                                foreach ($tq->fetchAll() as $t) {
+                                    $min = (int)$t['min_packages'];
+                                    $max = $t['max_packages'] !== null ? (int)$t['max_packages'] : null;
+                                    if ($needPk >= $min && ($max === null || $needPk <= $max)) { $best = min($best, (float)$t['price_per_package']); }
+                                }
+                            } catch (\Throwable $e) {}
+                        }
+                        if (!isset($prices[$sid])) { $prices[$sid] = []; }
+                        if (!isset($prices[$sid][$lname]) || $best < $prices[$sid][$lname]) { $prices[$sid][$lname] = $best; }
+                    }
+                    // Sum totals by supplier id
+                    $bySidTotal = [];
+                    foreach ($prices as $sid => $pm) {
+                        $sum = 0.0;
+                        foreach ($byNameQty as $iname => $_qty) { if (isset($pm[$iname])) { $sum += (float)$pm[$iname]; } }
+                        if ($sum > 0) { $bySidTotal[$sid] = $sum; }
+                    }
+                    // Align totals to name order; also auto-fill awarded if missing
+                    $canvassTotals = [];
+                    for ($i=0; $i<3; $i++) {
+                        $sid = $supplierIds[$i] ?? 0;
+                        $canvassTotals[$i] = ($sid && isset($bySidTotal[$sid])) ? (float)$bySidTotal[$sid] : null;
+                    }
+                    if ($awardedTo === '' && $bySidTotal) {
+                        asort($bySidTotal);
+                        $sidMin = (int)array_key_first($bySidTotal);
+                        // Find the name corresponding to sidMin in our order
+                        $idx = array_search($sidMin, $supplierIds, true);
+                        if ($idx !== false && isset($names[$idx])) { $awardedTo = (string)$names[$idx]; }
+                    }
+                }
+            } catch (\Throwable $ignored) {}
+        }
+
         // If PR approval is blank, fallback to canvassing approvals (so PR shows Admin name/date after canvassing approval)
         if ($approvedBy === '' || $approvedAt === '') {
             try {
@@ -1245,6 +1323,7 @@ class ProcurementController extends BaseController
             'approved_at' => $approvedAt,
             'canvassed_suppliers' => $canvasSup,
             'awarded_to' => $awardedTo,
+            'canvass_totals' => $canvassTotals,
         ];
         $items = [];
         foreach ($rows as $r) {
