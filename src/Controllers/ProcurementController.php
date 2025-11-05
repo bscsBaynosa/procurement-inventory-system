@@ -763,6 +763,8 @@ class ProcurementController extends BaseController
             'signature_variant' => 'purchase_approval',
             'purchase_approved_by' => $purchaseApprovedBy,
             'purchase_approved_at' => $purchaseApprovedAt,
+            // Explicitly render canvassing in the PR-Canvass PDF only
+            'render_canvass' => true,
         ];
         $itemsCan = [];
         foreach ($rows as $r) {
@@ -1132,6 +1134,8 @@ class ProcurementController extends BaseController
             'signature_variant' => 'purchase_approval',
             'purchase_approved_by' => $purchaseApprovedBy,
             'purchase_approved_at' => $purchaseApprovedAt,
+            // Explicitly render canvassing in the preview PDF only
+            'render_canvass' => true,
         ];
         $items = [];
         foreach ($rows as $r) {

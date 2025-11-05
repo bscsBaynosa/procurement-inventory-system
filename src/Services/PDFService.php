@@ -327,110 +327,115 @@ class PDFService
 			. $uniformRow($approvedLabel, $approvedName, $approvedDate)
 			. '</table>';
 
-		// Optional Canvassing section BEFORE attachments.
-		// New preferred layout: 5 columns [Item | Supplier1 | Supplier2 | Supplier3 | Awarded To]
-		// Each supplier cell shows "Supplier Name - ₱ price"; Awarded cell shows the chosen supplier for the item.
+		// Optional Canvassing section BEFORE attachments, but only when explicitly requested.
+		// Guard with render_canvass flag so a standard PR never shows the canvassing table by accident.
 		$canvas = '';
-		$cv = isset($meta['canvassed_suppliers']) && is_array($meta['canvassed_suppliers']) ? array_values($meta['canvassed_suppliers']) : [];
-		$cv = array_slice($cv, 0, 3);
-		$awarded = isset($meta['awarded_to']) ? trim((string)$meta['awarded_to']) : '';
-		$matrix = isset($meta['canvass_matrix']) && is_array($meta['canvass_matrix']) ? $meta['canvass_matrix'] : [];
-		if (!empty($matrix) && !empty($cv)) {
-			$head = '<div style="text-align:center;font-weight:700;margin:8px 0 4px;">CANVASSING</div>';
-			$thead = '<thead><tr>'
-				. '<th style="text-align:center;width:34%">ITEM</th>'
-				. '<th style="text-align:center;width:16%">SUPPLIER 1</th>'
-				. '<th style="text-align:center;width:16%">SUPPLIER 2</th>'
-				. '<th style="text-align:center;width:16%">SUPPLIER 3</th>'
-				. '<th style="text-align:center;width:18%">AWARDED TO</th>'
-				. '</tr></thead>';
-			$rowsHtml = '';
-			foreach ($matrix as $row) {
-				$itemLabel = htmlspecialchars((string)($row['item'] ?? ''), ENT_QUOTES, 'UTF-8');
-				$prices = isset($row['prices']) && is_array($row['prices']) ? $row['prices'] : [];
-				$cells = '';
-				for ($i=0;$i<3;$i++) {
-					$name = isset($cv[$i]) ? htmlspecialchars((string)$cv[$i], ENT_QUOTES, 'UTF-8') : '&nbsp;';
-					$price = isset($prices[$i]) && $prices[$i] !== null && $prices[$i] !== '' ? ('₱ ' . number_format((float)$prices[$i], 2)) : 'N/A';
-					$cells .= '<td style="text-align:center;vertical-align:top;">' . $name . '<br><strong>' . $price . '</strong></td>';
-				}
-				// Determine award per item (prefer provided award_index; else compute cheapest non-null)
-				$awardIdx = isset($row['award_index']) ? (int)$row['award_index'] : -1;
-				if ($awardIdx < 0) {
-					$minVal = null; $minI = -1;
-					for ($i=0;$i<3;$i++) {
-						if (isset($prices[$i]) && $prices[$i] !== null && $prices[$i] !== '') {
-							$v = (float)$prices[$i];
-							if ($minVal === null || $v < $minVal) { $minVal = $v; $minI = $i; }
-						}
-					}
-					$awardIdx = $minI;
-				}
-				$awardCell = '&nbsp;';
-				if ($awardIdx >= 0 && $awardIdx < 3 && isset($cv[$awardIdx])) {
-					$nm = htmlspecialchars((string)$cv[$awardIdx], ENT_QUOTES, 'UTF-8');
-					$pv = isset($prices[$awardIdx]) && $prices[$awardIdx] !== null && $prices[$awardIdx] !== '' ? ('₱ ' . number_format((float)$prices[$awardIdx], 2)) : 'N/A';
-					$awardCell = $nm . '<br><strong>' . $pv . '</strong>';
-				}
-				$rowsHtml .= '<tr>'
-						   . '<td>' . $itemLabel . '</td>'
-						   . $cells
-						   . '<td style="text-align:center;vertical-align:top;">' . $awardCell . '</td>'
-						   . '</tr>';
-			}
-			$canvas = $head
-				. '<table width="100%" border="1" cellspacing="0" cellpadding="6">'
-				. $thead
-				. '<tbody>' . $rowsHtml . '</tbody>'
-				. '</table>';
-		} else {
-			// Legacy compact 4-cell canvassing (supplier names + totals + awarded), kept for backward compatibility
-			$tot = isset($meta['canvass_totals']) && is_array($meta['canvass_totals']) ? array_values($meta['canvass_totals']) : [];
-			if ($awarded === '' && !empty($cv)) {
-				$minIdx = -1; $minVal = null; $hasNumeric = false;
-				for ($i=0;$i<min(3,count($cv));$i++) {
-					if (isset($tot[$i]) && $tot[$i] !== null && $tot[$i] !== '') {
-						$hasNumeric = true;
-						$v = (float)$tot[$i];
-						if ($minVal === null || $v < $minVal) { $minVal = $v; $minIdx = $i; }
-					}
-				}
-				if ($hasNumeric && $minIdx >= 0) { $awarded = (string)$cv[$minIdx]; }
-			}
-			if (!empty($cv) || $awarded !== '') {
-				$labels = ['SUPPLIER 1','SUPPLIER 2','SUPPLIER 3','AWARDED TO'];
-				$cols = '';
-				for ($i=0; $i<3; $i++) {
-					$name = isset($cv[$i]) ? htmlspecialchars((string)$cv[$i], ENT_QUOTES, 'UTF-8') : '&nbsp;';
-					$cols .= '<td style="text-align:center;vertical-align:top;height:40px;">' . $name . '</td>';
-				}
-				$awCell = '<td style="text-align:center;vertical-align:top;height:40px;">' . ($awarded !== '' ? htmlspecialchars($awarded, ENT_QUOTES, 'UTF-8') : '&nbsp;') . '</td>';
-				$totCells = '';
-				for ($i=0; $i<3; $i++) {
-					$val = isset($tot[$i]) ? (float)$tot[$i] : null;
-					$totCells .= '<td style="text-align:center;vertical-align:top;height:24px; font-weight:600;">' . ($val !== null ? ('₱ ' . number_format($val, 2)) : 'N/A') . '</td>';
-				}
-				$awardIdx = -1;
-				for ($i=0; $i<3; $i++) {
-					if ($i < count($cv)) {
-						$nm = trim((string)$cv[$i]);
-						if ($nm !== '' && strcasecmp($nm, (string)$awarded) === 0) { $awardIdx = $i; break; }
-					}
-				}
-				$awardVal = ($awardIdx >= 0 && isset($tot[$awardIdx]) && $tot[$awardIdx] !== null) ? ('₱ ' . number_format((float)$tot[$awardIdx], 2)) : 'N/A';
-				$totAward = '<td style="text-align:center;vertical-align:top;height:24px; font-weight:700;">' . $awardVal . '</td>';
+		$shouldRenderCanvass = !empty($meta['render_canvass']);
+		if ($shouldRenderCanvass) {
+			// New preferred layout: 5 columns [Item | Supplier1 | Supplier2 | Supplier3 | Awarded To]
+			// Each supplier cell shows "Supplier Name" and the quoted price (or N/A). Awarded cell shows the chosen supplier.
+			$cv = isset($meta['canvassed_suppliers']) && is_array($meta['canvassed_suppliers']) ? array_values($meta['canvassed_suppliers']) : [];
+			$cv = array_slice($cv, 0, 3);
+			$awarded = isset($meta['awarded_to']) ? trim((string)$meta['awarded_to']) : '';
+			$matrix = isset($meta['canvass_matrix']) && is_array($meta['canvass_matrix']) ? $meta['canvass_matrix'] : [];
+			if (!empty($matrix) && !empty($cv)) {
 				$head = '<div style="text-align:center;font-weight:700;margin:8px 0 4px;">CANVASSING</div>';
+				$thead = '<thead><tr>'
+					. '<th style="text-align:center;width:34%">ITEM</th>'
+					. '<th style="text-align:center;width:16%">SUPPLIER 1</th>'
+					. '<th style="text-align:center;width:16%">SUPPLIER 2</th>'
+					. '<th style="text-align:center;width:16%">SUPPLIER 3</th>'
+					. '<th style="text-align:center;width:18%">AWARDED TO</th>'
+					. '</tr></thead>';
+				$rowsHtml = '';
+				foreach ($matrix as $row) {
+					$itemLabel = htmlspecialchars((string)($row['item'] ?? ''), ENT_QUOTES, 'UTF-8');
+					$prices = isset($row['prices']) && is_array($row['prices']) ? $row['prices'] : [];
+					$cells = '';
+					for ($i=0;$i<3;$i++) {
+						$name = isset($cv[$i]) ? htmlspecialchars((string)$cv[$i], ENT_QUOTES, 'UTF-8') : '&nbsp;';
+						$price = isset($prices[$i]) && $prices[$i] !== null && $prices[$i] !== '' ? ('₱ ' . number_format((float)$prices[$i], 2)) : 'N/A';
+						$cells .= '<td style="text-align:center;vertical-align:top;">' . $name . '<br><strong>' . $price . '</strong></td>';
+					}
+					// Determine award per item (prefer provided award_index; else compute cheapest non-null)
+					$awardIdx = isset($row['award_index']) ? (int)$row['award_index'] : -1;
+					if ($awardIdx < 0) {
+						$minVal = null; $minI = -1;
+						for ($i=0;$i<3;$i++) {
+							if (isset($prices[$i]) && $prices[$i] !== null && $prices[$i] !== '') {
+								$v = (float)$prices[$i];
+								if ($minVal === null || $v < $minVal) { $minVal = $v; $minI = $i; }
+							}
+						}
+						$awardIdx = $minI;
+					}
+					$awardCell = '&nbsp;';
+					if ($awardIdx >= 0 && $awardIdx < 3 && isset($cv[$awardIdx])) {
+						$nm = htmlspecialchars((string)$cv[$awardIdx], ENT_QUOTES, 'UTF-8');
+						$pv = isset($prices[$awardIdx]) && $prices[$awardIdx] !== null && $prices[$awardIdx] !== '' ? ('₱ ' . number_format((float)$prices[$awardIdx], 2)) : 'N/A';
+						$awardCell = $nm . '<br><strong>' . $pv . '</strong>';
+					}
+					$rowsHtml .= '<tr>'
+							   . '<td>' . $itemLabel . '</td>'
+							   . $cells
+							   . '<td style="text-align:center;vertical-align:top;">' . $awardCell . '</td>'
+							   . '</tr>';
+				}
 				$canvas = $head
 					. '<table width="100%" border="1" cellspacing="0" cellpadding="6">'
-					. '<thead><tr>'
-					. '<th style="width:25%;text-align:center;">' . $labels[0] . '</th>'
-					. '<th style="width:25%;text-align:center;">' . $labels[1] . '</th>'
-					. '<th style="width:25%;text-align:center;">' . $labels[2] . '</th>'
-					. '<th style="width:25%;text-align:center;">' . $labels[3] . '</th>'
-					. '</tr></thead>'
-					. '<tbody><tr>' . $cols . $awCell . '</tr>'
-					. '<tr>' . $totCells . $totAward . '</tr></tbody>'
+					. $thead
+					. '<tbody>' . $rowsHtml . '</tbody>'
 					. '</table>';
+			} else {
+				// Legacy compact 4-cell canvassing (supplier names + totals + awarded), kept for backward compatibility
+				$cv = $cv; // already prepared
+				$tot = isset($meta['canvass_totals']) && is_array($meta['canvass_totals']) ? array_values($meta['canvass_totals']) : [];
+				if ($awarded === '' && !empty($cv)) {
+					$minIdx = -1; $minVal = null; $hasNumeric = false;
+					for ($i=0;$i<min(3,count($cv));$i++) {
+						if (isset($tot[$i]) && $tot[$i] !== null && $tot[$i] !== '') {
+							$hasNumeric = true;
+							$v = (float)$tot[$i];
+							if ($minVal === null || $v < $minVal) { $minVal = $v; $minIdx = $i; }
+						}
+					}
+					if ($hasNumeric && $minIdx >= 0) { $awarded = (string)$cv[$minIdx]; }
+				}
+				if (!empty($cv) || $awarded !== '') {
+					$labels = ['SUPPLIER 1','SUPPLIER 2','SUPPLIER 3','AWARDED TO'];
+					$cols = '';
+					for ($i=0; $i<3; $i++) {
+						$name = isset($cv[$i]) ? htmlspecialchars((string)$cv[$i], ENT_QUOTES, 'UTF-8') : '&nbsp;';
+						$cols .= '<td style="text-align:center;vertical-align:top;height:40px;">' . $name . '</td>';
+					}
+					$awCell = '<td style="text-align:center;vertical-align:top;height:40px;">' . ($awarded !== '' ? htmlspecialchars($awarded, ENT_QUOTES, 'UTF-8') : '&nbsp;') . '</td>';
+					$totCells = '';
+					for ($i=0; $i<3; $i++) {
+						$val = isset($tot[$i]) ? (float)$tot[$i] : null;
+						$totCells .= '<td style="text-align:center;vertical-align:top;height:24px; font-weight:600;">' . ($val !== null ? ('₱ ' . number_format($val, 2)) : 'N/A') . '</td>';
+					}
+					$awardIdx = -1;
+					for ($i=0; $i<3; $i++) {
+						if ($i < count($cv)) {
+							$nm = trim((string)$cv[$i]);
+							if ($nm !== '' && strcasecmp($nm, (string)$awarded) === 0) { $awardIdx = $i; break; }
+						}
+					}
+					$awardVal = ($awardIdx >= 0 && isset($tot[$awardIdx]) && $tot[$awardIdx] !== null) ? ('₱ ' . number_format((float)$tot[$awardIdx], 2)) : 'N/A';
+					$totAward = '<td style="text-align:center;vertical-align:top;height:24px; font-weight:700;">' . $awardVal . '</td>';
+					$head = '<div style="text-align:center;font-weight:700;margin:8px 0 4px;">CANVASSING</div>';
+					$canvas = $head
+						. '<table width="100%" border="1" cellspacing="0" cellpadding="6">'
+						. '<thead><tr>'
+						. '<th style="width:25%;text-align:center;">' . $labels[0] . '</th>'
+						. '<th style="width:25%;text-align:center;">' . $labels[1] . '</th>'
+						. '<th style="width:25%;text-align:center;">' . $labels[2] . '</th>'
+						. '<th style="width:25%;text-align:center;">' . $labels[3] . '</th>'
+						. '</tr></thead>'
+						. '<tbody><tr>' . $cols . $awCell . '</tr>'
+						. '<tr>' . $totCells . $totAward . '</tr></tbody>'
+						. '</table>';
+				}
 			}
 		}
 
@@ -439,9 +444,9 @@ class PDFService
 			. '<div>Duplicate: Requesting Section</div>'
 			. '</div>';
 
-		// Compose body with canvassing between the items list and attachments (if canvassing present)
+		// Compose body; canvassing appears only when explicitly enabled
 		$html = $logoHtml . $topTitle . $revRow . $titleRow . $reqMeta . $itemsTable
-			. ($canvas !== '' ? $canvas : '')
+			. ($shouldRenderCanvass && $canvas !== '' ? $canvas : '')
 			. $attachments . $sign . $distribution;
 		$mpdf->WriteHTML($html);
 		$mpdf->Output($filePath, 'F');
