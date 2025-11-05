@@ -72,6 +72,128 @@ class CustodianController extends BaseController
         ]);
     }
 
+    /** Create a new inventory item (Admin Assistant manual add) */
+    public function inventoryCreate(): void
+    {
+        $role = $_SESSION['role'] ?? '';
+        if ($role === 'custodian') { $role = 'admin_assistant'; }
+        if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant','admin','custodian'], true)) { header('Location: /login'); return; }
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $branchId = (int)($_SESSION['branch_id'] ?? 0);
+        // Collect fields
+        $name = isset($_POST['name']) ? trim((string)$_POST['name']) : '';
+        $category = isset($_POST['category']) ? trim((string)$_POST['category']) : '';
+        $status = isset($_POST['status']) ? trim((string)$_POST['status']) : 'good';
+        $quantity = (int)($_POST['quantity'] ?? 1);
+        $unitSel = isset($_POST['unit']) ? (string)$_POST['unit'] : 'pcs';
+        $unitOther = isset($_POST['unit_other']) ? trim((string)$_POST['unit_other']) : '';
+        $unit = ($unitSel === 'others' && $unitOther !== '') ? $unitOther : $unitSel;
+        $minQty = isset($_POST['minimum_quantity']) && $_POST['minimum_quantity'] !== '' ? (int)$_POST['minimum_quantity'] : 0;
+        $maintQty = isset($_POST['maintaining_quantity']) && $_POST['maintaining_quantity'] !== '' ? (int)$_POST['maintaining_quantity'] : 0;
+        if ($name === '' || $category === '') { header('Location: /admin-assistant/inventory?error=missing_fields'); return; }
+        try {
+            $this->inventory()->createItem([
+                'branch_id' => $branchId ?: null,
+                'name' => $name,
+                'category' => $category,
+                'status' => $status,
+                'quantity' => max(0, $quantity),
+                'unit' => $unit,
+                'minimum_quantity' => max(0, $minQty),
+                'maintaining_quantity' => max(0, $maintQty),
+            ], $userId);
+            $redir = '/admin-assistant/inventory' . ($category !== '' ? ('?category=' . rawurlencode($category)) : '');
+            header('Location: ' . $redir . ($category !== '' ? '&' : '?') . 'created=1');
+        } catch (\Throwable $e) {
+            $redir = '/admin-assistant/inventory' . ($category !== '' ? ('?category=' . rawurlencode($category)) : '');
+            header('Location: ' . $redir . ($category !== '' ? '&' : '?') . 'error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
+    /** Update an inventory item (name/category/status/quantity/unit/minimum/maintaining) */
+    public function inventoryUpdate(): void
+    {
+        $role = $_SESSION['role'] ?? '';
+        if ($role === 'custodian') { $role = 'admin_assistant'; }
+        if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant','admin','custodian'], true)) { header('Location: /login'); return; }
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $itemId = (int)($_POST['item_id'] ?? 0);
+        $category = isset($_POST['category']) ? trim((string)$_POST['category']) : '';
+        if ($itemId <= 0) { header('Location: /admin-assistant/inventory' . ($category!==''? ('?category=' . rawurlencode($category)) : '')); return; }
+        $payload = [];
+        if (isset($_POST['name'])) { $payload['name'] = trim((string)$_POST['name']); }
+        if (isset($_POST['category'])) { $payload['category'] = trim((string)$_POST['category']); }
+        if (isset($_POST['status'])) { $payload['status'] = trim((string)$_POST['status']); }
+        if (isset($_POST['quantity']) && $_POST['quantity'] !== '') { $payload['quantity'] = (int)$_POST['quantity']; }
+        if (isset($_POST['unit'])) {
+            $unitSel = (string)$_POST['unit'];
+            $unitOther = isset($_POST['unit_other']) ? trim((string)$_POST['unit_other']) : '';
+            $payload['unit'] = ($unitSel === 'others' && $unitOther !== '') ? $unitOther : $unitSel;
+        }
+        if (isset($_POST['minimum_quantity']) && $_POST['minimum_quantity'] !== '') { $payload['minimum_quantity'] = (int)$_POST['minimum_quantity']; }
+        if (isset($_POST['maintaining_quantity']) && $_POST['maintaining_quantity'] !== '') { $payload['maintaining_quantity'] = (int)$_POST['maintaining_quantity']; }
+        if (!empty($payload)) { $this->inventory()->updateItem($itemId, $payload, $userId); }
+        $redir = '/admin-assistant/inventory' . ($category !== '' ? ('?category=' . rawurlencode($category)) : '');
+        header('Location: ' . $redir . ($category !== '' ? '&' : '?') . 'updated=1');
+    }
+
+    /** Delete an inventory item */
+    public function inventoryDelete(): void
+    {
+        $role = $_SESSION['role'] ?? '';
+        if ($role === 'custodian') { $role = 'admin_assistant'; }
+        if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant','admin','custodian'], true)) { header('Location: /login'); return; }
+        $itemId = (int)($_POST['item_id'] ?? 0);
+        $category = isset($_POST['category']) ? trim((string)$_POST['category']) : '';
+        if ($itemId > 0) { $this->inventory()->deleteItem($itemId); }
+        $redir = '/admin-assistant/inventory' . ($category !== '' ? ('?category=' . rawurlencode($category)) : '');
+        header('Location: ' . $redir . ($category !== '' ? '&' : '?') . 'deleted=1');
+    }
+
+    /** Stock-only update (records a consumption/delivery log and updates quantity) */
+    public function updateStock(): void
+    {
+        $role = $_SESSION['role'] ?? '';
+        if ($role === 'custodian') { $role = 'admin_assistant'; }
+        if (!$this->auth()->isAuthenticated() || !in_array($role, ['admin_assistant','admin','custodian'], true)) { header('Location: /login'); return; }
+        $userId = (int)($_SESSION['user_id'] ?? 0);
+        $itemId = (int)($_POST['item_id'] ?? 0);
+        $newCount = isset($_POST['new_count']) ? (int)$_POST['new_count'] : null;
+        $category = isset($_POST['category']) ? trim((string)$_POST['category']) : '';
+        if ($itemId <= 0 || $newCount === null || $newCount < 0) { header('Location: /admin-assistant/inventory' . ($category!==''? ('?category=' . rawurlencode($category)) : '')); return; }
+        try {
+            $pdo = \App\Database\Connection::resolve();
+            // Fetch current count
+            $st = $pdo->prepare('SELECT quantity FROM inventory_items WHERE item_id = :id');
+            $st->execute(['id' => $itemId]);
+            $prev = (int)($st->fetchColumn() ?: 0);
+            $delta = $newCount - $prev;
+            // Ensure consumption_reports table
+            $pdo->exec("CREATE TABLE IF NOT EXISTS consumption_reports (
+                id BIGSERIAL PRIMARY KEY,
+                item_id BIGINT NOT NULL REFERENCES inventory_items(item_id) ON DELETE CASCADE,
+                previous_count INTEGER NOT NULL,
+                current_count INTEGER NOT NULL,
+                delta INTEGER NOT NULL,
+                changed_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+                changed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )");
+            // Insert log only when there is a change
+            if ($delta !== 0) {
+                $ins = $pdo->prepare('INSERT INTO consumption_reports (item_id, previous_count, current_count, delta, changed_by) VALUES (:i,:p,:c,:d,:u)');
+                $ins->execute(['i' => $itemId, 'p' => $prev, 'c' => $newCount, 'd' => $delta, 'u' => $userId]);
+            }
+            // Update inventory_items.quantity
+            $up = $pdo->prepare('UPDATE inventory_items SET quantity = :q, updated_by = :u WHERE item_id = :id');
+            $up->execute(['q' => $newCount, 'u' => $userId, 'id' => $itemId]);
+            $redir = '/admin-assistant/inventory' . ($category !== '' ? ('?category=' . rawurlencode($category)) : '');
+            header('Location: ' . $redir . ($category !== '' ? '&' : '?') . 'count_updated=1');
+        } catch (\Throwable $e) {
+            $redir = '/admin-assistant/inventory' . ($category !== '' ? ('?category=' . rawurlencode($category)) : '');
+            header('Location: ' . $redir . ($category !== '' ? '&' : '?') . 'error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
     /** Inventory list & simple create form for custodian */
     public function inventoryPage(): void
     {

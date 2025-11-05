@@ -718,6 +718,30 @@ class ProcurementController extends BaseController
         // Ensure supplier names are in the same order as chosen
         $supNamesOrdered = [];
         foreach ($chosen as $sid) { if (isset($map[$sid])) { $supNamesOrdered[] = $map[$sid]; } }
+        // Build per-item canvassing matrix for 5-column table (Item | S1 | S2 | S3 | Awarded To)
+        $canvassMatrix = (function() use ($rows, $chosen, $map, $prices) {
+            $matrix = [];
+            foreach ($rows as $r) {
+                $nm = strtolower(trim((string)($r['item_name'] ?? '')));
+                if ($nm === '') { continue; }
+                $qty = (int)($r['quantity'] ?? 0);
+                $unit = (string)($r['unit'] ?? '');
+                $label = (string)($r['item_name'] ?? 'Item');
+                if ($qty > 0) { $label .= ' × ' . $qty . ($unit !== '' ? (' ' . $unit) : ''); }
+                $rowPrices = [];
+                for ($i=0;$i<3;$i++) {
+                    $sid = $chosen[$i] ?? 0;
+                    $p = ($sid && isset($prices[$sid]) && isset($prices[$sid][$nm])) ? (float)$prices[$sid][$nm] : null;
+                    $rowPrices[$i] = $p;
+                }
+                // Pick cheapest non-null index
+                $awardIdx = -1; $minVal = null;
+                for ($i=0;$i<3;$i++) { if ($rowPrices[$i] !== null) { $v=(float)$rowPrices[$i]; if ($minVal===null || $v<$minVal){$minVal=$v;$awardIdx=$i;} } }
+                $matrix[] = ['item' => $label, 'prices' => $rowPrices, 'award_index' => $awardIdx];
+            }
+            return $matrix;
+        })();
+
         $metaCan = [
             'pr_number' => $pr,
             'branch_name' => (string)($rows[0]['branch_name'] ?? 'N/A'),
@@ -735,6 +759,7 @@ class ProcurementController extends BaseController
                 for ($i=0;$i<3;$i++) { $sid = $chosen[$i] ?? 0; $out[$i] = ($sid && isset($totals[$sid])) ? (float)$totals[$sid] : null; }
                 return $out;
             })(),
+            'canvass_matrix' => $canvassMatrix,
             'signature_variant' => 'purchase_approval',
             'purchase_approved_by' => $purchaseApprovedBy,
             'purchase_approved_at' => $purchaseApprovedAt,
@@ -862,6 +887,7 @@ class ProcurementController extends BaseController
                 for ($i=0;$i<3;$i++) { $sid = $chosen[$i] ?? 0; $out[$i] = ($sid && isset($totals[$sid])) ? (float)$totals[$sid] : null; }
                 return $out;
             })(),
+            'canvass_matrix' => $canvassMatrix,
         ];
         $items = [];
         foreach ($rows as $r) {
@@ -961,9 +987,10 @@ class ProcurementController extends BaseController
             $stR->execute(['s' => '%PR ' . $pr . '%', 'a' => 'pr_' . $pr . '%']);
             $dr = $stR->fetchColumn(); if ($dr) { $dateReceived = date('Y-m-d', strtotime((string)$dr)); }
         } catch (\Throwable $ignored) {}
-        // Compute cheapest totals per supplier for preview (to prefill AWARDED TO and totals)
+    // Compute cheapest totals per supplier for preview (to prefill AWARDED TO and totals)
         $awardedPreview = '';
         $totalsPreview = [];
+    $prices = [];
         try {
             // Build name->qty map
             $byNameQty = [];
@@ -1022,6 +1049,29 @@ class ProcurementController extends BaseController
             }
         } catch (\Throwable $ignored) {}
 
+        // Build per-item canvassing matrix for the new 5-column table
+        $canvassMatrix = (function() use ($rows, $chosen, $prices) {
+            $matrix = [];
+            foreach ($rows as $r) {
+                $nm = strtolower(trim((string)($r['item_name'] ?? '')));
+                if ($nm === '') { continue; }
+                $qty = (int)($r['quantity'] ?? 0);
+                $unit = (string)($r['unit'] ?? '');
+                $label = (string)($r['item_name'] ?? 'Item');
+                if ($qty > 0) { $label .= ' × ' . $qty . ($unit !== '' ? (' ' . $unit) : ''); }
+                $rowPrices = [];
+                for ($i=0;$i<3;$i++) {
+                    $sid = $chosen[$i] ?? 0;
+                    $p = ($sid && isset($prices[$sid]) && isset($prices[$sid][$nm])) ? (float)$prices[$sid][$nm] : null;
+                    $rowPrices[$i] = $p;
+                }
+                $awardIdx = -1; $minVal = null;
+                for ($i=0;$i<3;$i++) { if ($rowPrices[$i] !== null) { $v=(float)$rowPrices[$i]; if ($minVal===null || $v<$minVal){$minVal=$v;$awardIdx=$i;} } }
+                $matrix[] = ['item' => $label, 'prices' => $rowPrices, 'award_index' => $awardIdx];
+            }
+            return $matrix;
+        })();
+
         // Optional canvassing approval fields if already approved (preview after approval)
         $purchaseApprovedBy = '';
         $purchaseApprovedAt = '';
@@ -1076,6 +1126,7 @@ class ProcurementController extends BaseController
                 } catch (\Throwable $e) { return ''; }
             })(),
             'canvass_totals' => $totalsPreview,
+            'canvass_matrix' => $canvassMatrix,
             'signature_variant' => 'purchase_approval',
             'purchase_approved_by' => $purchaseApprovedBy,
             'purchase_approved_at' => $purchaseApprovedAt,
@@ -1101,6 +1152,7 @@ class ProcurementController extends BaseController
             })(),
             'totals' => $totalsPreview,
             'awarded_to' => $awardedPreview,
+            'matrix' => $canvassMatrix,
         ];
 
         // Generate to temp and stream inline
@@ -1208,15 +1260,17 @@ class ProcurementController extends BaseController
 
         // Optional canvassing info
         // Priority: 1) session preview (mirror canvassing page), 2) persisted pr_canvassing, 3) recompute fallback
-        $canvasSup = [];
-        $awardedTo = '';
-        $canvassTotals = [];
+    $canvasSup = [];
+    $awardedTo = '';
+    $canvassTotals = [];
+    $canvassMatrix = [];
         // 1) Always try to seed from preview first so PR mirrors the Canvassing page exactly
         if (isset($_SESSION['canvass_preview_data'][$pr]) && is_array($_SESSION['canvass_preview_data'][$pr])) {
             $pv0 = $_SESSION['canvass_preview_data'][$pr];
             $canvasSup = array_slice((array)($pv0['supplier_names'] ?? []), 0, 3);
             $awardedTo = (string)($pv0['awarded_to'] ?? '');
             $canvassTotals = array_slice((array)($pv0['totals'] ?? []), 0, 3);
+            if (isset($pv0['matrix']) && is_array($pv0['matrix'])) { $canvassMatrix = $pv0['matrix']; }
         }
         try {
             $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
@@ -1391,6 +1445,28 @@ class ProcurementController extends BaseController
                         $sid = $supplierIds[$i] ?? 0;
                         $canvassTotals[$i] = ($sid && isset($bySidTotal[$sid])) ? (float)$bySidTotal[$sid] : null;
                     }
+                    // Build per-item canvassing matrix
+                    $canvassMatrix = (function() use ($rows, $supplierIds, $prices) {
+                        $matrix = [];
+                        foreach ($rows as $r) {
+                            $nm = strtolower(trim((string)($r['item_name'] ?? '')));
+                            if ($nm === '') { continue; }
+                            $qty = (int)($r['quantity'] ?? 0);
+                            $unit = (string)($r['unit'] ?? '');
+                            $label = (string)($r['item_name'] ?? 'Item');
+                            if ($qty > 0) { $label .= ' × ' . $qty . ($unit !== '' ? (' ' . $unit) : ''); }
+                            $rowPrices = [];
+                            for ($i=0;$i<3;$i++) {
+                                $sid = $supplierIds[$i] ?? 0;
+                                $p = ($sid && isset($prices[$sid]) && isset($prices[$sid][$nm])) ? (float)$prices[$sid][$nm] : null;
+                                $rowPrices[$i] = $p;
+                            }
+                            $awardIdx = -1; $minVal = null;
+                            for ($i=0;$i<3;$i++) { if ($rowPrices[$i] !== null) { $v=(float)$rowPrices[$i]; if ($minVal===null || $v<$minVal){$minVal=$v;$awardIdx=$i;} } }
+                            $matrix[] = ['item' => $label, 'prices' => $rowPrices, 'award_index' => $awardIdx];
+                        }
+                        return $matrix;
+                    })();
                     // If award still blank, use preview session award first; else compute from cheapest
                     if ($awardedTo === '' && isset($_SESSION['canvass_preview_data'][$pr]['awarded_to']) && $_SESSION['canvass_preview_data'][$pr]['awarded_to'] !== '') {
                         $awardedTo = (string)$_SESSION['canvass_preview_data'][$pr]['awarded_to'];
@@ -1466,6 +1542,7 @@ class ProcurementController extends BaseController
             'canvassed_suppliers' => $canvasSup,
             'awarded_to' => $awardedTo,
             'canvass_totals' => $canvassTotals,
+            'canvass_matrix' => $canvassMatrix,
         ];
         $items = [];
         foreach ($rows as $r) {
