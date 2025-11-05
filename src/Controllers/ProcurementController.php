@@ -1064,6 +1064,20 @@ class ProcurementController extends BaseController
                 'stock_on_hand' => isset($r['stock_on_hand']) ? (int)$r['stock_on_hand'] : null,
             ];
         }
+        // Store preview selection in session so PR download can mirror the same suppliers/totals before final submit
+        if (!isset($_SESSION['canvass_preview_data']) || !is_array($_SESSION['canvass_preview_data'])) { $_SESSION['canvass_preview_data'] = []; }
+        $_SESSION['canvass_preview_data'][$pr] = [
+            'at' => time(),
+            // Supplier names in the same order as the chosen ids
+            'supplier_names' => (function() use ($chosen, $map) {
+                $out = [];
+                foreach ($chosen as $sid) { if (isset($map[$sid])) { $out[] = $map[$sid]; } }
+                return array_slice($out, 0, 3);
+            })(),
+            'totals' => $totalsPreview,
+            'awarded_to' => $awardedPreview,
+        ];
+
         // Generate to temp and stream inline
         $dir = sys_get_temp_dir();
         $file = rtrim($dir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'PR-Canvass-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '-preview.pdf';
@@ -1170,6 +1184,7 @@ class ProcurementController extends BaseController
         // Optional canvassing info (persisted by canvassSubmit)
         $canvasSup = [];
         $awardedTo = '';
+        $canvassTotals = [];
         try {
             $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
                 pr_number VARCHAR(32) PRIMARY KEY,
@@ -1188,9 +1203,16 @@ class ProcurementController extends BaseController
             }
         } catch (\Throwable $ignored) {}
 
-        // Compute supplier totals aligned to stored supplier order to mirror the Canvassing page
-        $canvassTotals = [];
-        if (!empty($canvasSup)) {
+        // If nothing persisted yet, use the latest canvass preview data from session (mirrors the Canvassing page)
+        if (empty($canvasSup) && isset($_SESSION['canvass_preview_data'][$pr]) && is_array($_SESSION['canvass_preview_data'][$pr])) {
+            $pv = $_SESSION['canvass_preview_data'][$pr];
+            $canvasSup = array_slice((array)($pv['supplier_names'] ?? []), 0, 3);
+            if ($awardedTo === '' && !empty($pv['awarded_to'])) { $awardedTo = (string)$pv['awarded_to']; }
+            $canvassTotals = array_slice((array)($pv['totals'] ?? []), 0, 3);
+        }
+
+        // Compute supplier totals aligned to supplier order to mirror the Canvassing page (if not already from preview)
+        if (empty($canvassTotals) && !empty($canvasSup)) {
             try {
                 // Map supplier names to IDs
                 $names = array_slice(array_values($canvasSup), 0, 3);
