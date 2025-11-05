@@ -301,21 +301,15 @@ class PDFService
 			$approvedLabel = 'Approved By:';
 		}
 		$uniformRow = function(string $leftLabel, string $leftValue, string $rightDate): string {
-			// Use a nested table with fixed heights to guarantee identical row sizing across all three signature rows.
-			$cellH = 54; // total vertical space for the signature block per cell
+			// Robust, mPDF-friendly fixed-height blocks to keep all rows identical.
+			$lineH = 44; // height allocated before the signature line
 			$nowrap = 'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
-			$leftCell = '<table width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed;">'
-				. '<tr><td style="font-size:10px;">' . $leftLabel . '</td></tr>'
-				. '<tr><td style="height:' . $cellH . 'px; vertical-align:bottom;">'
-					. '<div style="border-top:1px solid #999; text-align:center; padding-top:8px; ' . $nowrap . '">' . $leftValue . '</div>'
-				. '</td></tr>'
-				. '</table>';
-			$rightCell = '<table width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed;">'
-				. '<tr><td style="font-size:10px;">Date:</td></tr>'
-				. '<tr><td style="height:' . $cellH . 'px; vertical-align:bottom;">'
-					. '<div style="border-top:1px solid #999; text-align:center; padding-top:8px; ' . $nowrap . '">' . $rightDate . '</div>'
-				. '</td></tr>'
-				. '</table>';
+			$leftCell = '<div style="font-size:10px;">' . $leftLabel . '</div>'
+				. '<div style="display:block;height:' . $lineH . 'px;"></div>'
+				. '<div style="border-top:1px solid #999; text-align:center; padding-top:8px; ' . $nowrap . '">' . $leftValue . '</div>';
+			$rightCell = '<div style="font-size:10px;">Date:</div>'
+				. '<div style="display:block;height:' . $lineH . 'px;"></div>'
+				. '<div style="border-top:1px solid #999; text-align:center; padding-top:8px; ' . $nowrap . '">' . $rightDate . '</div>';
 			return '<tr>'
 				. '<td style="width:60%;vertical-align:top;">' . $leftCell . '</td>'
 				. '<td style="width:40%;vertical-align:top;">' . $rightCell . '</td>'
@@ -374,6 +368,10 @@ class PDFService
 						$nm = htmlspecialchars((string)$cv[$awardIdx], ENT_QUOTES, 'UTF-8');
 						$pv = isset($prices[$awardIdx]) && $prices[$awardIdx] !== null && $prices[$awardIdx] !== '' ? ('₱ ' . number_format((float)$prices[$awardIdx], 2)) : 'N/A';
 						$awardCell = $nm . '<br><strong>' . $pv . '</strong>';
+					}
+					// Fallback: if no per-item award derived, use overall awarded_to if provided
+					if ($awardCell === '&nbsp;' && $awarded !== '') {
+						$awardCell = htmlspecialchars($awarded, ENT_QUOTES, 'UTF-8');
 					}
 					$rowsHtml .= '<tr>'
 							   . '<td>' . $itemLabel . '</td>'
