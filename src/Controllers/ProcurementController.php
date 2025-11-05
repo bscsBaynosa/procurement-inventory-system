@@ -1259,9 +1259,26 @@ class ProcurementController extends BaseController
             if ($awardedTo === '' && !empty($pv['awarded_to'])) { $awardedTo = (string)$pv['awarded_to']; }
             $canvassTotals = array_slice((array)($pv['totals'] ?? []), 0, 3);
         }
+        // If we have supplier names but totals are all nulls, try session preview totals/award as well
+        if (!empty($canvasSup) && isset($_SESSION['canvass_preview_data'][$pr]) && is_array($_SESSION['canvass_preview_data'][$pr])) {
+            $nonNull = 0;
+            foreach ((array)$canvassTotals as $v) { if ($v !== null && $v !== '') { $nonNull++; }
+            }
+            if ($nonNull === 0) {
+                $pv = $_SESSION['canvass_preview_data'][$pr];
+                $tmp = array_slice((array)($pv['totals'] ?? []), 0, 3);
+                // Only adopt if preview actually had something
+                $tmpHas = 0; foreach ($tmp as $t) { if ($t !== null && $t !== '') { $tmpHas++; } }
+                if ($tmpHas > 0) {
+                    $canvassTotals = $tmp;
+                    if ($awardedTo === '' && !empty($pv['awarded_to'])) { $awardedTo = (string)$pv['awarded_to']; }
+                }
+            }
+        }
 
-        // Compute supplier totals aligned to supplier order to mirror the Canvassing page (if not already from preview)
-        if (empty($canvassTotals) && !empty($canvasSup)) {
+    // Compute supplier totals aligned to supplier order to mirror the Canvassing page (if not already from preview)
+    $hasNumericTotals = 0; foreach ((array)$canvassTotals as $v) { if ($v !== null && $v !== '') { $hasNumericTotals++; } }
+    if ($hasNumericTotals === 0 && !empty($canvasSup)) {
             try {
                 // Map supplier names to IDs
                 $names = array_slice(array_values($canvasSup), 0, 3);

@@ -298,6 +298,7 @@ class InventoryService
 		// Normalize supplier_items.category to our allowed buckets so near-miss labels still count
 		$sql = "WITH cats(category) AS (VALUES ".implode(',', $vals)."), src AS (
 			SELECT CASE
+				WHEN category IS NULL OR TRIM(category) = '' THEN 'Office Supplies'
 				WHEN category ILIKE 'office%%' OR category ILIKE '%%stationery%%' THEN 'Office Supplies'
 				WHEN category ILIKE 'medical equip%%' OR category ILIKE '%%equipment%%' OR category ILIKE 'medical%%' THEN 'Medical Equipments'
 				WHEN category ILIKE 'medicine%%' OR category ILIKE 'drug%%' THEN 'Medicines'
