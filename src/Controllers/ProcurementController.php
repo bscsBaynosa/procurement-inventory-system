@@ -818,6 +818,16 @@ class ProcurementController extends BaseController
                 ->execute(['pr' => $pr, 's1' => $s1, 's2' => $s2, 's3' => $s3, 'sid1' => $sid1, 'sid2' => $sid2, 'sid3' => $sid3, 't1' => $t1, 't2' => $t2, 't3' => $t3, 'aw' => $awardedName]);
         } catch (\Throwable $ignored) {}
 
+        // Respect user's explicit Awarded selection if provided and valid
+        $awardedSelected = isset($_POST['awarded_to']) && $_POST['awarded_to'] !== '' ? (int)$_POST['awarded_to'] : 0;
+        if ($awardedSelected && in_array($awardedSelected, $chosen, true) && isset($map[$awardedSelected])) {
+            $awardedPreview = (string)$map[$awardedSelected];
+        }
+        // Final fallback for preview: if still blank, default to first chosen supplier to avoid an empty cell
+        if ($awardedPreview === '' && !empty($chosen)) {
+            $first = $chosen[0]; if (isset($map[$first])) { $awardedPreview = (string)$map[$first]; }
+        }
+
         // Build PR PDF as second attachment (final PR with approval/canvassing info)
         $justification = '';
         $neededBy = '';
@@ -1109,8 +1119,8 @@ class ProcurementController extends BaseController
             'date_received' => $dateReceived,
             'noted_by' => $notedBy,
             'canvassed_suppliers' => array_values($map),
-            // Prefer existing awarded_to if saved; else use computed cheapest for preview
-            'awarded_to' => (function() use ($pdo, $pr, $awardedPreview) {
+            // Prefer preview value (user selection/cheapest); else DB; else first chosen
+            'awarded_to' => (function() use ($pdo, $pr, $awardedPreview, $chosen, $map) {
                 try {
                     $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
                         pr_number VARCHAR(32) PRIMARY KEY,
@@ -1126,7 +1136,10 @@ class ProcurementController extends BaseController
                     $st = $pdo->prepare('SELECT awarded_to FROM pr_canvassing WHERE pr_number = :pr');
                     $st->execute(['pr' => $pr]);
                     $v = $st->fetchColumn();
-                    return $v ? (string)$v : $awardedPreview;
+                    if ($awardedPreview !== '') { return (string)$awardedPreview; }
+                    if ($v) { return (string)$v; }
+                    if (!empty($chosen)) { $first = $chosen[0]; if (isset($map[$first])) { return (string)$map[$first]; } }
+                    return '';
                 } catch (\Throwable $e) { return ''; }
             })(),
             'canvass_totals' => $totalsPreview,

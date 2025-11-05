@@ -302,13 +302,13 @@ class PDFService
 		}
 		$uniformRow = function(string $leftLabel, string $leftValue, string $rightDate): string {
 			// Robust, mPDF-friendly fixed-height blocks to keep all rows identical.
-			$lineH = 44; // height allocated before the signature line
+			$lineH = 48; // height allocated before the signature line
 			$nowrap = 'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
 			$leftCell = '<div style="font-size:10px;">' . $leftLabel . '</div>'
-				. '<div style="display:block;height:' . $lineH . 'px;"></div>'
+				. '<div style="display:block;height:' . $lineH . 'px; line-height:' . $lineH . 'px;">&nbsp;</div>'
 				. '<div style="border-top:1px solid #999; text-align:center; padding-top:8px; ' . $nowrap . '">' . $leftValue . '</div>';
 			$rightCell = '<div style="font-size:10px;">Date:</div>'
-				. '<div style="display:block;height:' . $lineH . 'px;"></div>'
+				. '<div style="display:block;height:' . $lineH . 'px; line-height:' . $lineH . 'px;">&nbsp;</div>'
 				. '<div style="border-top:1px solid #999; text-align:center; padding-top:8px; ' . $nowrap . '">' . $rightDate . '</div>';
 			return '<tr>'
 				. '<td style="width:60%;vertical-align:top;">' . $leftCell . '</td>'
