@@ -21,7 +21,13 @@
         .btn.primary{ border-color: color-mix(in oklab, var(--accent) 35%, var(--border)); background: color-mix(in oklab, var(--accent) 10%, transparent); }
         .filters{ display:grid; grid-template-columns: repeat(4, minmax(180px, 1fr)) 100px; gap:8px; align-items:center; margin-bottom:10px; }
         select, input[type="date"]{ padding:0 10px; height:var(--control-h); border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); }
-        table{ width:100%; border-collapse: collapse; background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+        /* Scroll container ensures horizontal scroll on small screens while keeping uniform look */
+        .table-scroll{ width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:14px; background:var(--card); border:1px solid var(--border); }
+        .table-scroll::-webkit-scrollbar{ height:10px; }
+        .table-scroll::-webkit-scrollbar-thumb{ background:color-mix(in oklab, var(--muted) 35%, transparent); border-radius:999px; }
+        table{ width:100%; border-collapse: collapse; background:transparent; /* wrapper handles bg/border */ }
+        /* Ensure we don't squish columns: allow horizontal scroll when needed */
+        table{ min-width: 1100px; }
         th, td{ padding:12px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; vertical-align:middle; }
         th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
         .muted{ color:var(--muted); }
@@ -30,6 +36,25 @@
         .nowrap{ white-space:nowrap; }
         .mono{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
         pre.items{ margin:0; white-space:pre-wrap; line-height:1.3; }
+
+        /* Responsiveness */
+        @media (max-width: 1200px){
+            .filters{ grid-template-columns: repeat(2, minmax(180px,1fr)); grid-auto-rows:auto; }
+            .toolbar .btn{ min-width:auto; }
+        }
+        @media (max-width: 960px){
+            .layout{ grid-template-columns: 1fr; }
+            .sidebar{ display:none; }
+            .content{ padding:14px; }
+            .h1{ font-size:18px; flex-wrap:wrap; gap:6px; }
+            .filters{ grid-template-columns: 1fr; }
+            .btn{ height:34px; padding:0 10px; min-width:auto; }
+            th, td{ padding:10px; font-size:13px; }
+        }
+        @media (max-width: 480px){
+            .btn{ height:32px; padding:0 10px; font-size:11.5px; }
+            .actions{ gap:6px; }
+        }
     </style>
 </head>
 <body>
@@ -81,6 +106,7 @@
             <button class="btn" type="submit">Apply</button>
         </form>
 
+        <div class="table-scroll">
         <table>
             <thead>
                 <tr>
@@ -149,6 +175,7 @@
                 <?php endif; ?>
             </tbody>
         </table>
+        </div>
     </main>
 </div>
 </body>
