@@ -545,35 +545,70 @@ class ProcurementController extends BaseController
         if ($awardedId && in_array($awardedId, $chosen, true) && isset($map[$awardedId])) {
             $awardedName = $map[$awardedId];
         }
-        // Totals per supplier (used for justification row in PDFs); ensure it's always defined
+        // Totals per supplier (used for justification row in PDFs) — always compute to mirror the canvassing page
         $totals = [];
-        // Server-side fallback: if no awarded vendor provided, auto-pick cheapest by summing per-item prices among selected suppliers
-        if (!$awardedId) {
-            try {
-                $byNameQty = [];
-                foreach ($rows as $r) {
-                    $n = strtolower(trim((string)($r['item_name'] ?? '')));
-                    if ($n === '') { continue; }
-                    $qty = (int)($r['quantity'] ?? 0);
-                    $byNameQty[$n] = ($byNameQty[$n] ?? 0) + max(0, $qty);
+        try {
+            $byNameQty = [];
+            foreach ($rows as $r) {
+                $n = strtolower(trim((string)($r['item_name'] ?? '')));
+                if ($n === '') { continue; }
+                $qty = (int)($r['quantity'] ?? 0);
+                $byNameQty[$n] = ($byNameQty[$n] ?? 0) + max(0, $qty);
+            }
+            $names = array_keys($byNameQty);
+            if ($names && $chosen) {
+                $inSup = implode(',', array_fill(0, count($chosen), '?'));
+                $inNames = implode(',', array_fill(0, count($names), '?'));
+                $params = [];
+                foreach ($chosen as $sid) { $params[] = (int)$sid; }
+                foreach ($names as $nm) { $params[] = $nm; }
+                $sql = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE supplier_id IN (' . $inSup . ') AND LOWER(name) IN (' . $inNames . ')';
+                $st = $pdo->prepare($sql);
+                $st->execute($params);
+                $prices = [];
+                foreach ($st->fetchAll() as $it) {
+                    $sid = (int)$it['supplier_id'];
+                    $lname = (string)$it['lname'];
+                    $base = (float)($it['price'] ?? 0);
+                    $ppp = max(1, (int)($it['pieces_per_package'] ?? 1));
+                    $needPk = $ppp > 0 ? (int)ceil((int)($byNameQty[$lname] ?? 0) / $ppp) : 0;
+                    $best = $base;
+                    if ($needPk > 0) {
+                        try {
+                            $tq = $pdo->prepare('SELECT min_packages, max_packages, price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC');
+                            $tq->execute(['id' => (int)$it['id']]);
+                            foreach ($tq->fetchAll() as $t) {
+                                $min = (int)$t['min_packages'];
+                                $max = $t['max_packages'] !== null ? (int)$t['max_packages'] : null;
+                                if ($needPk >= $min && ($max === null || $needPk <= $max)) { $best = min($best, (float)$t['price_per_package']); }
+                            }
+                        } catch (\Throwable $e) {}
+                    }
+                    if (!isset($prices[$sid])) { $prices[$sid] = []; }
+                    if (!isset($prices[$sid][$lname]) || $best < $prices[$sid][$lname]) { $prices[$sid][$lname] = $best; }
                 }
-                $names = array_keys($byNameQty);
-                if ($names && $chosen) {
-                    $inSup = implode(',', array_fill(0, count($chosen), '?'));
-                    $inNames = implode(',', array_fill(0, count($names), '?'));
-                    $params = [];
-                    foreach ($chosen as $sid) { $params[] = (int)$sid; }
-                    foreach ($names as $nm) { $params[] = $nm; }
-                    $sql = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE supplier_id IN (' . $inSup . ') AND LOWER(name) IN (' . $inNames . ')';
-                    $st = $pdo->prepare($sql);
-                    $st->execute($params);
-                    $prices = [];
-                    foreach ($st->fetchAll() as $it) {
+                // Fuzzy tokens for missing
+                $found = [];
+                foreach ($prices as $sid0 => $m0) { foreach ($m0 as $nm0 => $_) { $found[$nm0] = true; } }
+                $toFind = array_values(array_filter($names, static fn($nm) => !isset($found[$nm])));
+                foreach ($toFind as $nm) {
+                    $tokens = preg_split('/[^a-z0-9]+/i', (string)$nm) ?: [];
+                    $tokens = array_values(array_filter(array_map('strtolower', $tokens), static fn($t) => strlen($t) >= 3));
+                    if (!$tokens) { continue; }
+                    $tokens = array_slice($tokens, 0, 3);
+                    $cond = [];
+                    $p2 = [];
+                    $cond[] = 'supplier_id IN (' . $inSup . ')';
+                    foreach ($chosen as $sid) { $p2[] = (int)$sid; }
+                    foreach ($tokens as $t) { $cond[] = 'LOWER(name) ILIKE ?'; $p2[] = '%' . $t . '%'; }
+                    $sql2 = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE ' . implode(' AND ', $cond);
+                    $st2 = $pdo->prepare($sql2);
+                    $st2->execute($p2);
+                    foreach ($st2->fetchAll() as $it) {
                         $sid = (int)$it['supplier_id'];
-                        $lname = (string)$it['lname'];
                         $base = (float)($it['price'] ?? 0);
                         $ppp = max(1, (int)($it['pieces_per_package'] ?? 1));
-                        $needPk = $ppp > 0 ? (int)ceil((int)($byNameQty[$lname] ?? 0) / $ppp) : 0;
+                        $needPk = $ppp > 0 ? (int)ceil((int)($byNameQty[$nm] ?? 0) / $ppp) : 0;
                         $best = $base;
                         if ($needPk > 0) {
                             try {
@@ -587,62 +622,25 @@ class ProcurementController extends BaseController
                             } catch (\Throwable $e) {}
                         }
                         if (!isset($prices[$sid])) { $prices[$sid] = []; }
-                        if (!isset($prices[$sid][$lname]) || $best < $prices[$sid][$lname]) { $prices[$sid][$lname] = $best; }
-                    }
-                    // Fuzzy tokens for missing
-                    $found = [];
-                    foreach ($prices as $sid0 => $m0) { foreach ($m0 as $nm0 => $_) { $found[$nm0] = true; } }
-                    $toFind = array_values(array_filter($names, static fn($nm) => !isset($found[$nm])));
-                    foreach ($toFind as $nm) {
-                        $tokens = preg_split('/[^a-z0-9]+/i', (string)$nm) ?: [];
-                        $tokens = array_values(array_filter(array_map('strtolower', $tokens), static fn($t) => strlen($t) >= 3));
-                        if (!$tokens) { continue; }
-                        $tokens = array_slice($tokens, 0, 3);
-                        $cond = [];
-                        $p2 = [];
-                        $cond[] = 'supplier_id IN (' . $inSup . ')';
-                        foreach ($chosen as $sid) { $p2[] = (int)$sid; }
-                        foreach ($tokens as $t) { $cond[] = 'LOWER(name) ILIKE ?'; $p2[] = '%' . $t . '%'; }
-                        $sql2 = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE ' . implode(' AND ', $cond);
-                        $st2 = $pdo->prepare($sql2);
-                        $st2->execute($p2);
-                        foreach ($st2->fetchAll() as $it) {
-                            $sid = (int)$it['supplier_id'];
-                            $base = (float)($it['price'] ?? 0);
-                            $ppp = max(1, (int)($it['pieces_per_package'] ?? 1));
-                            $needPk = $ppp > 0 ? (int)ceil((int)($byNameQty[$nm] ?? 0) / $ppp) : 0;
-                            $best = $base;
-                            if ($needPk > 0) {
-                                try {
-                                    $tq = $pdo->prepare('SELECT min_packages, max_packages, price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC');
-                                    $tq->execute(['id' => (int)$it['id']]);
-                                    foreach ($tq->fetchAll() as $t) {
-                                        $min = (int)$t['min_packages'];
-                                        $max = $t['max_packages'] !== null ? (int)$t['max_packages'] : null;
-                                        if ($needPk >= $min && ($max === null || $needPk <= $max)) { $best = min($best, (float)$t['price_per_package']); }
-                                    }
-                                } catch (\Throwable $e) {}
-                            }
-                            if (!isset($prices[$sid])) { $prices[$sid] = []; }
-                            if (!isset($prices[$sid][$nm]) || $best < $prices[$sid][$nm]) { $prices[$sid][$nm] = $best; }
-                        }
-                    }
-                    // Sum totals per supplier and pick cheapest
-                    $totals = [];
-                    foreach ($prices as $sid => $pm) {
-                        $sum = 0.0;
-                        foreach ($byNameQty as $iname => $_qty) {
-                            if (isset($pm[$iname])) { $sum += (float)$pm[$iname]; }
-                        }
-                        if ($sum > 0) { $totals[$sid] = $sum; }
-                    }
-                    if ($totals) {
-                        asort($totals); // ascending
-                        $sid = (int)array_key_first($totals);
-                        if ($sid && isset($map[$sid])) { $awardedId = $sid; $awardedName = $map[$sid]; }
+                        if (!isset($prices[$sid][$nm]) || $best < $prices[$sid][$nm]) { $prices[$sid][$nm] = $best; }
                     }
                 }
-            } catch (\Throwable $e) { /* ignore fallback errors */ }
+                // Sum totals per supplier
+                foreach ($prices as $sid => $pm) {
+                    $sum = 0.0;
+                    foreach ($byNameQty as $iname => $_qty) {
+                        if (isset($pm[$iname])) { $sum += (float)$pm[$iname]; }
+                    }
+                    if ($sum > 0) { $totals[$sid] = $sum; }
+                }
+            }
+        } catch (\Throwable $e) { /* best-effort: totals may remain empty */ }
+
+        // If no manual award selected, auto-pick the cheapest supplier using computed totals
+        if (!$awardedId && $totals) {
+            asort($totals);
+            $sid = (int)array_key_first($totals);
+            if ($sid && isset($map[$sid])) { $awardedId = $sid; $awardedName = $map[$sid]; }
         }
         // If still no awarded vendor, try saved awarded_to on pr_canvassing; else default to first chosen supplier to avoid blank
         if (!$awardedName) {
@@ -1209,6 +1207,26 @@ class ProcurementController extends BaseController
                 if ($rowAp = $stAp->fetch()) {
                     if ($approvedBy === '' && !empty($rowAp['approved_by'])) { $approvedBy = (string)$rowAp['approved_by']; }
                     if ($approvedAt === '' && !empty($rowAp['approved_at'])) { $approvedAt = date('Y-m-d', strtotime((string)$rowAp['approved_at'])); }
+                }
+            } catch (\Throwable $ignored) {}
+        }
+
+        // Final fallback: if still blank, backfill from events history for the initial Admin approval
+        if ($approvedBy === '' || $approvedAt === '') {
+            try {
+                $stEv = $pdo->prepare(
+                    "SELECT e.performed_at, u.full_name AS who
+                     FROM purchase_request_events e
+                     JOIN purchase_requests pr2 ON pr2.request_id = e.request_id
+                     LEFT JOIN users u ON u.user_id = e.performed_by
+                     WHERE pr2.pr_number = :pr AND e.new_status = 'approved'
+                     ORDER BY e.performed_at DESC
+                     LIMIT 1"
+                );
+                $stEv->execute(['pr' => $pr]);
+                if ($ev = $stEv->fetch()) {
+                    if ($approvedBy === '' && !empty($ev['who'])) { $approvedBy = (string)$ev['who']; }
+                    if ($approvedAt === '' && !empty($ev['performed_at'])) { $approvedAt = date('Y-m-d', strtotime((string)$ev['performed_at'])); }
                 }
             } catch (\Throwable $ignored) {}
         }
