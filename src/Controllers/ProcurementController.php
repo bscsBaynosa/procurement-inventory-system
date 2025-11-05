@@ -1224,6 +1224,24 @@ class ProcurementController extends BaseController
                 foreach ($stS->fetchAll() as $row) { $idByName[(string)$row['lname']] = (int)$row['user_id']; }
                 $supplierIds = [];
                 foreach ($lowers as $ln) { $supplierIds[] = $idByName[$ln] ?? 0; }
+                // Fuzzy fallback: if any supplier id not found by exact match, try token-based ILIKE search
+                if (in_array(0, $supplierIds, true)) {
+                    for ($i=0; $i<count($supplierIds); $i++) {
+                        if ($supplierIds[$i] !== 0) { continue; }
+                        $nm = $names[$i] ?? '';
+                        $tokens = preg_split('/[^a-z0-9]+/i', (string)$nm) ?: [];
+                        $tokens = array_values(array_filter(array_map('strtolower', $tokens), static fn($t) => strlen($t) >= 2));
+                        if (!$tokens) { continue; }
+                        $conds = ["role='supplier'", 'is_active = TRUE'];
+                        $paramsTok = [];
+                        foreach ($tokens as $t) { $conds[] = 'full_name ILIKE ?'; $paramsTok[] = '%' . $t . '%'; }
+                        $sqlTok = 'SELECT user_id FROM users WHERE ' . implode(' AND ', $conds) . ' ORDER BY user_id ASC LIMIT 1';
+                        $stTok = $pdo->prepare($sqlTok);
+                        $stTok->execute($paramsTok);
+                        $got = (int)($stTok->fetchColumn() ?: 0);
+                        if ($got > 0) { $supplierIds[$i] = $got; }
+                    }
+                }
                 // Build item name->qty map
                 $byNameQty = [];
                 foreach ($rows as $r) {
@@ -1276,6 +1294,10 @@ class ProcurementController extends BaseController
                     for ($i=0; $i<3; $i++) {
                         $sid = $supplierIds[$i] ?? 0;
                         $canvassTotals[$i] = ($sid && isset($bySidTotal[$sid])) ? (float)$bySidTotal[$sid] : null;
+                    }
+                    // If award still blank, use preview session award first; else compute from cheapest
+                    if ($awardedTo === '' && isset($_SESSION['canvass_preview_data'][$pr]['awarded_to']) && $_SESSION['canvass_preview_data'][$pr]['awarded_to'] !== '') {
+                        $awardedTo = (string)$_SESSION['canvass_preview_data'][$pr]['awarded_to'];
                     }
                     if ($awardedTo === '' && $bySidTotal) {
                         asort($bySidTotal);
