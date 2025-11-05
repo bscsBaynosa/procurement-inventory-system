@@ -301,10 +301,22 @@ class PDFService
 			$approvedLabel = 'Approved By:';
 		}
 		$uniformRow = function(string $leftLabel, string $leftValue, string $rightDate): string {
-			$box = 'height:28px; line-height:14px;';
+			// Enforce uniform height and spacing across all three rows and both columns
+			$fixedHeight = 44; // px; adjust if you need more space
+			$padTop = 8;
+			$boxLeft = 'height:' . $fixedHeight . 'px;';
+			$boxRight = 'height:' . $fixedHeight . 'px;';
 			return '<tr>'
-				. '<td style="width:60%;vertical-align:top;">' . $leftLabel . '<div style="' . $box . '"></div><div style="border-top:1px solid #999; text-align:center; padding-top:6px; min-height:18px;">' . $leftValue . '</div></td>'
-				. '<td style="width:40%;vertical-align:top;">Date:<div style="' . $box . '"></div><div style="border-top:1px solid #999; text-align:center; padding-top:6px; min-height:18px;">' . $rightDate . '</div></td>'
+				. '<td style="width:60%;vertical-align:bottom;">'
+					. '<div style="' . $boxLeft . '"></div>'
+					. '<div style="border-top:1px solid #999; text-align:center; padding-top:' . $padTop . 'px; min-height:18px;">' . $leftValue . '</div>'
+					. '<div style="position:relative; margin-top:-' . ($fixedHeight + $padTop) . 'px; font-size:10px;">' . $leftLabel . '</div>'
+				. '</td>'
+				. '<td style="width:40%;vertical-align:bottom;">'
+					. '<div style="' . $boxRight . '"></div>'
+					. '<div style="border-top:1px solid #999; text-align:center; padding-top:' . $padTop . 'px; min-height:18px;">' . $rightDate . '</div>'
+					. '<div style="position:relative; margin-top:-' . ($fixedHeight + $padTop) . 'px; font-size:10px;">Date:</div>'
+				. '</td>'
 				. '</tr>';
 		};
 		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'

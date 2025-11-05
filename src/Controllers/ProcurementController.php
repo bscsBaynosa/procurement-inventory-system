@@ -749,23 +749,46 @@ class ProcurementController extends BaseController
             ];
         }
         $this->pdf()->generatePurchaseRequisitionToFile($metaCan, $itemsCan, $file);
-        // Persist selected suppliers for PR (for inclusion in PR PDF later)
+        // Persist selected suppliers, their IDs and computed totals for PR (for inclusion in PR PDF later)
         try {
             $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
                 pr_number VARCHAR(32) PRIMARY KEY,
                 supplier1 VARCHAR(255),
                 supplier2 VARCHAR(255),
                 supplier3 VARCHAR(255),
+                supplier1_id BIGINT,
+                supplier2_id BIGINT,
+                supplier3_id BIGINT,
+                total1 NUMERIC(14,2),
+                total2 NUMERIC(14,2),
+                total3 NUMERIC(14,2),
                 awarded_to VARCHAR(255),
+                approved_by VARCHAR(255),
+                approved_at TIMESTAMPTZ,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )");
+            // Ensure new columns exist in older installs
+            try { $pdo->exec("ALTER TABLE pr_canvassing ADD COLUMN IF NOT EXISTS supplier1_id BIGINT"); } catch (\Throwable $e) {}
+            try { $pdo->exec("ALTER TABLE pr_canvassing ADD COLUMN IF NOT EXISTS supplier2_id BIGINT"); } catch (\Throwable $e) {}
+            try { $pdo->exec("ALTER TABLE pr_canvassing ADD COLUMN IF NOT EXISTS supplier3_id BIGINT"); } catch (\Throwable $e) {}
+            try { $pdo->exec("ALTER TABLE pr_canvassing ADD COLUMN IF NOT EXISTS total1 NUMERIC(14,2)"); } catch (\Throwable $e) {}
+            try { $pdo->exec("ALTER TABLE pr_canvassing ADD COLUMN IF NOT EXISTS total2 NUMERIC(14,2)"); } catch (\Throwable $e) {}
+            try { $pdo->exec("ALTER TABLE pr_canvassing ADD COLUMN IF NOT EXISTS total3 NUMERIC(14,2)"); } catch (\Throwable $e) {}
             $names = array_values($map);
             $s1 = $names[0] ?? null; $s2 = $names[1] ?? null; $s3 = $names[2] ?? null;
+            $sid1 = $chosen[0] ?? null; $sid2 = $chosen[1] ?? null; $sid3 = $chosen[2] ?? null;
+            $t1 = ($sid1 && isset($totals[$sid1])) ? (float)$totals[$sid1] : null;
+            $t2 = ($sid2 && isset($totals[$sid2])) ? (float)$totals[$sid2] : null;
+            $t3 = ($sid3 && isset($totals[$sid3])) ? (float)$totals[$sid3] : null;
             // Upsert
-            $pdo->prepare('INSERT INTO pr_canvassing (pr_number, supplier1, supplier2, supplier3, awarded_to) VALUES (:pr,:s1,:s2,:s3,:aw)
-                           ON CONFLICT (pr_number) DO UPDATE SET supplier1 = EXCLUDED.supplier1, supplier2 = EXCLUDED.supplier2, supplier3 = EXCLUDED.supplier3, awarded_to = EXCLUDED.awarded_to, updated_at = NOW()')
-                ->execute(['pr' => $pr, 's1' => $s1, 's2' => $s2, 's3' => $s3, 'aw' => $awardedName]);
+            $pdo->prepare('INSERT INTO pr_canvassing (pr_number, supplier1, supplier2, supplier3, supplier1_id, supplier2_id, supplier3_id, total1, total2, total3, awarded_to)
+                           VALUES (:pr,:s1,:s2,:s3,:sid1,:sid2,:sid3,:t1,:t2,:t3,:aw)
+                           ON CONFLICT (pr_number) DO UPDATE SET supplier1 = EXCLUDED.supplier1, supplier2 = EXCLUDED.supplier2, supplier3 = EXCLUDED.supplier3,
+                               supplier1_id = EXCLUDED.supplier1_id, supplier2_id = EXCLUDED.supplier2_id, supplier3_id = EXCLUDED.supplier3_id,
+                               total1 = EXCLUDED.total1, total2 = EXCLUDED.total2, total3 = EXCLUDED.total3,
+                               awarded_to = EXCLUDED.awarded_to, updated_at = NOW()')
+                ->execute(['pr' => $pr, 's1' => $s1, 's2' => $s2, 's3' => $s3, 'sid1' => $sid1, 'sid2' => $sid2, 'sid3' => $sid3, 't1' => $t1, 't2' => $t2, 't3' => $t3, 'aw' => $awardedName]);
         } catch (\Throwable $ignored) {}
 
         // Build PR PDF as second attachment (final PR with approval/canvassing info)
@@ -1200,14 +1223,31 @@ class ProcurementController extends BaseController
                 supplier1 VARCHAR(255),
                 supplier2 VARCHAR(255),
                 supplier3 VARCHAR(255),
+                supplier1_id BIGINT,
+                supplier2_id BIGINT,
+                supplier3_id BIGINT,
+                total1 NUMERIC(14,2),
+                total2 NUMERIC(14,2),
+                total3 NUMERIC(14,2),
                 awarded_to VARCHAR(255),
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )");
-            $stC = $pdo->prepare('SELECT supplier1, supplier2, supplier3, awarded_to FROM pr_canvassing WHERE pr_number = :pr');
+            // Evolve schema for existing deployments
+            try { $pdo->exec("ALTER TABLE pr_canvassing ADD COLUMN IF NOT EXISTS supplier1_id BIGINT"); } catch (\Throwable $e) {}
+            try { $pdo->exec("ALTER TABLE pr_canvassing ADD COLUMN IF NOT EXISTS supplier2_id BIGINT"); } catch (\Throwable $e) {}
+            try { $pdo->exec("ALTER TABLE pr_canvassing ADD COLUMN IF NOT EXISTS supplier3_id BIGINT"); } catch (\Throwable $e) {}
+            try { $pdo->exec("ALTER TABLE pr_canvassing ADD COLUMN IF NOT EXISTS total1 NUMERIC(14,2)"); } catch (\Throwable $e) {}
+            try { $pdo->exec("ALTER TABLE pr_canvassing ADD COLUMN IF NOT EXISTS total2 NUMERIC(14,2)"); } catch (\Throwable $e) {}
+            try { $pdo->exec("ALTER TABLE pr_canvassing ADD COLUMN IF NOT EXISTS total3 NUMERIC(14,2)"); } catch (\Throwable $e) {}
+            $stC = $pdo->prepare('SELECT supplier1, supplier2, supplier3, total1, total2, total3, awarded_to FROM pr_canvassing WHERE pr_number = :pr');
             $stC->execute(['pr' => $pr]);
             if ($cv = $stC->fetch()) {
                 foreach (['supplier1','supplier2','supplier3'] as $k) { if (!empty($cv[$k])) { $canvasSup[] = (string)$cv[$k]; } }
+                // Use persisted totals if present
+                $canvassTotals = [ isset($cv['total1']) ? (float)$cv['total1'] : null,
+                                   isset($cv['total2']) ? (float)$cv['total2'] : null,
+                                   isset($cv['total3']) ? (float)$cv['total3'] : null, ];
                 $awardedTo = (string)($cv['awarded_to'] ?? '');
             }
         } catch (\Throwable $ignored) {}
