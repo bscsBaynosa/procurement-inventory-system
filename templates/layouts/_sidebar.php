@@ -56,6 +56,10 @@ try {
         <?php if ($role === 'admin'): ?>
             <a href="/admin/users" class="<?= nav_active('/admin/users', $path) ?>"><svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5s-3 1.34-3 3 1.34 3 3 3zM8 11c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.67 0-8 1.34-8 4v2h10v-2c0-2.66-5.33-4-8-4zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.96 1.97 3.45v2h6v-2c0-2.66-5.33-4-8-4z"/></svg> Users</a>
             <a href="/admin/branches" class="<?= nav_active('/admin/branches', $path) ?>"><svg viewBox="0 0 24 24"><path d="M12 2l7 6v12H5V8l7-6zm0 2.2L7 8v10h10V8l-5-3.8z"/></svg> Branches</a>
+            <a href="/admin/announcements" class="<?= nav_active('/admin/announcements', $path) ?>">
+                <svg viewBox="0 0 24 24"><path d="M3 3h18v4H3V3zm0 6h12v4H3V9zm0 6h18v4H3v-4z"/></svg>
+                Announcements
+            </a>
             <a href="/admin/requests" class="<?= nav_active('/admin/requests', $path) ?>">
                 <svg viewBox="0 0 24 24"><path d="M3 3h18v14H6l-3 3V3z"/></svg>
                 Purchase Requests

@@ -1497,6 +1497,97 @@ class AdminController extends BaseController
         }
     }
 
+    /** Admin: Announcements list + create form */
+    public function announcements(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+        try {
+            // Ensure table exists
+            $this->pdo->exec('CREATE TABLE IF NOT EXISTS announcements (
+                id BIGSERIAL PRIMARY KEY,
+                topic VARCHAR(255) NOT NULL,
+                content TEXT NOT NULL,
+                created_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )');
+            $list = $this->pdo->query('SELECT id, topic, content, created_by, created_at FROM announcements ORDER BY created_at DESC LIMIT 100')->fetchAll();
+            $err = isset($_GET['error']) ? (string)$_GET['error'] : '';
+            $ok = isset($_GET['created']) ? true : false;
+            $this->render('dashboard/announcements.php', ['announcements' => $list, 'created' => $ok, 'error' => $err]);
+        } catch (\Throwable $e) {
+            http_response_code(500);
+            header('Content-Type: text/plain');
+            echo 'Error loading announcements: ' . $e->getMessage();
+        }
+    }
+
+    /** Admin: Create a new announcement and notify Admin Assistants and Procurement */
+    public function createAnnouncement(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+        $topic = trim((string)($_POST['topic'] ?? ''));
+        $content = trim((string)($_POST['content'] ?? ''));
+        if ($topic === '' || $content === '') { header('Location: /admin/announcements?error=' . rawurlencode('Topic and content are required.')); return; }
+        try {
+            // Ensure table exists then insert
+            $this->pdo->exec('CREATE TABLE IF NOT EXISTS announcements (
+                id BIGSERIAL PRIMARY KEY,
+                topic VARCHAR(255) NOT NULL,
+                content TEXT NOT NULL,
+                created_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )');
+            $ins = $this->pdo->prepare('INSERT INTO announcements (topic, content, created_by) VALUES (:t, :c, :by)');
+            $ins->execute(['t' => $topic, 'c' => $content, 'by' => (int)($_SESSION['user_id'] ?? 0)]);
+
+            // Notify Admin Assistants and Procurement roles via messages
+            try {
+                // Ensure messages table exists
+                $this->pdo->exec('CREATE TABLE IF NOT EXISTS messages (
+                    id BIGSERIAL PRIMARY KEY,
+                    sender_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+                    recipient_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+                    subject VARCHAR(255) NOT NULL,
+                    body TEXT NOT NULL,
+                    is_read BOOLEAN NOT NULL DEFAULT FALSE,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )');
+                $recips = $this->pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('admin_assistant','custodian','procurement','procurement_manager')")->fetchAll();
+                if ($recips) {
+                    $subject = 'Announcement • ' . $topic;
+                    $encBody = \App\Services\CryptoService::encrypt($content, 'announce');
+                    $insMsg = $this->pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
+                    $sender = (int)($_SESSION['user_id'] ?? 0);
+                    foreach ($recips as $r) {
+                        $insMsg->execute(['s' => $sender, 'r' => (int)$r['user_id'], 'j' => $subject, 'b' => $encBody]);
+                    }
+                }
+            } catch (\Throwable $ignored) {}
+
+            header('Location: /admin/announcements?created=1');
+        } catch (\Throwable $e) {
+            header('Location: /admin/announcements?error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
+    /** Admin: Delete an announcement */
+    public function deleteAnnouncement(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? null) !== 'admin') { header('Location: /login'); return; }
+        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        if ($id <= 0) { header('Location: /admin/announcements?error=' . rawurlencode('Invalid announcement.')); return; }
+        try {
+            $del = $this->pdo->prepare('DELETE FROM announcements WHERE id = :id');
+            $del->execute(['id' => $id]);
+            header('Location: /admin/announcements');
+        } catch (\Throwable $e) {
+            header('Location: /admin/announcements?error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
     /** View a single purchase request details with history. */
     public function viewRequest(): void
     {

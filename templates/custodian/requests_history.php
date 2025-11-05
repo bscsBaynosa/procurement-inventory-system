@@ -44,7 +44,7 @@
                 <tbody>
                 <?php if (!empty($rows)): foreach ($rows as $r): ?>
                     <tr>
-                        <td class="mono"><?= htmlspecialchars((string)$r['pr_number'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td class="mono"><?= htmlspecialchars(\App\Services\IdService::format('PR', (string)$r['pr_number']), ENT_QUOTES, 'UTF-8') ?></td>
                         <td><?= htmlspecialchars((string)($r['status'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                         <td class="mono">
                             <?= $r['attachment_name'] ? htmlspecialchars((string)$r['attachment_name'], ENT_QUOTES, 'UTF-8') : '<span style="color:#64748b">No PDF yet</span>' ?>

@@ -14,7 +14,7 @@ $status = isset($rows[0]['status']) ? (string)$rows[0]['status'] : '';
 <html>
 <head>
   <meta charset="utf-8">
-  <title>PR <?= htmlspecialchars($pr) ?> • Procurement</title>
+  <title><?= htmlspecialchars(\App\Services\IdService::format('PR', (string)$pr)) ?> • Procurement</title>
   <link rel="icon" href="/img/pocc-logo.svg">
   <link rel="stylesheet" href="/css/main.css">
   <style>
@@ -42,8 +42,8 @@ $status = isset($rows[0]['status']) ? (string)$rows[0]['status'] : '';
   <div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
       <div>
-        <div class="muted">Purchase Requisition No.</div>
-        <div style="font-size:20px;font-weight:800;">PR <?= htmlspecialchars($pr) ?></div>
+  <div class="muted">Purchase Requisition</div>
+  <div style="font-size:20px;font-weight:800;"><?= htmlspecialchars(\App\Services\IdService::format('PR', (string)$pr)) ?></div>
       </div>
       <div class="actions">
         <a class="btn ghost" href="/manager/requests">← Back to Requests</a>

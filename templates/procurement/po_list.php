@@ -74,7 +74,7 @@
                 <?php if (!empty($pos)): foreach ($pos as $p): ?>
                     <tr>
                         <td class="nowrap"><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)$p['created_at'])), ENT_QUOTES, 'UTF-8') ?></td>
-                        <td class="mono"><?= htmlspecialchars((string)$p['pr_number'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td class="mono"><?= htmlspecialchars(\App\Services\IdService::format('PR', (string)$p['pr_number']), ENT_QUOTES, 'UTF-8') ?></td>
                         <td class="mono"><?= htmlspecialchars((string)$p['po_number'], ENT_QUOTES, 'UTF-8') ?></td>
                         <td><?= htmlspecialchars((string)$p['supplier_name'], ENT_QUOTES, 'UTF-8') ?></td>
                         <td><span class="badge"><?= htmlspecialchars(ucwords(str_replace('_',' ', (string)$p['status'])), ENT_QUOTES, 'UTF-8') ?></span></td>

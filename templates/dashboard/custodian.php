@@ -154,7 +154,15 @@
             <tbody>
             <?php if (!empty($pendingRequests)): foreach ($pendingRequests as $r): ?>
                 <tr>
-                    <td><?= htmlspecialchars((string)(isset($r['pr_number']) ? $r['pr_number'] : (isset($r['request_id']) ? $r['request_id'] : '')), ENT_QUOTES, 'UTF-8') ?></td>
+                    <td>
+                        <?php if (isset($r['pr_number']) && $r['pr_number'] !== ''): ?>
+                            <?= htmlspecialchars(\App\Services\IdService::format('PR', (string)$r['pr_number']), ENT_QUOTES, 'UTF-8') ?>
+                        <?php elseif (isset($r['request_id'])): ?>
+                            <?= htmlspecialchars((string)$r['request_id'], ENT_QUOTES, 'UTF-8') ?>
+                        <?php else: ?>
+                            <span class="muted">—</span>
+                        <?php endif; ?>
+                    </td>
                     <td><?= htmlspecialchars((string)(isset($r['item_name']) ? $r['item_name'] : '—'), ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars((string)(isset($r['status']) ? $r['status'] : ''), ENT_QUOTES, 'UTF-8') ?></td>
                     <td><?= htmlspecialchars((string)(isset($r['created_at']) ? $r['created_at'] : ''), ENT_QUOTES, 'UTF-8') ?></td>

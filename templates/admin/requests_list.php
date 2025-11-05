@@ -77,7 +77,7 @@
                             $revLabel = $rev !== '' ? ($revMap[$rev] ?? $rev) : '';
                         ?>
                         <tr>
-                            <td class="mono"><?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?></td>
+                            <td class="mono"><?= htmlspecialchars(\App\Services\IdService::format('PR', (string)$g['pr_number']), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)($g['branch_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><pre style="margin:0;white-space:pre-wrap;line-height:1.3;max-height:3.2em;overflow:hidden;">&ZeroWidthSpace;<?= htmlspecialchars((string)($g['items_summary'] ?? ''), ENT_QUOTES, 'UTF-8') ?></pre></td>
                             <td class="nowrap"><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)($g['min_created_at'] ?? 'now'))), ENT_QUOTES, 'UTF-8') ?></td>

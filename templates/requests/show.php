@@ -11,10 +11,14 @@
         <h1>Purchase Request Details</h1>
         <?php if (!empty($request)): ?>
             <div class="request-details">
-                <p><strong>ID:</strong> <?= htmlspecialchars($request['request_id'], ENT_QUOTES, 'UTF-8') ?></p>
-                <?php if (!empty($request['pr_number'])): ?>
-                <p><strong>PR Number:</strong> <?= htmlspecialchars($request['pr_number'], ENT_QUOTES, 'UTF-8') ?></p>
+                <?php 
+                    $reqId = (int)($request['request_id'] ?? 0);
+                    $prNo = (string)($request['pr_number'] ?? '');
+                ?>
+                <?php if ($prNo !== ''): ?>
+                    <p><strong>PR:</strong> <?= htmlspecialchars(\App\Services\IdService::format('PR', $prNo), ENT_QUOTES, 'UTF-8') ?></p>
                 <?php endif; ?>
+                <p><strong>Request ID:</strong> <?= htmlspecialchars((string)$reqId, ENT_QUOTES, 'UTF-8') ?></p>
                 <p><strong>Item:</strong> <?= htmlspecialchars($request['item_id'] ?? 'N/A', ENT_QUOTES, 'UTF-8') ?></p>
                 <p><strong>Quantity:</strong> <?= htmlspecialchars($request['quantity'], ENT_QUOTES, 'UTF-8') ?></p>
                 <p><strong>Status:</strong> <?= htmlspecialchars($request['status'], ENT_QUOTES, 'UTF-8') ?></p>

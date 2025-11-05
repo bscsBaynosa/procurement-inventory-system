@@ -46,7 +46,7 @@
         <div class="grid" style="margin-bottom:12px;">
             <div class="card">
                 <div class="muted">PR Number</div>
-                <div class="mono"><?= htmlspecialchars((string)$po['pr_number'], ENT_QUOTES, 'UTF-8') ?></div>
+                <div class="mono"><?= htmlspecialchars(\App\Services\IdService::format('PR', (string)$po['pr_number']), ENT_QUOTES, 'UTF-8') ?></div>
                 <div class="muted" style="margin-top:8px;">Supplier</div>
                 <div><?= htmlspecialchars((string)$po['supplier_name'], ENT_QUOTES, 'UTF-8') ?></div>
                 <?php if (!empty($po['vendor_name'])): ?>

@@ -41,17 +41,30 @@
             </div>
             <div class="muted" style="margin:6px 0 12px;">From <?= htmlspecialchars((string)$message['from_name'], ENT_QUOTES, 'UTF-8') ?> • <?= htmlspecialchars((string)$message['created_at'], ENT_QUOTES, 'UTF-8') ?></div>
             <div style="white-space:pre-wrap;"><?= nl2br(htmlspecialchars((string)$message['body'], ENT_QUOTES, 'UTF-8')) ?></div>
-            <?php if (!empty($message['attachment_name']) && !empty($message['attachment_path'])): ?>
+            <?php
+                // Build a unified list of attachments (primary + additional)
+                $attList = [];
+                if (!empty($message['attachment_name']) && !empty($message['attachment_path'])) {
+                    $attList[] = [ 'id' => 0, 'file_name' => (string)$message['attachment_name'] ];
+                }
+                if (!empty($attachments)) {
+                    foreach ($attachments as $att) {
+                        $attList[] = [ 'id' => (int)$att['id'], 'file_name' => (string)$att['file_name'] ];
+                    }
+                }
+            ?>
+            <?php if (!empty($attList)): ?>
                 <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                    <a class="btn" href="/inbox/download?id=<?= (int)$message['id'] ?>">Download: <?= htmlspecialchars((string)$message['attachment_name'], ENT_QUOTES, 'UTF-8') ?></a>
-                    <?php if (!empty($attachments)): foreach ($attachments as $att): ?>
-                        <a class="btn" href="/inbox/download?id=<?= (int)$message['id'] ?>&aid=<?= (int)$att['id'] ?>">Download: <?= htmlspecialchars((string)$att['file_name'], ENT_QUOTES, 'UTF-8') ?></a>
-                    <?php endforeach; endif; ?>
-                </div>
-            <?php elseif (!empty($attachments)): ?>
-                <div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-                    <?php foreach ($attachments as $att): ?>
-                        <a class="btn" href="/inbox/download?id=<?= (int)$message['id'] ?>&aid=<?= (int)$att['id'] ?>">Download: <?= htmlspecialchars((string)$att['file_name'], ENT_QUOTES, 'UTF-8') ?></a>
+                    <?php foreach ($attList as $a): $name = (string)$a['file_name']; $isPdf = (bool)preg_match('/\.pdf$/i', $name); ?>
+                        <div class="card" style="padding:8px 10px; display:inline-flex; align-items:center; gap:10px; border-radius:999px;">
+                            <span class="mono" title="Attachment" style="max-width:320px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">
+                                <?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?>
+                            </span>
+                            <?php if ($isPdf): ?>
+                                <a class="btn muted" style="height:30px;" href="/inbox/preview?id=<?= (int)$message['id'] ?><?= ($a['id']>0?'&aid='.(int)$a['id']:'') ?>">Preview</a>
+                            <?php endif; ?>
+                            <a class="btn" style="height:30px;" href="/inbox/download?id=<?= (int)$message['id'] ?><?= ($a['id']>0?'&aid='.(int)$a['id']:'') ?>">Download</a>
+                        </div>
                     <?php endforeach; ?>
                 </div>
             <?php endif; ?>

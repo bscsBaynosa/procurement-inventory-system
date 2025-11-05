@@ -772,6 +772,23 @@ if ($method === 'POST' && $path === '/settings/test-email') {
 	exit;
 }
 
+// Admin: Announcements
+if ($method === 'GET' && $path === '/admin/announcements') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
+	$admin->announcements();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/announcements') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
+	$admin->createAnnouncement();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/announcements/delete') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
+	$admin->deleteAnnouncement();
+	exit;
+}
+
 // One-time setup route (guarded). Enable by setting SETUP_TOKEN env var.
 if ($method === 'GET' && $path === '/setup') {
 	// Emergency bootstrap switch: /setup?force=1 will run installer unconditionally.
