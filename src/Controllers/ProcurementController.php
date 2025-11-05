@@ -921,14 +921,16 @@ class ProcurementController extends BaseController
         // Ensure message columns exist (safety)
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
-        $to = 0;
+        // Prefill all Admin users as recipients
+        $toList = [];
         try {
-            $stAdm = $pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role = 'admin' ORDER BY user_id ASC LIMIT 1");
-            $to = (int)($stAdm ? ($stAdm->fetchColumn() ?: 0) : 0);
+            $stAdm = $pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role = 'admin' ORDER BY user_id ASC");
+            foreach ($stAdm->fetchAll() as $row) { $id = (int)$row['user_id']; if ($id > 0) { $toList[] = $id; } }
         } catch (\Throwable $ignored) {}
         $subject = 'PR ' . $pr . ' • PR - Canvass';
         $qs = http_build_query([
-            'to' => $to > 0 ? $to : null,
+            // multiple recipients like to[]=1&to[]=2
+            'to' => $toList ?: null,
             'subject' => $subject,
             // Primary attach: Canvassing PDF
             'attach_name' => basename($file),
@@ -1658,14 +1660,15 @@ class ProcurementController extends BaseController
         try { $this->requests()->updateGroupStatus($pr, 'for_admin_approval', (int)($_SESSION['user_id'] ?? 0), 'Sent to Admin for Approval'); } catch (\Throwable $ignored) {}
 
         // Redirect user to the compose screen with prefilled recipient, subject, and auto-attachment
-        $to = 0;
+        // Prefill all Admin users as recipients
+        $toList = [];
         try {
-            $stAdm = $pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role = 'admin' ORDER BY user_id ASC LIMIT 1");
-            $to = (int)($stAdm ? ($stAdm->fetchColumn() ?: 0) : 0);
+            $stAdm = $pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role = 'admin' ORDER BY user_id ASC");
+            foreach ($stAdm->fetchAll() as $row) { $id = (int)$row['user_id']; if ($id > 0) { $toList[] = $id; } }
         } catch (\Throwable $ignored) {}
         $subject = 'PR ' . $pr . ' • For Approval';
         $qs = http_build_query([
-            'to' => $to > 0 ? $to : null,
+            'to' => $toList ?: null,
             'subject' => $subject,
             'attach_name' => basename($tmpFile),
             'attach_path' => $tmpFile,

@@ -49,7 +49,9 @@ class AdminController extends BaseController
                     'pending' => 0,
                     'approved' => 0,
                     'rejected' => 0,
-                    'in_review' => 0,
+                    'for_admin_approval' => 0,
+                    'canvassing_submitted' => 0,
+                    'canvassing_approved' => 0,
                 ],
                 // Keep only overall inventory stats; no per-branch inventory table on dashboard
                 'inventory' => $this->inventory()->getStatsByBranch(null),
@@ -63,8 +65,8 @@ class AdminController extends BaseController
             // Branches
             $stmt = $this->pdo->query('SELECT COUNT(*) FROM branches');
             $counts['branches'] = (int)$stmt->fetchColumn();
-            // Role counts (split out managers vs procurement vs suppliers)
-            $stmt = $this->pdo->query("SELECT role, COUNT(*) AS c FROM users GROUP BY role");
+            // Role counts (active only; split out managers vs procurement vs suppliers)
+            $stmt = $this->pdo->query("SELECT role, COUNT(*) AS c FROM users WHERE is_active = TRUE GROUP BY role");
             foreach ($stmt->fetchAll() as $row) {
                 $role = (string)$row['role'];
                 $c = (int)$row['c'];
@@ -75,7 +77,9 @@ class AdminController extends BaseController
             }
 
             // Requests by status (incoming)
-            $rs = $this->pdo->query('SELECT status, COUNT(*) AS c FROM purchase_requests GROUP BY status');
+            // Exclude archived for exact current numbers
+            try { $this->pdo->exec("ALTER TABLE purchase_requests ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE"); } catch (\Throwable $e) {}
+            $rs = $this->pdo->query("SELECT status, COUNT(*) AS c FROM purchase_requests WHERE COALESCE(is_archived, FALSE) = FALSE GROUP BY status");
             foreach ($rs->fetchAll() as $row) {
                 $status = (string)$row['status'];
                 $c = (int)$row['c'];
@@ -85,12 +89,13 @@ class AdminController extends BaseController
 
             // Recent activity: last 6 requests
             $recent = $this->pdo->query(
-                'SELECT pr.request_id, pr.pr_number, pr.status, pr.created_at, i.name AS item_name, b.name AS branch_name
+                "SELECT pr.request_id, pr.pr_number, pr.status, pr.created_at, i.name AS item_name, b.name AS branch_name
                  FROM purchase_requests pr
                  LEFT JOIN inventory_items i ON i.item_id = pr.item_id
                  LEFT JOIN branches b ON b.branch_id = pr.branch_id
+                 WHERE COALESCE(pr.is_archived, FALSE) = FALSE
                  ORDER BY pr.created_at DESC
-                 LIMIT 6'
+                 LIMIT 6"
             )->fetchAll();
 
             // Build simple 6-month trend series using generate_series for three metrics
@@ -762,7 +767,21 @@ class AdminController extends BaseController
                 $row['body'] = \App\Services\CryptoService::maybeDecrypt((string)$row['body']);
             }
             $users = $this->pdo->query("SELECT user_id, full_name, role FROM users WHERE is_active = TRUE ORDER BY role, full_name")->fetchAll();
+            // Allow prefill of multiple recipients via to[] or comma-separated to
             $prefillTo = isset($_GET['to']) ? (int)$_GET['to'] : 0;
+            $prefillToList = [];
+            if (isset($_GET['to'])) {
+                if (is_array($_GET['to'])) {
+                    foreach ($_GET['to'] as $v) { $id = (int)$v; if ($id > 0) { $prefillToList[] = $id; } }
+                } else {
+                    $raw = (string)$_GET['to'];
+                    if (strpos($raw, ',') !== false) {
+                        foreach (explode(',', $raw) as $part) { $id = (int)trim($part); if ($id > 0) { $prefillToList[] = $id; } }
+                    } elseif ($prefillTo > 0) {
+                        $prefillToList[] = $prefillTo;
+                    }
+                }
+            }
             $prefillSubject = isset($_GET['subject']) ? (string)$_GET['subject'] : '';
             $prefillAttachName = isset($_GET['attach_name']) ? (string)$_GET['attach_name'] : '';
             $prefillAttachPath = isset($_GET['attach_path']) ? (string)$_GET['attach_path'] : '';
@@ -773,6 +792,7 @@ class AdminController extends BaseController
                 'inbox' => $inbox,
                 'users' => $users,
                 'prefill_to' => $prefillTo,
+                'prefill_to_list' => $prefillToList,
                 'prefill_subject' => $prefillSubject,
                 'prefill_attachment_name' => $prefillAttachName,
                 'prefill_attachment_path' => $prefillAttachPath,
@@ -809,30 +829,50 @@ class AdminController extends BaseController
     public function sendMessage(): void
     {
         $me = (int)($_SESSION['user_id'] ?? 0);
-        $to = isset($_POST['to']) ? (int)$_POST['to'] : 0;
+        // Accept single or multiple recipients
+        $toParam = $_POST['to'] ?? null;
+        $toList = [];
+        if (is_array($toParam)) {
+            foreach ($toParam as $v) { $id = (int)$v; if ($id > 0) { $toList[] = $id; } }
+        } else {
+            $id = (int)$toParam; if ($id > 0) { $toList[] = $id; }
+        }
         $subject = trim((string)($_POST['subject'] ?? ''));
         $body = trim((string)($_POST['body'] ?? ''));
-        if ($to <= 0 || $subject === '' || $body === '') { header('Location: /admin/messages'); return; }
+        if (empty($toList) || $subject === '' || $body === '') { header('Location: /admin/messages'); return; }
         try {
+            // Insert one message per recipient
+            $this->pdo->exec('CREATE TABLE IF NOT EXISTS messages (
+                id BIGSERIAL PRIMARY KEY,
+                sender_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+                recipient_id BIGINT REFERENCES users(user_id) ON DELETE SET NULL,
+                subject VARCHAR(255) NOT NULL,
+                body TEXT NOT NULL,
+                is_read BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )');
             $stmt = $this->pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
-            $encBody = \App\Services\CryptoService::encrypt($body, 'msg:' . (string)$me . '->' . (string)$to);
-            $stmt->execute(['s' => $me, 'r' => $to, 'j' => $subject, 'b' => $encBody]);
-            $msgId = (int)$this->pdo->lastInsertId('messages_id_seq');
+            $msgIds = [];
+            foreach ($toList as $to) {
+                $encBody = \App\Services\CryptoService::encrypt($body, 'msg:' . (string)$me . '->' . (string)$to);
+                $stmt->execute(['s' => $me, 'r' => $to, 'j' => $subject, 'b' => $encBody]);
+                $msgIds[] = (int)$this->pdo->lastInsertId('messages_id_seq');
+            }
             // Optionally auto-attach an existing file (e.g., pre-generated PR PDF)
             $autoName = isset($_POST['attach_name']) ? trim((string)$_POST['attach_name']) : '';
             $autoPath = isset($_POST['attach_path']) ? trim((string)$_POST['attach_path']) : '';
-            if ($autoName !== '' && $autoPath !== '' && @is_file($autoPath)) {
+            if (!empty($msgIds) && $autoName !== '' && $autoPath !== '' && @is_file($autoPath)) {
                 try {
                     $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);");
                     $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;");
                 } catch (\Throwable $e) {}
                 $up = $this->pdo->prepare('UPDATE messages SET attachment_name = :n, attachment_path = :p WHERE id = :id');
-                $up->execute(['n' => $autoName, 'p' => $autoPath, 'id' => $msgId]);
+                foreach ($msgIds as $mid) { $up->execute(['n' => $autoName, 'p' => $autoPath, 'id' => $mid]); }
             }
             // Optional second prefilled attachment saved to messages_attachments
             $autoName2 = isset($_POST['attach_name2']) ? trim((string)$_POST['attach_name2']) : '';
             $autoPath2 = isset($_POST['attach_path2']) ? trim((string)$_POST['attach_path2']) : '';
-            if ($autoName2 !== '' && $autoPath2 !== '' && @is_file($autoPath2)) {
+            if (!empty($msgIds) && $autoName2 !== '' && $autoPath2 !== '' && @is_file($autoPath2)) {
                 try {
                     $this->pdo->exec('CREATE TABLE IF NOT EXISTS messages_attachments (
                         id BIGSERIAL PRIMARY KEY,
@@ -843,10 +883,10 @@ class AdminController extends BaseController
                     )');
                 } catch (\Throwable $e) {}
                 $insA0 = $this->pdo->prepare('INSERT INTO messages_attachments (message_id, file_name, file_path) VALUES (:m,:n,:p)');
-                $insA0->execute(['m' => $msgId, 'n' => basename($autoName2), 'p' => $autoPath2]);
+                foreach ($msgIds as $mid) { $insA0->execute(['m' => $mid, 'n' => basename($autoName2), 'p' => $autoPath2]); }
             }
             // Handle optional attachment upload
-            if (!empty($_FILES['attachment']) && is_uploaded_file($_FILES['attachment']['tmp_name'])) {
+            if (!empty($msgIds) && !empty($_FILES['attachment']) && is_uploaded_file($_FILES['attachment']['tmp_name'])) {
                 // Ensure attachments table
                 try {
                     $this->pdo->exec('CREATE TABLE IF NOT EXISTS messages_attachments (
@@ -864,7 +904,7 @@ class AdminController extends BaseController
                 $dest = $dir . DIRECTORY_SEPARATOR . uniqid('att_') . '_' . $safe;
                 if (@move_uploaded_file($_FILES['attachment']['tmp_name'], $dest)) {
                     $insA = $this->pdo->prepare('INSERT INTO messages_attachments (message_id, file_name, file_path) VALUES (:m,:n,:p)');
-                    $insA->execute(['m' => $msgId, 'n' => $safe, 'p' => $dest]);
+                    foreach ($msgIds as $mid) { $insA->execute(['m' => $mid, 'n' => $safe, 'p' => $dest]); }
                 }
             }
             header('Location: /admin/messages');

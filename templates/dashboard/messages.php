@@ -83,12 +83,18 @@
                 <form method="POST" action="/admin/messages" style="display:grid; gap:10px;" enctype="multipart/form-data">
                     <div>
                         <label>To</label>
-                        <select name="to" required>
-                            <option value="">— Select recipient —</option>
-                            <?php $pf = isset($prefill_to) ? (int)$prefill_to : 0; foreach ($users as $u): ?>
-                                <option value="<?= (int)$u['user_id'] ?>" <?= ($pf === (int)$u['user_id'] ? 'selected' : '') ?>><?= htmlspecialchars($u['full_name'] . ' (' . $u['role'] . ')', ENT_QUOTES, 'UTF-8') ?></option>
+                        <select name="to[]" multiple required size="6" title="Hold Ctrl or Cmd to select multiple">
+                            <?php
+                                $pf = isset($prefill_to) ? (int)$prefill_to : 0;
+                                $pfl = isset($prefill_to_list) && is_array($prefill_to_list) ? array_map('intval', $prefill_to_list) : array();
+                                foreach ($users as $u):
+                                    $uid = (int)$u['user_id'];
+                                    $sel = ($pf === $uid) || in_array($uid, $pfl, true);
+                            ?>
+                                <option value="<?= $uid ?>" <?= $sel ? 'selected' : '' ?>><?= htmlspecialchars($u['full_name'] . ' (' . $u['role'] . ')', ENT_QUOTES, 'UTF-8') ?></option>
                             <?php endforeach; ?>
                         </select>
+                        <div class="muted" style="font-size:12px;margin-top:6px;">Tip: Select one or more recipients (Ctrl/Cmd + Click).</div>
                     </div>
                     <div>
                         <label>Subject</label>
