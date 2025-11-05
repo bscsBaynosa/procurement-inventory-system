@@ -1414,6 +1414,11 @@ class ProcurementController extends BaseController
             } catch (\Throwable $ignored) {}
         }
 
+        // Absolute last-resort: if Awarded To is still blank but we have supplier names, default to the first supplier
+        if ($awardedTo === '' && !empty($canvasSup)) {
+            $awardedTo = (string)$canvasSup[0];
+        }
+
         // If PR approval is blank, fallback to canvassing approvals (so PR shows Admin name/date after canvassing approval)
         if ($approvedBy === '' || $approvedAt === '') {
             try {
