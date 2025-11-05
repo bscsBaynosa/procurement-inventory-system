@@ -801,6 +801,15 @@ class ProcurementController extends BaseController
         // Keep supplier display order aligned with the chosen IDs
         $supNamesOrdered2 = [];
         foreach ($chosen as $sid) { if (isset($map[$sid])) { $supNamesOrdered2[] = $map[$sid]; } }
+        // If totals are still empty but a preview exists, fallback to preview totals/award one more time
+        if ((empty($canvassTotals) || count(array_filter($canvassTotals, static fn($v) => $v !== null)) === 0)
+            && isset($_SESSION['canvass_preview_data'][$pr])) {
+            $pv = $_SESSION['canvass_preview_data'][$pr];
+            $canvassTotals = array_slice((array)($pv['totals'] ?? []), 0, 3);
+            if ($awardedTo === '' && !empty($pv['awarded_to'])) { $awardedTo = (string)$pv['awarded_to']; }
+            if (empty($canvasSup) && !empty($pv['supplier_names'])) { $canvasSup = array_slice((array)$pv['supplier_names'], 0, 3); }
+        }
+
         $meta = [
             'pr_number' => $pr,
             'branch_name' => (string)($rows[0]['branch_name'] ?? 'N/A'),
@@ -1281,6 +1290,44 @@ class ProcurementController extends BaseController
                         }
                         if (!isset($prices[$sid])) { $prices[$sid] = []; }
                         if (!isset($prices[$sid][$lname]) || $best < $prices[$sid][$lname]) { $prices[$sid][$lname] = $best; }
+                    }
+                    // Fuzzy fallback for item names not matched by exact LOWER(name) IN (...) using token-based ILIKE
+                    $foundNames = [];
+                    foreach ($prices as $sid0 => $map0) { foreach ($map0 as $nm0 => $_) { $foundNames[$nm0] = true; } }
+                    $toFind = array_values(array_filter($itemNames, static fn($nm) => !isset($foundNames[$nm])));
+                    foreach ($toFind as $nm) {
+                        $tokens = preg_split('/[^a-z0-9]+/i', (string)$nm) ?: [];
+                        $tokens = array_values(array_filter(array_map('strtolower', $tokens), static fn($t) => strlen($t) >= 3));
+                        if (!$tokens) { continue; }
+                        $tokens = array_slice($tokens, 0, 3);
+                        $conds = [];
+                        $params2 = [];
+                        $conds[] = 'supplier_id IN (' . $inSup . ')';
+                        foreach ($supplierIds as $sid) { $params2[] = (int)$sid; }
+                        foreach ($tokens as $t) { $conds[] = 'LOWER(name) ILIKE ?'; $params2[] = '%' . $t . '%'; }
+                        $sql2 = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE ' . implode(' AND ', $conds);
+                        $st2 = $pdo->prepare($sql2);
+                        $st2->execute($params2);
+                        foreach ($st2->fetchAll() as $it) {
+                            $sid = (int)$it['supplier_id'];
+                            $base = (float)($it['price'] ?? 0);
+                            $ppp = max(1, (int)($it['pieces_per_package'] ?? 1));
+                            $needPk = $ppp > 0 ? (int)ceil((int)($byNameQty[$nm] ?? 0) / $ppp) : 0;
+                            $best = $base;
+                            if ($needPk > 0) {
+                                try {
+                                    $tq = $pdo->prepare('SELECT min_packages, max_packages, price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC');
+                                    $tq->execute(['id' => (int)$it['id']]);
+                                    foreach ($tq->fetchAll() as $t) {
+                                        $min = (int)$t['min_packages'];
+                                        $max = $t['max_packages'] !== null ? (int)$t['max_packages'] : null;
+                                        if ($needPk >= $min && ($max === null || $needPk <= $max)) { $best = min($best, (float)$t['price_per_package']); }
+                                    }
+                                } catch (\Throwable $e) {}
+                            }
+                            if (!isset($prices[$sid])) { $prices[$sid] = []; }
+                            if (!isset($prices[$sid][$nm]) || $best < $prices[$sid][$nm]) { $prices[$sid][$nm] = $best; }
+                        }
                     }
                     // Sum totals by supplier id
                     $bySidTotal = [];
