@@ -328,6 +328,7 @@ class InventoryService
 			if ($totalSup === 0) {
 				try {
 					$cnt = (int)$this->pdo->query("SELECT COUNT(*) FROM users WHERE role='supplier' AND is_active=TRUE")->fetchColumn();
+					if ($cnt <= 0) { $cnt = (int)$this->pdo->query("SELECT COUNT(*) FROM users WHERE role='supplier'")->fetchColumn(); }
 					if ($cnt > 0) {
 						// Assign all active suppliers to Office Supplies to avoid misleading zeroes on the dashboard
 						for ($i = 0; $i < count($rows); $i++) {

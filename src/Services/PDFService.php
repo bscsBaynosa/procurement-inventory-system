@@ -301,20 +301,21 @@ class PDFService
 			$approvedLabel = 'Approved By:';
 		}
 		$uniformRow = function(string $leftLabel, string $leftValue, string $rightDate): string {
-			// Enforce uniform height and spacing across all three rows and both columns
-			$fixedHeight = 44; // px; adjust if you need more space
+			// Strictly enforce identical box height and prevent text wrapping to keep rows uniform
+			$fixedHeight = 48; // px
 			$padTop = 8;
 			$boxLeft = 'height:' . $fixedHeight . 'px;';
 			$boxRight = 'height:' . $fixedHeight . 'px;';
+			$nowrap = 'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
 			return '<tr>'
 				. '<td style="width:60%;vertical-align:bottom;">'
 					. '<div style="' . $boxLeft . '"></div>'
-					. '<div style="border-top:1px solid #999; text-align:center; padding-top:' . $padTop . 'px; min-height:18px;">' . $leftValue . '</div>'
+					. '<div style="border-top:1px solid #999; text-align:center; padding-top:' . $padTop . 'px; min-height:18px;' . $nowrap . '">' . $leftValue . '</div>'
 					. '<div style="position:relative; margin-top:-' . ($fixedHeight + $padTop) . 'px; font-size:10px;">' . $leftLabel . '</div>'
 				. '</td>'
 				. '<td style="width:40%;vertical-align:bottom;">'
 					. '<div style="' . $boxRight . '"></div>'
-					. '<div style="border-top:1px solid #999; text-align:center; padding-top:' . $padTop . 'px; min-height:18px;">' . $rightDate . '</div>'
+					. '<div style="border-top:1px solid #999; text-align:center; padding-top:' . $padTop . 'px; min-height:18px;' . $nowrap . '">' . $rightDate . '</div>'
 					. '<div style="position:relative; margin-top:-' . ($fixedHeight + $padTop) . 'px; font-size:10px;">Date:</div>'
 				. '</td>'
 				. '</tr>';
@@ -326,10 +327,12 @@ class PDFService
 			. '</table>';
 
 		// Optional Canvassing section (3 suppliers + Awarded To), shown BEFORE attachments
-		$canvas = '';
-		$cv = isset($meta['canvassed_suppliers']) && is_array($meta['canvassed_suppliers']) ? array_values($meta['canvassed_suppliers']) : [];
-		$cv = array_slice($cv, 0, 3);
-		$awarded = isset($meta['awarded_to']) ? (string)$meta['awarded_to'] : '';
+	$canvas = '';
+	$cv = isset($meta['canvassed_suppliers']) && is_array($meta['canvassed_suppliers']) ? array_values($meta['canvassed_suppliers']) : [];
+	$cv = array_slice($cv, 0, 3);
+	$awarded = isset($meta['awarded_to']) ? trim((string)$meta['awarded_to']) : '';
+	// Absolute display fallback: if Awarded To is blank but suppliers exist, default to Supplier 1 to avoid empty cell
+	if ($awarded === '' && !empty($cv)) { $awarded = (string)$cv[0]; }
 		if (!empty($cv) || $awarded !== '') {
 			$labels = ['SUPPLIER 1','SUPPLIER 2','SUPPLIER 3','AWARDED TO'];
 			$cols = '';
