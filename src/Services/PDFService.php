@@ -301,9 +301,10 @@ class PDFService
 			$approvedLabel = 'Approved By:';
 		}
 		$uniformRow = function(string $leftLabel, string $leftValue, string $rightDate): string {
+			$box = 'height:28px; line-height:14px;';
 			return '<tr>'
-				. '<td style="width:60%;vertical-align:top;">' . $leftLabel . '<div style="height:22px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:4px;">' . $leftValue . '</div></td>'
-				. '<td style="width:40%;vertical-align:top;">Date:<div style="height:22px;"></div><div style="border-top:1px solid #999; text-align:center; padding-top:4px;">' . $rightDate . '</div></td>'
+				. '<td style="width:60%;vertical-align:top;">' . $leftLabel . '<div style="' . $box . '"></div><div style="border-top:1px solid #999; text-align:center; padding-top:6px; min-height:18px;">' . $leftValue . '</div></td>'
+				. '<td style="width:40%;vertical-align:top;">Date:<div style="' . $box . '"></div><div style="border-top:1px solid #999; text-align:center; padding-top:6px; min-height:18px;">' . $rightDate . '</div></td>'
 				. '</tr>';
 		};
 		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
@@ -332,7 +333,16 @@ class PDFService
 				$val = isset($tot[$i]) ? (float)$tot[$i] : null;
 				$totCells .= '<td style="text-align:center;vertical-align:top;height:24px; font-weight:600;">' . ($val !== null ? ('₱ ' . number_format($val, 2)) : 'N/A') . '</td>';
 			}
-			$totAward = '<td style="text-align:center;vertical-align:top;height:24px; font-weight:600;">Totals</td>';
+			// Show the awarded supplier total in the rightmost cell
+			$awardIdx = -1;
+			for ($i=0; $i<3; $i++) {
+				if ($i < count($cv)) {
+					$nm = trim((string)$cv[$i]);
+					if ($nm !== '' && strcasecmp($nm, (string)$awarded) === 0) { $awardIdx = $i; break; }
+				}
+			}
+			$awardVal = ($awardIdx >= 0 && isset($tot[$awardIdx]) && $tot[$awardIdx] !== null) ? ('₱ ' . number_format((float)$tot[$awardIdx], 2)) : 'N/A';
+			$totAward = '<td style="text-align:center;vertical-align:top;height:24px; font-weight:700;">' . $awardVal . '</td>';
 			$head = '<div style="text-align:center;font-weight:700;margin:8px 0 4px;">CANVASSING</div>';
 			$canvas = $head
 				. '<table width="100%" border="1" cellspacing="0" cellpadding="6">'
