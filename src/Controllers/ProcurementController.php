@@ -1046,6 +1046,44 @@ class ProcurementController extends BaseController
                     if (!isset($prices[$sid])) { $prices[$sid] = []; }
                     if (!isset($prices[$sid][$lname]) || $best < $prices[$sid][$lname]) { $prices[$sid][$lname] = $best; }
                 }
+                // Fuzzy fallback for items not matched by exact LOWER(name)
+                $foundNames = [];
+                foreach ($prices as $sid0 => $map0) { foreach ($map0 as $nm0 => $_) { $foundNames[$nm0] = true; } }
+                $toFind = array_values(array_filter($names, static fn($nm) => !isset($foundNames[$nm])));
+                foreach ($toFind as $nm) {
+                    $tokens = preg_split('/[^a-z0-9]+/i', (string)$nm) ?: [];
+                    $tokens = array_values(array_filter(array_map('strtolower', $tokens), static fn($t) => strlen($t) >= 3));
+                    if (!$tokens) { continue; }
+                    $tokens = array_slice($tokens, 0, 3);
+                    $cond = [];
+                    $p2 = [];
+                    $cond[] = 'supplier_id IN (' . $inSup . ')';
+                    foreach ($chosen as $sid) { $p2[] = (int)$sid; }
+                    foreach ($tokens as $t) { $cond[] = 'LOWER(name) ILIKE ?'; $p2[] = '%' . $t . '%'; }
+                    $sql2 = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE ' . implode(' AND ', $cond);
+                    $st2 = $pdo->prepare($sql2);
+                    $st2->execute($p2);
+                    foreach ($st2->fetchAll() as $it) {
+                        $sid = (int)$it['supplier_id'];
+                        $base = (float)($it['price'] ?? 0);
+                        $ppp = max(1, (int)($it['pieces_per_package'] ?? 1));
+                        $needPk = $ppp > 0 ? (int)ceil((int)($byNameQty[$nm] ?? 0) / $ppp) : 0;
+                        $best = $base;
+                        if ($needPk > 0) {
+                            try {
+                                $tq = $pdo->prepare('SELECT min_packages, max_packages, price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC');
+                                $tq->execute(['id' => (int)$it['id']]);
+                                foreach ($tq->fetchAll() as $t) {
+                                    $min = (int)$t['min_packages'];
+                                    $max = $t['max_packages'] !== null ? (int)$t['max_packages'] : null;
+                                    if ($needPk >= $min && ($max === null || $needPk <= $max)) { $best = min($best, (float)$t['price_per_package']); }
+                                }
+                            } catch (\Throwable $e) {}
+                        }
+                        if (!isset($prices[$sid])) { $prices[$sid] = []; }
+                        if (!isset($prices[$sid][$nm]) || $best < $prices[$sid][$nm]) { $prices[$sid][$nm] = $best; }
+                    }
+                }
                 // Sum totals per supplier and pick cheapest
                 $totals = [];
                 foreach ($prices as $sid => $pm) {
