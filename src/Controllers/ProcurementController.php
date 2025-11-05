@@ -545,6 +545,8 @@ class ProcurementController extends BaseController
         if ($awardedId && in_array($awardedId, $chosen, true) && isset($map[$awardedId])) {
             $awardedName = $map[$awardedId];
         }
+        // Totals per supplier (used for justification row in PDFs); ensure it's always defined
+        $totals = [];
         // Server-side fallback: if no awarded vendor provided, auto-pick cheapest by summing per-item prices among selected suppliers
         if (!$awardedId) {
             try {
