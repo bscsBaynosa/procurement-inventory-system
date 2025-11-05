@@ -1190,6 +1190,29 @@ class ProcurementController extends BaseController
             }
         } catch (\Throwable $ignored) {}
 
+        // If PR approval is blank, fallback to canvassing approvals (so PR shows Admin name/date after canvassing approval)
+        if ($approvedBy === '' || $approvedAt === '') {
+            try {
+                $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
+                    pr_number VARCHAR(32) PRIMARY KEY,
+                    supplier1 VARCHAR(255),
+                    supplier2 VARCHAR(255),
+                    supplier3 VARCHAR(255),
+                    awarded_to VARCHAR(255),
+                    approved_by VARCHAR(255),
+                    approved_at TIMESTAMPTZ,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                )");
+                $stAp = $pdo->prepare('SELECT approved_by, approved_at FROM pr_canvassing WHERE pr_number = :pr');
+                $stAp->execute(['pr' => $pr]);
+                if ($rowAp = $stAp->fetch()) {
+                    if ($approvedBy === '' && !empty($rowAp['approved_by'])) { $approvedBy = (string)$rowAp['approved_by']; }
+                    if ($approvedAt === '' && !empty($rowAp['approved_at'])) { $approvedAt = date('Y-m-d', strtotime((string)$rowAp['approved_at'])); }
+                }
+            } catch (\Throwable $ignored) {}
+        }
+
         $meta = [
             'pr_number' => $pr,
             'branch_name' => (string)($rows[0]['branch_name'] ?? 'N/A'),
@@ -1211,6 +1234,7 @@ class ProcurementController extends BaseController
                 'description' => (string)($r['item_name'] ?? 'Item'),
                 'unit' => (string)($r['unit'] ?? ''),
                 'qty' => (int)($r['quantity'] ?? 0),
+                'stock_on_hand' => isset($r['stock_on_hand']) ? (int)$r['stock_on_hand'] : null,
             ];
         }
         // Generate to a writable folder and stream inline (storage/pdf with fallback to system temp)
