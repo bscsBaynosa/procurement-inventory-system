@@ -664,9 +664,18 @@ class ProcurementController extends BaseController
             $first = $chosen[0]; if (isset($map[$first])) { $awardedName = $map[$first]; }
         }
         // Build PR‑style PR-Canvass PDF (PR layout + Canvassing table inserted before Attachments)
-        $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
-        if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
-        $file = $dir . DIRECTORY_SEPARATOR . 'PR-Canvass-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '.pdf';
+        // Choose a writable directory (storage/pdf if available, else system temp) to avoid //storage paths on hosts without realpath
+        $root = @realpath(__DIR__ . '/../../..') ?: null;
+        $dirCandidates = [];
+        if ($root) { $dirCandidates[] = $root . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf'; }
+        $dirCandidates[] = sys_get_temp_dir();
+        $dir = null;
+        foreach ($dirCandidates as $cand) {
+            if (!is_dir($cand)) { @mkdir($cand, 0777, true); }
+            if (is_dir($cand) && is_writable($cand)) { $dir = $cand; break; }
+        }
+        if ($dir === null) { $dir = '.'; }
+        $file = rtrim($dir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'PR-Canvass-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr) . '.pdf';
         // PR meta
         $justification = '';
         $neededBy = '';
@@ -776,6 +785,10 @@ class ProcurementController extends BaseController
             ];
         }
         $this->pdf()->generatePurchaseRequisitionToFile($metaCan, $itemsCan, $file);
+        if (!@is_file($file) || ((int)@filesize($file) <= 0)) {
+            header('Location: /manager/requests/canvass?pr=' . urlencode($pr) . '&error=' . rawurlencode('Failed to write PR-Canvass PDF'));
+            return;
+        }
         // Persist selected suppliers, their IDs and computed totals for PR (for inclusion in PR PDF later)
         try {
             $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (
