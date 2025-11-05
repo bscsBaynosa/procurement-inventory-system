@@ -363,22 +363,28 @@ class RequestService
 				pr.revision_state, pr.revision_notes,
 				pr.needed_by, pr.justification,
 				pr.approved_by, pr.approved_at,
-				(
-				  SELECT quantity FROM inventory_items ii
-				   WHERE ii.item_id = pr.item_id AND ii.branch_id = pr.branch_id
-				   ORDER BY ii.updated_at DESC NULLS LAST, ii.item_id LIMIT 1
-				) IS NOT NULL
-				  ? (
+				CASE
+				  WHEN EXISTS (
+				    SELECT 1 FROM inventory_items ii
+				     WHERE ii.item_id = pr.item_id AND ii.branch_id = pr.branch_id
+				  ) THEN (
+				    SELECT quantity FROM inventory_items ii
+				     WHERE ii.item_id = pr.item_id AND ii.branch_id = pr.branch_id
+				     ORDER BY ii.updated_at DESC NULLS LAST, ii.item_id LIMIT 1
+				  )
+				  ELSE COALESCE(
+				    (
 				      SELECT quantity FROM inventory_items ii
-				       WHERE ii.item_id = pr.item_id AND ii.branch_id = pr.branch_id
+				       WHERE ii.item_id = pr.item_id AND (ii.branch_id IS NULL OR ii.branch_id = 0)
+				       ORDER BY ii.updated_at DESC NULLS LAST, ii.item_id LIMIT 1
+				    ),
+				    (
+				      SELECT quantity FROM inventory_items ii
+				       WHERE ii.item_id = pr.item_id
 				       ORDER BY ii.updated_at DESC NULLS LAST, ii.item_id LIMIT 1
 				    )
-				  : COALESCE(
-				      (SELECT quantity FROM inventory_items ii WHERE ii.item_id = pr.item_id AND (ii.branch_id IS NULL OR ii.branch_id = 0)
-				       ORDER BY ii.updated_at DESC NULLS LAST, ii.item_id LIMIT 1),
-				      (SELECT quantity FROM inventory_items ii WHERE ii.item_id = pr.item_id
-				       ORDER BY ii.updated_at DESC NULLS LAST, ii.item_id LIMIT 1)
-				    ) AS stock_on_hand
+				  )
+				END AS stock_on_hand
 			 FROM purchase_requests pr
 			 LEFT JOIN inventory_items i0 ON i0.item_id = pr.item_id
 			 LEFT JOIN branches b ON b.branch_id = pr.branch_id
@@ -934,7 +940,6 @@ SQL);
 		try {
 			$this->pdo->exec("ALTER TABLE purchase_requests
 				ADD COLUMN IF NOT EXISTS revision_state VARCHAR(32),
-				'for_admin_approval' => 'Forwarded to Admin',
 				ADD COLUMN IF NOT EXISTS revision_notes TEXT");
 		} catch (\Throwable $e) {}
 	}
