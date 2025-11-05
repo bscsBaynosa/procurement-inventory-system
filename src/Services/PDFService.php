@@ -301,26 +301,27 @@ class PDFService
 			$approvedLabel = 'Approved By:';
 		}
 		$uniformRow = function(string $leftLabel, string $leftValue, string $rightDate): string {
-			// Strictly enforce identical box height and prevent text wrapping to keep rows uniform
-			$fixedHeight = 48; // px
-			$padTop = 8;
-			$boxLeft = 'height:' . $fixedHeight . 'px;';
-			$boxRight = 'height:' . $fixedHeight . 'px;';
+			// Use a nested table with fixed heights to guarantee identical row sizing across all three signature rows.
+			$cellH = 54; // total vertical space for the signature block per cell
 			$nowrap = 'white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+			$leftCell = '<table width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed;">'
+				. '<tr><td style="font-size:10px;">' . $leftLabel . '</td></tr>'
+				. '<tr><td style="height:' . $cellH . 'px; vertical-align:bottom;">'
+					. '<div style="border-top:1px solid #999; text-align:center; padding-top:8px; ' . $nowrap . '">' . $leftValue . '</div>'
+				. '</td></tr>'
+				. '</table>';
+			$rightCell = '<table width="100%" cellpadding="0" cellspacing="0" style="table-layout:fixed;">'
+				. '<tr><td style="font-size:10px;">Date:</td></tr>'
+				. '<tr><td style="height:' . $cellH . 'px; vertical-align:bottom;">'
+					. '<div style="border-top:1px solid #999; text-align:center; padding-top:8px; ' . $nowrap . '">' . $rightDate . '</div>'
+				. '</td></tr>'
+				. '</table>';
 			return '<tr>'
-				. '<td style="width:60%;vertical-align:bottom;">'
-					. '<div style="' . $boxLeft . '"></div>'
-					. '<div style="border-top:1px solid #999; text-align:center; padding-top:' . $padTop . 'px; min-height:18px;' . $nowrap . '">' . $leftValue . '</div>'
-					. '<div style="position:relative; margin-top:-' . ($fixedHeight + $padTop) . 'px; font-size:10px;">' . $leftLabel . '</div>'
-				. '</td>'
-				. '<td style="width:40%;vertical-align:bottom;">'
-					. '<div style="' . $boxRight . '"></div>'
-					. '<div style="border-top:1px solid #999; text-align:center; padding-top:' . $padTop . 'px; min-height:18px;' . $nowrap . '">' . $rightDate . '</div>'
-					. '<div style="position:relative; margin-top:-' . ($fixedHeight + $padTop) . 'px; font-size:10px;">Date:</div>'
-				. '</td>'
+				. '<td style="width:60%;vertical-align:top;">' . $leftCell . '</td>'
+				. '<td style="width:40%;vertical-align:top;">' . $rightCell . '</td>'
 				. '</tr>';
 		};
-		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;font-size:10px;">'
+		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;font-size:10px; table-layout:fixed;">'
 			. $uniformRow('Requisition By:', $reqBy, $prepAt)
 			. $uniformRow('Noted By:', htmlspecialchars((string)($meta['noted_by'] ?? ''), ENT_QUOTES, 'UTF-8'), htmlspecialchars((string)($meta['date_received'] ?? ''), ENT_QUOTES, 'UTF-8'))
 			. $uniformRow($approvedLabel, $approvedName, $approvedDate)
@@ -334,16 +335,16 @@ class PDFService
 		// Prefer the cheapest among provided totals when award is blank to mirror highlighted cheapest on Canvassing page
 		$tot = isset($meta['canvass_totals']) && is_array($meta['canvass_totals']) ? array_values($meta['canvass_totals']) : [];
 		if ($awarded === '' && !empty($cv)) {
-			// Find index of minimum non-null total
-			$minIdx = -1; $minVal = null;
+			// Only auto-pick when we actually have numeric totals; otherwise leave blank (no default-to-first).
+			$minIdx = -1; $minVal = null; $hasNumeric = false;
 			for ($i=0;$i<min(3,count($cv));$i++) {
-				if (isset($tot[$i]) && $tot[$i] !== null) {
+				if (isset($tot[$i]) && $tot[$i] !== null && $tot[$i] !== '') {
+					$hasNumeric = true;
 					$v = (float)$tot[$i];
 					if ($minVal === null || $v < $minVal) { $minVal = $v; $minIdx = $i; }
 				}
 			}
-			if ($minIdx >= 0) { $awarded = (string)$cv[$minIdx]; }
-			elseif (!empty($cv)) { $awarded = (string)$cv[0]; }
+			if ($hasNumeric && $minIdx >= 0) { $awarded = (string)$cv[$minIdx]; }
 		}
 		if (!empty($cv) || $awarded !== '') {
 			$labels = ['SUPPLIER 1','SUPPLIER 2','SUPPLIER 3','AWARDED TO'];

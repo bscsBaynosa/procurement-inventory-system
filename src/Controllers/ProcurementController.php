@@ -824,14 +824,7 @@ class ProcurementController extends BaseController
         // Keep supplier display order aligned with the chosen IDs
         $supNamesOrdered2 = [];
         foreach ($chosen as $sid) { if (isset($map[$sid])) { $supNamesOrdered2[] = $map[$sid]; } }
-        // If totals are still empty but a preview exists, fallback to preview totals/award one more time
-        if ((empty($canvassTotals) || count(array_filter($canvassTotals, static fn($v) => $v !== null)) === 0)
-            && isset($_SESSION['canvass_preview_data'][$pr])) {
-            $pv = $_SESSION['canvass_preview_data'][$pr];
-            $canvassTotals = array_slice((array)($pv['totals'] ?? []), 0, 3);
-            if ($awardedTo === '' && !empty($pv['awarded_to'])) { $awardedTo = (string)$pv['awarded_to']; }
-            if (empty($canvasSup) && !empty($pv['supplier_names'])) { $canvasSup = array_slice((array)$pv['supplier_names'], 0, 3); }
-        }
+        // (removed stray preview fallback block that referenced undefined variables; totals and awards are handled above)
 
         $meta = [
             'pr_number' => $pr,
