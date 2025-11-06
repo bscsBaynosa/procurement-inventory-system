@@ -141,7 +141,7 @@
         </table>
         <?php endif; ?>
 
-        <div class="h1" style="margin-top:16px;">Pending Requests</div>
+    <div class="h1" style="margin-top:16px;">Purchase Requisitions</div>
         <table>
             <thead>
                 <tr>

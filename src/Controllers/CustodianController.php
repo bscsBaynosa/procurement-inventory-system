@@ -39,7 +39,16 @@ class CustodianController extends BaseController
         $branchId = $_SESSION['branch_id'] ?? null;
     $inventoryStats = $this->inventory()->getStatsByBranch($branchId ? (int)$branchId : null);
     $categoryStats = $this->inventory()->getStatsByCategory($branchId ? (int)$branchId : null);
-        $pendingRequests = $this->requests()->getPendingRequests($branchId ? (int)$branchId : null);
+        // Show all PRs for this branch except those already completed (and exclude archived)
+    $allForBranch = $this->requests()->getAllRequests($branchId ? ['branch_id' => (int)$branchId] : []);
+        if (!is_array($allForBranch)) { $allForBranch = []; }
+        $pendingRequests = [];
+        foreach ($allForBranch as $row) {
+            $status = (string)($row['status'] ?? '');
+            $arch = (bool)($row['is_archived'] ?? false);
+            if ($arch) { continue; }
+            if (strcasecmp($status, 'completed') !== 0) { $pendingRequests[] = $row; }
+        }
         // Greeting, unread, branch name, avatar
         $meId = (int)($_SESSION['user_id'] ?? 0);
         $meFirst = null; $avatarPath = null; $unread = 0; $branchName = null;
