@@ -22,6 +22,8 @@ class RequestService
 		$this->ensureRequestStatusEnum();
 		// Ensure revision columns exist
 		$this->ensureRevisionColumns();
+		// Ensure PO sequence table exists for PO numbering
+		$this->ensurePoSequenceTable();
 	}
 
 	/**
@@ -92,6 +94,74 @@ class RequestService
 		$this->recordAudit('purchase_requests', (int)$request['request_id'], 'create', $userId, $payload);
 
 		return $request;
+	}
+
+	// ===== Purchase Order Numbering (YYYY + 3-digit sequence like PR) =====
+
+	/** Ensure the purchase_order_sequences table exists (idempotent). */
+	private function ensurePoSequenceTable(): void
+	{
+		try {
+			$this->pdo->exec("CREATE TABLE IF NOT EXISTS purchase_order_sequences (
+				calendar_year INTEGER PRIMARY KEY,
+				last_value INTEGER NOT NULL DEFAULT 0,
+				updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+			)");
+		} catch (\Throwable $e) { /* ignore */ }
+	}
+
+	/** @return string */
+	private function generatePoNumber(): string
+	{
+		$year = (int)date('Y');
+		return $this->generatePoNumberForYear($year);
+	}
+
+	/**
+	 * @param int $year
+	 * @return string
+	 */
+	private function generatePoNumberForYear($year): string
+	{
+		$this->ensurePoSequenceTable();
+		// Atomically increment per-year counter
+		$this->pdo->beginTransaction();
+		try {
+			$this->pdo->prepare('INSERT INTO purchase_order_sequences (calendar_year, last_value) VALUES (:y, 0) ON CONFLICT (calendar_year) DO NOTHING')
+				->execute(['y' => $year]);
+			$st = $this->pdo->prepare('UPDATE purchase_order_sequences SET last_value = last_value + 1, updated_at = NOW() WHERE calendar_year = :y RETURNING last_value');
+			$st->execute(['y' => $year]);
+			$next = (int)$st->fetchColumn();
+			$this->pdo->commit();
+		} catch (\Throwable $e) {
+			$this->pdo->rollBack();
+			$next = 1; // fallback
+		}
+		return sprintf('%04d%03d', $year, $next);
+	}
+
+	/** Preview the next PO number without incrementing. */
+	public function getNextPoNumberPreview(): string
+	{
+		$this->ensurePoSequenceTable();
+		$year = (int)date('Y');
+		try {
+			$this->pdo->prepare('INSERT INTO purchase_order_sequences (calendar_year, last_value) VALUES (:y, 0) ON CONFLICT (calendar_year) DO NOTHING')
+				->execute(['y' => $year]);
+			$st = $this->pdo->prepare('SELECT last_value FROM purchase_order_sequences WHERE calendar_year = :y');
+			$st->execute(['y' => $year]);
+			$current = (int)$st->fetchColumn();
+			$next = $current + 1;
+			return sprintf('%04d%03d', $year, $next);
+		} catch (\Throwable $e) {
+			return sprintf('%04d%03d', $year, 1);
+		}
+	}
+
+	/** @return string */
+	public function generateNewPoNumber(): string
+	{
+		return $this->generatePoNumber();
 	}
 
 	/** @return string */

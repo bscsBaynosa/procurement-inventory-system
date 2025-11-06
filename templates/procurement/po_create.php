@@ -34,7 +34,8 @@
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
                 <div>
                     <label>PO Number</label>
-                    <input name="po_number" placeholder="2025xxxx" required />
+                    <input name="po_number" placeholder="Auto-assigned (YYYYNNN)" value="<?= isset($po_next) ? htmlspecialchars((string)$po_next, ENT_QUOTES, 'UTF-8') : '' ?>" />
+                    <div style="font-size:12px;color:var(--muted);margin-top:4px;">Leave as-is to auto-generate like PR (e.g., 2025001).</div>
                 </div>
                 <div>
                     <label>Supplier (Vendor)</label>

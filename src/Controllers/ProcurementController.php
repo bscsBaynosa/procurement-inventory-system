@@ -57,6 +57,10 @@ class ProcurementController extends BaseController
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         )");
+        // Enforce unique PO numbers to avoid collisions (best-effort; ignore if duplicates currently exist)
+        try {
+            $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_purchase_orders_po_number_unique ON purchase_orders (po_number)");
+        } catch (\Throwable $ignored) {}
         // purchase_order_items lines
         $pdo->exec("CREATE TABLE IF NOT EXISTS purchase_order_items (
             id BIGSERIAL PRIMARY KEY,
@@ -96,7 +100,10 @@ class ProcurementController extends BaseController
         // Load suppliers list (optional: narrow to previously selected suppliers)
         $pdo = \App\Database\Connection::resolve();
         $suppliers = $pdo->query("SELECT user_id, full_name FROM users WHERE is_active=TRUE AND role='supplier' ORDER BY full_name ASC")->fetchAll();
-        $this->render('procurement/po_create.php', [ 'pr' => $pr, 'rows' => $rows, 'suppliers' => $suppliers ]);
+        // Preview next PO number (auto-filled like PR numbering)
+        $poNext = '';
+        try { $poNext = $this->requests()->getNextPoNumberPreview(); } catch (\Throwable $ignored) { $poNext = ''; }
+        $this->render('procurement/po_create.php', [ 'pr' => $pr, 'rows' => $rows, 'suppliers' => $suppliers, 'po_next' => $poNext ]);
     }
 
     /** POST: Create PO, generate PDF, and send to Admin for approval */
@@ -107,7 +114,15 @@ class ProcurementController extends BaseController
         $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
         $supplierId = (int)($_POST['supplier_id'] ?? 0);
         $poNumber = isset($_POST['po_number']) ? trim((string)$_POST['po_number']) : '';
-        if ($pr === '' || $supplierId <= 0 || $poNumber === '') { header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Missing+fields'); return; }
+        if ($pr === '' || $supplierId <= 0) { header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Missing+fields'); return; }
+        // If no PO number provided, generate one; else validate format
+        if ($poNumber === '') {
+            try { $poNumber = $this->requests()->generateNewPoNumber(); } catch (\Throwable $e) { $poNumber = ''; }
+        } else {
+            if (!preg_match('/^\d{7}$/', $poNumber)) { // Expect YYYY + 3-digit sequence e.g., 2025001
+                header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Invalid+PO+number+format+(expected+YYYYNNN)'); return;
+            }
+        }
         $vendorName = trim((string)($_POST['vendor_name'] ?? ''));
         $vendorAddress = trim((string)($_POST['vendor_address'] ?? ''));
         $vendorTin = trim((string)($_POST['vendor_tin'] ?? ''));
@@ -138,8 +153,17 @@ class ProcurementController extends BaseController
         if (empty($items)) { header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Add+at+least+one+item'); return; }
         $pdo = \App\Database\Connection::resolve();
         // Insert PO
+        // Guard against duplicate PO numbers race by retrying once if unique violation occurs
         $ins = $pdo->prepare('INSERT INTO purchase_orders (pr_number, po_number, supplier_id, vendor_name, vendor_address, vendor_tin, center, reference, terms, notes, deliver_to, look_for, status, total, created_by) VALUES (:pr,:po,:sid,:vn,:va,:vt,:ce,:ref,:te,:no,:dt,:lf,\'submitted\',:tot,:uid) RETURNING id');
-        $ins->execute(['pr' => $pr, 'po' => $poNumber, 'sid' => $supplierId, 'vn' => $vendorName ?: null, 'va' => $vendorAddress ?: null, 'vt' => $vendorTin ?: null, 'ce' => $center ?: null, 'ref' => $reference ?: null, 'te' => $terms ?: null, 'no' => $notes ?: null, 'dt' => $deliverTo ?: null, 'lf' => $lookFor ?: null, 'tot' => $total, 'uid' => (int)($_SESSION['user_id'] ?? 0)]);
+        try {
+            $ins->execute(['pr' => $pr, 'po' => $poNumber, 'sid' => $supplierId, 'vn' => $vendorName ?: null, 'va' => $vendorAddress ?: null, 'vt' => $vendorTin ?: null, 'ce' => $center ?: null, 'ref' => $reference ?: null, 'te' => $terms ?: null, 'no' => $notes ?: null, 'dt' => $deliverTo ?: null, 'lf' => $lookFor ?: null, 'tot' => $total, 'uid' => (int)($_SESSION['user_id'] ?? 0)]);
+        } catch (\Throwable $e) {
+            // If duplicate key on po_number, generate a fresh one and retry once
+            if (stripos((string)$e->getMessage(), 'duplicate') !== false) {
+                try { $poNumber = $this->requests()->generateNewPoNumber(); } catch (\Throwable $ignored) {}
+                $ins->execute(['pr' => $pr, 'po' => $poNumber, 'sid' => $supplierId, 'vn' => $vendorName ?: null, 'va' => $vendorAddress ?: null, 'vt' => $vendorTin ?: null, 'ce' => $center ?: null, 'ref' => $reference ?: null, 'te' => $terms ?: null, 'no' => $notes ?: null, 'dt' => $deliverTo ?: null, 'lf' => $lookFor ?: null, 'tot' => $total, 'uid' => (int)($_SESSION['user_id'] ?? 0)]);
+            } else { throw $e; }
+        }
         $poId = (int)$ins->fetchColumn();
         $lineIns = $pdo->prepare('INSERT INTO purchase_order_items (po_id, description, unit, qty, unit_price, line_total) VALUES (:po,:d,:u,:q,:p,:t)');
         foreach ($items as $it) { $lineIns->execute(['po' => $poId, 'd' => $it['description'], 'u' => $it['unit'], 'q' => $it['qty'], 'p' => $it['unit_price'], 't' => $it['total']]); }
