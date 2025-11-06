@@ -202,9 +202,9 @@
                             <div class="signin-actions">
                                 <button type="submit" class="btn btn-primary">Sign in</button>
                             </div>
-                            <div style="text-align:center;margin-top:14px; display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
-                                <a href="#" id="switchToSignup" style="color:#2563eb;text-decoration:none;font-weight:700;">Supplier? Create an account</a>
-                                <a href="#" id="switchToForgot" style="color:#2563eb;text-decoration:none;font-weight:700;">Forgot password?</a>
+                            <div class="auth-links" style="text-align:center;margin-top:14px; display:flex; gap:18px; justify-content:center; flex-wrap:wrap;">
+                                <a href="#" id="switchToSignup" class="auth-link" style="color:#2563eb;text-decoration:none;font-weight:600;font-size:12.5px;">Supplier? Sign up</a>
+                                <a href="#" id="switchToForgot" class="auth-link" style="color:#2563eb;text-decoration:none;font-weight:600;font-size:12.5px;">Forgot password?</a>
                             </div>
                         </form>
 

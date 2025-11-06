@@ -24,8 +24,9 @@
             </div>
             <button type="submit">Login</button>
         </form>
-        <div style="margin-top:10px;">
-            <a href="/signup">Supplier? Create an account</a>
+        <div style="margin-top:10px; display:flex; gap:16px; align-items:center; flex-wrap:wrap; font-size:12.5px;">
+            <a href="/signup" style="font-weight:600;">Supplier? Sign up</a>
+            <a href="/auth/forgot" style="font-weight:600;">Forgot password?</a>
         </div>
         <div class="footer">
             <p>&copy; 2023 Procurement and Inventory System</p>
