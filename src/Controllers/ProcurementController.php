@@ -546,11 +546,20 @@ class ProcurementController extends BaseController
         $st->execute($chosen);
         $map = [];
         foreach ($st->fetchAll() as $s) { $map[(int)$s['user_id']] = (string)$s['full_name']; }
-        // Optional awarded vendor (must be among selected)
+        // Optional awarded vendor (must be among selected) — overall award (legacy/global)
         $awardedId = isset($_POST['awarded_to']) && $_POST['awarded_to'] !== '' ? (int)$_POST['awarded_to'] : null;
         $awardedName = null;
         if ($awardedId && in_array($awardedId, $chosen, true) && isset($map[$awardedId])) {
             $awardedName = $map[$awardedId];
+        }
+        // Per-item award map: item_key (lowercase) => supplier_id
+        $awardMap = [];
+        if (isset($_POST['item_award']) && is_array($_POST['item_award'])) {
+            foreach ($_POST['item_award'] as $k => $sidVal) {
+                $k2 = strtolower(trim((string)$k)); if ($k2 === '') { continue; }
+                $sid = (int)$sidVal; if ($sid <= 0) { continue; }
+                $awardMap[$k2] = $sid;
+            }
         }
         // Totals per supplier (used for justification row in PDFs) — always compute to mirror the canvassing page
         $totals = [];
@@ -735,7 +744,7 @@ class ProcurementController extends BaseController
         $supNamesOrdered = [];
         foreach ($chosen as $sid) { if (isset($map[$sid])) { $supNamesOrdered[] = $map[$sid]; } }
         // Build per-item canvassing matrix for 5-column table (Item | S1 | S2 | S3 | Awarded To)
-        $canvassMatrix = (function() use ($rows, $chosen, $map, $prices) {
+        $canvassMatrix = (function() use ($rows, $chosen, $map, $prices, $awardMap) {
             $matrix = [];
             foreach ($rows as $r) {
                 $nm = strtolower(trim((string)($r['item_name'] ?? '')));
@@ -750,9 +759,21 @@ class ProcurementController extends BaseController
                     $p = ($sid && isset($prices[$sid]) && isset($prices[$sid][$nm])) ? (float)$prices[$sid][$nm] : null;
                     $rowPrices[$i] = $p;
                 }
-                // Pick cheapest non-null index
-                $awardIdx = -1; $minVal = null;
-                for ($i=0;$i<3;$i++) { if ($rowPrices[$i] !== null) { $v=(float)$rowPrices[$i]; if ($minVal===null || $v<$minVal){$minVal=$v;$awardIdx=$i;} } }
+                // Honor per-item manual award if provided and valid; else pick cheapest non-null index
+                $awardIdx = -1;
+                if (isset($awardMap[$nm])) {
+                    $manualSid = (int)$awardMap[$nm];
+                    for ($i=0;$i<3;$i++) {
+                        if (($chosen[$i] ?? 0) === $manualSid) {
+                            if ($rowPrices[$i] !== null) { $awardIdx = $i; }
+                            break;
+                        }
+                    }
+                }
+                if ($awardIdx < 0) {
+                    $minVal = null;
+                    for ($i=0;$i<3;$i++) { if ($rowPrices[$i] !== null) { $v=(float)$rowPrices[$i]; if ($minVal===null || $v<$minVal){$minVal=$v;$awardIdx=$i;} } }
+                }
                 $matrix[] = ['item' => $label, 'prices' => $rowPrices, 'award_index' => $awardIdx];
             }
             return $matrix;
@@ -1122,7 +1143,16 @@ class ProcurementController extends BaseController
         } catch (\Throwable $ignored) {}
 
         // Build per-item canvassing matrix for the new 5-column table
-        $canvassMatrix = (function() use ($rows, $chosen, $prices) {
+        // Per-item award map from preview form
+        $awardMap = [];
+        if (isset($_POST['item_award']) && is_array($_POST['item_award'])) {
+            foreach ($_POST['item_award'] as $k => $sidVal) {
+                $k2 = strtolower(trim((string)$k)); if ($k2 === '') { continue; }
+                $sid = (int)$sidVal; if ($sid <= 0) { continue; }
+                $awardMap[$k2] = $sid;
+            }
+        }
+        $canvassMatrix = (function() use ($rows, $chosen, $prices, $awardMap) {
             $matrix = [];
             foreach ($rows as $r) {
                 $nm = strtolower(trim((string)($r['item_name'] ?? '')));
@@ -1137,8 +1167,21 @@ class ProcurementController extends BaseController
                     $p = ($sid && isset($prices[$sid]) && isset($prices[$sid][$nm])) ? (float)$prices[$sid][$nm] : null;
                     $rowPrices[$i] = $p;
                 }
-                $awardIdx = -1; $minVal = null;
-                for ($i=0;$i<3;$i++) { if ($rowPrices[$i] !== null) { $v=(float)$rowPrices[$i]; if ($minVal===null || $v<$minVal){$minVal=$v;$awardIdx=$i;} } }
+                // If a manual per-item selection was provided and it matches one of the chosen suppliers with a price, honor it
+                $awardIdx = -1;
+                if (isset($awardMap[$nm])) {
+                    $manualSid = (int)$awardMap[$nm];
+                    for ($i=0;$i<3;$i++) {
+                        if (($chosen[$i] ?? 0) === $manualSid) {
+                            if ($rowPrices[$i] !== null) { $awardIdx = $i; }
+                            break;
+                        }
+                    }
+                }
+                if ($awardIdx < 0) {
+                    $minVal = null;
+                    for ($i=0;$i<3;$i++) { if ($rowPrices[$i] !== null) { $v=(float)$rowPrices[$i]; if ($minVal===null || $v<$minVal){$minVal=$v;$awardIdx=$i;} } }
+                }
                 $matrix[] = ['item' => $label, 'prices' => $rowPrices, 'award_index' => $awardIdx];
             }
             return $matrix;

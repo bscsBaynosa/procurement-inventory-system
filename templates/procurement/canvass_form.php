@@ -98,6 +98,7 @@
                                 <?php foreach ($supMap as $sid => $name): ?>
                                     <th style="min-width:140px;" data-supplier-id="<?= (int)$sid ?>"><?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?></th>
                                 <?php endforeach; ?>
+                                <th style="min-width:180px;">Awarded To</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -109,6 +110,14 @@
                                         <?= $p !== null ? ('₱ ' . number_format($p, 2)) : '—' ?>
                                     </td>
                                 <?php endforeach; ?>
+                                <td>
+                                    <select name="item_award[<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>]" class="award-per-item" data-item-key="<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>">
+                                        <option value="">— Select —</option>
+                                        <?php foreach ($suppliers as $s): ?>
+                                            <option value="<?= (int)$s['user_id'] ?>"><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </td>
                             </tr>
                         <?php endforeach; ?>
                         </tbody>
@@ -150,13 +159,14 @@
                         tr.querySelectorAll('td[data-supplier-id]').forEach(td => { td.classList.remove('best'); td.classList.remove('dim'); });
                         // Gather prices only for selected suppliers
                         let min = Infinity;
+                        let minSid = null;
                         const tds = Array.from(tr.querySelectorAll('td[data-supplier-id]'));
                         tds.forEach(td => {
                             const sid = td.getAttribute('data-supplier-id');
                             const priceStr = td.getAttribute('data-price');
                             const price = priceStr === '' ? NaN : parseFloat(priceStr);
                             if (selected.size > 0 && !selected.has(sid)) { td.classList.add('dim'); }
-                            if (selected.size > 0 && selected.has(sid) && !isNaN(price)) { if (price < min) min = price; }
+                            if (selected.size > 0 && selected.has(sid) && !isNaN(price)) { if (price < min) { min = price; minSid = sid; } }
                             if (selected.size > 0 && selected.has(sid) && !isNaN(price)) { totals[sid] = (totals[sid] || 0) + price; }
                         });
                         if (min !== Infinity) {
@@ -166,6 +176,24 @@
                                 const price = priceStr === '' ? NaN : parseFloat(priceStr);
                                 if (selected.has(sid) && !isNaN(price) && Math.abs(price - min) < 1e-9) { td.classList.add('best'); }
                             });
+                        }
+                        // Sync per-item award select
+                        const awardSel = tr.querySelector('select.award-per-item');
+                        if (awardSel) {
+                            // Disable options not in selected set
+                            Array.from(awardSel.options).forEach(opt => {
+                                if (!opt.value) { opt.disabled = false; return; }
+                                opt.disabled = (selected.size > 0 && !selected.has(opt.value));
+                            });
+                            // If current choice invalid (not selected supplier), clear
+                            if (awardSel.value && awardSel.options[awardSel.selectedIndex] && awardSel.options[awardSel.selectedIndex].disabled) {
+                                awardSel.value = '';
+                            }
+                            // Auto-pick cheapest for this row if user hasn't set manually
+                            if (!awardSel.dataset.userSet) {
+                                if (minSid && selected.has(minSid)) { awardSel.value = minSid; }
+                                else { awardSel.value = ''; }
+                            }
                         }
                     });
                     // Disable unselected options in Awarded select
@@ -204,6 +232,8 @@
                     }
                 }
                 document.querySelectorAll('.supplier-choice').forEach(cb => cb.addEventListener('change', recalc));
+                // Track manual changes on per-item award selects
+                document.querySelectorAll('select.award-per-item').forEach(sel => sel.addEventListener('change', function(){ this.dataset.userSet = '1'; }));
                 recalc();
                 // Preview flow: submit to preview endpoint in a new tab and enable Send button
                 btnPreview.addEventListener('click', function(){
@@ -215,6 +245,8 @@
                         const selSet = new Set(Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.value));
                         if (!selSet.has(awardSel.value)) { alert('Awarded vendor must be one of the selected suppliers.'); return; }
                     }
+                    // Ensure per-item awards (if any) are from selected suppliers; else auto will handle in backend
+                    // Submit to preview
                     form.setAttribute('action', '/manager/requests/canvass/preview');
                     form.setAttribute('target', '_blank');
                     form.submit();
