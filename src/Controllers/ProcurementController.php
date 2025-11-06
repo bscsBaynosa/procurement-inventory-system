@@ -75,18 +75,23 @@ class ProcurementController extends BaseController
         if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
         $pr = isset($_GET['pr']) ? trim((string)$_GET['pr']) : '';
         if ($pr === '') { header('Location: /manager/requests'); return; }
-    $rows = $this->requests()->getGroupDetails($pr);
-    if (!$rows) { header('Location: /manager/requests'); return; }
-    // Gate: allow canvassing only when group is Approved or Canvassing Rejected (to re-canvass)
-    $statuses = [];
-    foreach ($rows as $r) { $statuses[(string)($r['status'] ?? '')] = true; }
-    $allowedStates = ['approved','canvassing_rejected'];
-    $isAllowed = false;
-    foreach ($allowedStates as $as) { if (isset($statuses[$as])) { $isAllowed = true; break; } }
-    if (!$isAllowed) { header('Location: /manager/requests?error=' . rawurlencode('Canvassing allowed only for Approved PRs')); return; }
-        // Require canvassing_approved to proceed
-        $status = (string)($rows[0]['status'] ?? '');
-        if ($status !== 'canvassing_approved' && $status !== 'po_rejected') { header('Location: /manager/requests?error=PO+allowed+only+after+canvassing+approval'); return; }
+        $rows = $this->requests()->getGroupDetails($pr);
+        if (!$rows) { header('Location: /manager/requests'); return; }
+        // Require canvassing_approved (or allow PO retry after po_rejected)
+        // Determine the most recent group status to avoid relying on an arbitrary row
+        try {
+            $pdo = \App\Database\Connection::resolve();
+            $st = $pdo->prepare("SELECT status FROM purchase_requests WHERE pr_number = :pr ORDER BY updated_at DESC LIMIT 1");
+            $st->execute(['pr' => $pr]);
+            $groupStatus = (string)($st->fetchColumn() ?: '');
+        } catch (\Throwable $e) {
+            // Fallback: use the first row's status
+            $groupStatus = (string)($rows[0]['status'] ?? '');
+        }
+        if ($groupStatus !== 'canvassing_approved' && $groupStatus !== 'po_rejected') {
+            header('Location: /manager/requests?error=' . rawurlencode('PO allowed only after canvassing approval'));
+            return;
+        }
         $this->ensurePoTables();
         // Load suppliers list (optional: narrow to previously selected suppliers)
         $pdo = \App\Database\Connection::resolve();
@@ -110,6 +115,7 @@ class ProcurementController extends BaseController
         $reference = trim((string)($_POST['reference'] ?? ''));
         $terms = trim((string)($_POST['terms'] ?? ''));
         $notes = trim((string)($_POST['notes'] ?? ''));
+    $discount = isset($_POST['discount']) ? (float)$_POST['discount'] : 0.0;
         $deliverTo = trim((string)($_POST['deliver_to'] ?? 'MHI Bldg., New York St., Brgy. Immaculate Concepcion, Cubao, Quezon City'));
         $lookFor = trim((string)($_POST['look_for'] ?? (string)($_SESSION['full_name'] ?? '')));
         $date = date('Y-m-d');
@@ -151,6 +157,7 @@ class ProcurementController extends BaseController
             'terms' => $terms,
             'center' => $center,
             'notes' => $notes,
+            'discount' => $discount,
             'deliver_to' => $deliverTo,
             'look_for' => $lookFor,
             'prepared_by' => (string)($_SESSION['full_name'] ?? ''),

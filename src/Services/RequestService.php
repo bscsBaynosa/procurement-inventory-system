@@ -407,7 +407,24 @@ class RequestService
 	 */
 	public function updateGroupStatus($prNumber, $status, $performedBy, $notes = null)
 	{
-		$allowed = ['pending','for_admin_approval','approved','rejected','in_progress','completed','cancelled','canvassing_submitted','canvassing_approved','canvassing_rejected'];
+		$allowed = [
+			'pending',
+			'for_admin_approval',
+			'approved',
+			'rejected',
+			'in_progress',
+			'completed',
+			'cancelled',
+			'canvassing_submitted',
+			'canvassing_approved',
+			'canvassing_rejected',
+			// PO phase statuses
+			'po_submitted',
+			'po_admin_approved',
+			'po_rejected',
+			// supplier response to PO
+			'supplier_response'
+		];
 		if (!in_array($status, $allowed, true)) { return false; }
 		$this->ensureRequestStatusEnum();
 		$rows = $this->getGroupDetails($prNumber);
@@ -916,6 +933,47 @@ DO $$ BEGIN
 				ALTER TYPE request_status ADD VALUE 'canvassing_rejected';
 			END;
 		END IF;
+		-- PO-related statuses
+		IF NOT EXISTS (
+			SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+			WHERE t.typname = 'request_status' AND e.enumlabel = 'po_submitted'
+		) THEN
+			BEGIN
+				ALTER TYPE request_status ADD VALUE 'po_submitted' AFTER 'canvassing_rejected';
+			EXCEPTION WHEN others THEN
+				ALTER TYPE request_status ADD VALUE 'po_submitted';
+			END;
+		END IF;
+		IF NOT EXISTS (
+			SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+			WHERE t.typname = 'request_status' AND e.enumlabel = 'po_admin_approved'
+		) THEN
+			BEGIN
+				ALTER TYPE request_status ADD VALUE 'po_admin_approved' AFTER 'po_submitted';
+			EXCEPTION WHEN others THEN
+				ALTER TYPE request_status ADD VALUE 'po_admin_approved';
+			END;
+		END IF;
+		IF NOT EXISTS (
+			SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+			WHERE t.typname = 'request_status' AND e.enumlabel = 'po_rejected'
+		) THEN
+			BEGIN
+				ALTER TYPE request_status ADD VALUE 'po_rejected' AFTER 'po_submitted';
+			EXCEPTION WHEN others THEN
+				ALTER TYPE request_status ADD VALUE 'po_rejected';
+			END;
+		END IF;
+		IF NOT EXISTS (
+			SELECT 1 FROM pg_enum e JOIN pg_type t ON t.oid = e.enumtypid
+			WHERE t.typname = 'request_status' AND e.enumlabel = 'supplier_response'
+		) THEN
+			BEGIN
+				ALTER TYPE request_status ADD VALUE 'supplier_response' AFTER 'po_admin_approved';
+			EXCEPTION WHEN others THEN
+				ALTER TYPE request_status ADD VALUE 'supplier_response';
+			END;
+		END IF;
 	END IF;
 END $$;
 SQL);
@@ -924,7 +982,7 @@ SQL);
 			try {
 				$labelsStmt = $this->pdo->query("SELECT e.enumlabel FROM pg_type t JOIN pg_enum e ON e.enumtypid = t.oid WHERE t.typname = 'request_status'");
 				$labels = $labelsStmt ? $labelsStmt->fetchAll(\PDO::FETCH_COLUMN) : array();
-				foreach (array('for_admin_approval','canvassing_submitted','canvassing_approved','canvassing_rejected') as $v) {
+				foreach (array('for_admin_approval','canvassing_submitted','canvassing_approved','canvassing_rejected','po_submitted','po_admin_approved','po_rejected','supplier_response') as $v) {
 					if (!in_array($v, $labels, true)) {
 						$this->pdo->exec("ALTER TYPE request_status ADD VALUE '" . $v . "'");
 					}

@@ -473,30 +473,35 @@ class PDFService
 		$prepared = htmlspecialchars((string)($po['prepared_by'] ?? ''), ENT_QUOTES, 'UTF-8');
 		$reviewed = htmlspecialchars((string)($po['reviewed_by'] ?? ''), ENT_QUOTES, 'UTF-8');
 		$approved = htmlspecialchars((string)($po['approved_by'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$discount = isset($po['discount']) ? (float)$po['discount'] : 0.0;
 
-		$header = '<div style="text-align:center;font-weight:800;font-size:20px;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
-			. '<div style="text-align:center;font-size:10px;margin-bottom:6px;">Address: Basement, Marian Medical Arts Bldg., Dahlia Street, West Fairview, Quezon City</div>';
-		// Top grid Vendor vs PO meta
-		$top = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-bottom:6px;">'
-			. '<tr>'
-			. '<td style="width:55%;vertical-align:top;">'
-			. '<div style="font-size:11px;margin-bottom:6px;"><strong>VENDOR:</strong><br>' . $vendor . '</div>'
-			. '<div style="font-size:11px;margin-bottom:6px;"><strong>ADDRESS:</strong><br>' . $addr . '</div>'
-			. '<div style="font-size:11px;"><strong>VAT/TIN:</strong> ' . $tin . '</div>'
-			. '</td>'
-			. '<td style="vertical-align:top;">'
-			. '<table width="100%" border="0" cellspacing="0" cellpadding="4" style="font-size:11px;">'
-			. '<tr><td style="width:55%;">PO NO:</td><td style="text-align:right;">' . $poNum . '</td></tr>'
-			. '<tr><td>DATE:</td><td style="text-align:right;">' . $date . '</td></tr>'
-			. '<tr><td>CENTER:</td><td style="text-align:right;">' . $center . '</td></tr>'
-			. '<tr><td>REFERENCE:</td><td style="text-align:right;">' . $ref . '</td></tr>'
-			. '<tr><td>TERMS OF PAYMENT:</td><td style="text-align:right;">' . $terms . '</td></tr>'
-			. '</table>'
-			. '</td>'
-			. '</tr>'
-			. '</table>';
+		// Header (Title + Address)
+		$header = '<div style="text-align:center;font-weight:800;font-size:18px;">Philippine Oncology Center Corporation</div>'
+				. '<div style="text-align:center;font-size:10px;margin-bottom:6px;">Address: Basement, Marian Medical Arts Bldg., Dahlia Street, West Fairview, Quezon City</div>';
 
-		// Items table
+		// Top two-column block: Vendor (left) vs PO Meta (right)
+		$top = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-bottom:6px; font-size:11px;">'
+			 . '<tr>'
+			 . '  <td style="width:55%;vertical-align:top;">'
+			 . '    <table width="100%" border="0" cellspacing="0" cellpadding="4">'
+			 . '      <tr><td style="width:26%;">VENDOR:</td><td style="border:1px solid #999;height:24px;">' . $vendor . '</td></tr>'
+			 . '      <tr><td>ADDRESS:</td><td style="border:1px solid #999;height:38px;">' . $addr . '</td></tr>'
+			 . '      <tr><td>VAT/TIN:</td><td style="border:1px solid #999;height:24px;">' . $tin . '</td></tr>'
+			 . '    </table>'
+			 . '  </td>'
+			 . '  <td style="vertical-align:top;">'
+			 . '    <table width="100%" border="0" cellspacing="0" cellpadding="4" style="font-size:11px;">'
+			 . '      <tr><td style="width:45%;">PURCHASE ORDER NO.</td><td style="border:1px solid #999; text-align:right; height:22px;">' . $poNum . '</td></tr>'
+			 . '      <tr><td>CENTER</td><td style="border:1px solid #999; height:22px;">' . $center . '</td></tr>'
+			 . '      <tr><td>DATE</td><td style="border:1px solid #999; height:22px; text-align:right;">' . $date . '</td></tr>'
+			 . '      <tr><td>REFERENCE:</td><td style="border:1px solid #999; height:22px;">' . $ref . '</td></tr>'
+			 . '      <tr><td>TERMS OF PAYMENT</td><td style="border:1px solid #999; height:22px;">' . $terms . '</td></tr>'
+			 . '    </table>'
+			 . '  </td>'
+			 . '</tr>'
+			 . '</table>';
+
+		// Items table with padding rows, DISCOUNTED row, and TOTAL row
 		$itemsRows = '';
 		$total = 0.0;
 		foreach (($po['items'] ?? []) as $it) {
@@ -508,47 +513,94 @@ class PDFService
 			$total += $line;
 			$itemsRows .= '<tr>'
 				. '<td>' . $desc . '</td>'
-				. '<td style="text-align:center;">' . $unit . '</td>'
-				. '<td style="text-align:center;">' . $qty . '</td>'
-				. '<td style="text-align:right;">' . number_format($price, 2) . '</td>'
-				. '<td style="text-align:right;">' . number_format($line, 2) . '</td>'
+				. '<td style="text-align:center; width:8%;">' . $unit . '</td>'
+				. '<td style="text-align:center; width:8%;">' . $qty . '</td>'
+				. '<td style="text-align:right; width:15%;">' . number_format($price, 2) . '</td>'
+				. '<td style="text-align:right; width:15%;">' . number_format($line, 2) . '</td>'
 				. '</tr>';
 		}
-		// Optional nothing follows line to visually close
-		$itemsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="6">'
-			. '<thead><tr><th>ITEM DESCRIPTION</th><th style="width:8%;">U/M</th><th style="width:8%;">QTY</th><th style="width:15%;">UNIT PRICE</th><th style="width:15%;">TOTAL</th></tr></thead>'
-			. '<tbody>' . $itemsRows . '</tbody>'
-			. '<tfoot><tr><td colspan="4" style="text-align:right;font-weight:700;">TOTAL:</td><td style="text-align:right;font-weight:700;">₱ ' . number_format($total, 2) . '</td></tr></tfoot>'
-			. '</table>';
+		// Pad rows to keep the form look
+		$minRows = 8;
+		$currentRows = substr_count($itemsRows, '<tr>');
+		for ($i = $currentRows; $i < $minRows; $i++) {
+			$itemsRows .= '<tr>'
+						. '<td>&nbsp;</td>'
+						. '<td>&nbsp;</td>'
+						. '<td>&nbsp;</td>'
+						. '<td>&nbsp;</td>'
+						. '<td>&nbsp;</td>'
+						. '</tr>';
+		}
+		$discountFmt = $discount > 0 ? ('₱ ' . number_format($discount, 2)) : '&nbsp;';
+		$grand = max(0.0, $total - $discount);
+		$itemsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="font-size:11px;">'
+					. '<thead><tr>'
+					. '<th>ITEM DESCRIPTION</th>'
+					. '<th>U/M</th>'
+					. '<th>QTY</th>'
+					. '<th>UNIT PRICE</th>'
+					. '<th>TOTAL</th>'
+					. '</tr></thead>'
+					. '<tbody>' . $itemsRows . '</tbody>'
+					. '<tfoot>'
+					. '<tr><td colspan="4" style="text-align:right; font-weight:700;">DISCOUNTED</td><td style="text-align:right;">' . $discountFmt . '</td></tr>'
+					. '<tr><td colspan="4" style="text-align:right; font-weight:800;">TOTAL:</td><td style="text-align:right; font-weight:800;">₱ ' . number_format($grand, 2) . '</td></tr>'
+					. '</tfoot>'
+					. '</table>';
 
-		// Notes, delivery and signatures
-		$footer = '<div style="margin-top:8px;font-size:11px;">'
-			. '<div style="margin-bottom:6px;"><strong>NOTES & INSTRUCTIONS:</strong><br>' . $notes . '</div>'
-			. '<div style="margin-bottom:8px;text-align:center;">'
-			. '<div style="font-weight:700;">PLEASE DELIVER TO:</div>'
-			. '<div>PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
-			. '<div>' . $deliverTo . '</div>'
-			. '<div>LOOK FOR: ' . $lookFor . '</div>'
-			. '</div>'
-			. '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="font-size:11px;">'
-			. '<tr>'
-			. '<td style="width:33%;vertical-align:bottom;">'
-			. '<div style="height:48px;"></div>'
-			. '<div style="border-top:1px solid #999;text-align:center;padding-top:6px;">PREPARED BY:<br>' . $prepared . '<br><small>Procurement & Gen. Services</small></div>'
-			. '</td>'
-			. '<td style="width:33%;vertical-align:bottom;">'
-			. '<div style="height:48px;"></div>'
-			. '<div style="border-top:1px solid #999;text-align:center;padding-top:6px;">REVIEWED BY:<br>' . ($reviewed !== '' ? $reviewed : '&nbsp;') . '<br><small>Finance Officer</small></div>'
-			. '</td>'
-			. '<td style="width:34%;vertical-align:bottom;">'
-			. '<div style="height:48px;"></div>'
-			. '<div style="border-top:1px solid #999;text-align:center;padding-top:6px;">APPROVED BY:<br>' . $approved . '<br><small>Administrator</small></div>'
-			. '</td>'
-			. '</tr>'
-			. '</table>'
+		// Notes & Instructions block styled as a gray band, with Deliver To and Look For
+		$notesBlock = '<div style="border:1px solid #999; background:#f3f4f6; padding:6px; margin-top:6px; font-size:10px;">'
+					. '<div style="font-weight:700; text-align:center;">NOTES & INSTRUCTIONS:</div>'
+					. '<div style="margin-top:4px;">' . ($notes !== '' ? $notes : '&nbsp;') . '</div>'
+					. '<div style="text-align:center; margin-top:6px;">'
+					. '  <div style="font-weight:700;">PLEASE DELIVER TO:</div>'
+					. '  <div><span style="font-weight:700;">PHILIPPINE ONCOLOGY CENTER CORPORATION</span></div>'
+					. '  <div>' . $deliverTo . '</div>'
+					. '  <div>LOOK FOR: <span style="font-weight:700;">' . $lookFor . '</span></div>'
+					. '</div>'
+					. '</div>';
+
+		// Signature and Conditions area — two columns
+		$conditionsText = '<div style="text-align:center;font-weight:700;margin-bottom:4px;">CONDITIONS</div>'
+			. '<div style="font-size:9px; line-height:1.3;">'
+			. 'The PO number & date must be shown on the invoice and/or statement of account. At least two (2) copies '
+			. 'of delivery receipts / or invoice must accompany the delivery. Goods or merchandises must be supplied '
+			. 'risk-free. Acceptance of the PO constitutes a contract between Vendor and Vendee. The Philippine Oncology '
+			. 'Center Corporation reserves the right to cancel this PO without notice for failure of the vendor to comply '
+			. 'with the above terms and conditions and other supplementary agreements e.g. Purchasing Guidelines.'
 			. '</div>';
 
-		$html = $header . $top . $itemsTable . $footer;
+		$sigCell = function(string $title, string $name, string $subtitle): string {
+			$n = $name !== '' ? htmlspecialchars($name, ENT_QUOTES, 'UTF-8') : '&nbsp;';
+			$sub = $subtitle !== '' ? htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8') : '&nbsp;';
+			return '<div style="margin-bottom:10px;">'
+				 . '  <div style="font-size:10px;">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</div>'
+				 . '  <div style="height:40px;"></div>'
+				 . '  <div style="border-top:1px solid #999; text-align:center; padding-top:6px; font-size:10px;">' . $n . '<br><small>' . $sub . '</small></div>'
+				 . '</div>';
+		};
+
+		$leftSigs = $sigCell('PREPARED BY:', $prepared, 'PROCUREMENT & GEN. SERVICES')
+				  . $sigCell('PREPARED BY:', $reviewed, 'FINANCE OFFICER')
+				  . $sigCell('PREPARED BY:', '', '')
+				  . $sigCell('PREPARED BY:', $approved, 'ADMINISTRATOR');
+
+		$supplierSig = '<div style="margin-top:12px;">'
+					 . '  <div style="height:40px;"></div>'
+					 . '  <div style="border-top:1px solid #999; text-align:center; padding-top:6px; font-size:10px;">SUPPLIER / SUPPLIERS REPRESENTATIVE<br>SIGNATURE OVER PRINTED NAME</div>'
+					 . '</div>'
+					 . '<div style="margin-top:12px; font-size:10px; display:flex; justify-content:space-between;">'
+					 . '  <div>PREPARED BY:</div><div>DATE</div>'
+					 . '</div>';
+
+		$sigConditions = '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="margin-top:6px;">'
+						. '  <tr>'
+						. '    <td style="width:60%; vertical-align:top;">' . $leftSigs . '</td>'
+						. '    <td style="vertical-align:top;">' . $conditionsText . $supplierSig . '</td>'
+						. '  </tr>'
+						. '</table>';
+
+		$html = $header . $top . $itemsTable . $notesBlock . $sigConditions;
 		$mpdf->WriteHTML($html);
 		$mpdf->Output($filePath, 'F');
 	}

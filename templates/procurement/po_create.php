@@ -81,6 +81,10 @@
                     <label>Notes & Instructions</label>
                     <textarea name="notes" rows="3"></textarea>
                 </div>
+                <div>
+                    <label>Discount (optional)</label>
+                    <input name="discount" type="number" step="0.01" min="0" value="0" oninput="recalcAll()" />
+                </div>
             </div>
             <div style="margin-top:14px;">
                 <strong>Items</strong>
@@ -99,7 +103,8 @@
                         <?php endforeach; ?>
                     </tbody>
                     <tfoot>
-                        <tr><td colspan="4" style="text-align:right;font-weight:700;">Grand Total:</td><td id="grandTotal" style="font-weight:700;">₱ 0.00</td><td></td></tr>
+                        <tr><td colspan="4" style="text-align:right;">Discount:</td><td id="discountCell">₱ 0.00</td><td></td></tr>
+                        <tr><td colspan="4" style="text-align:right;font-weight:700;">Total:</td><td id="grandTotal" style="font-weight:700;">₱ 0.00</td><td></td></tr>
                     </tfoot>
                 </table>
                 <div style="margin-top:10px;"><button class="btn muted" type="button" onclick="addRow()">Add Item</button></div>
@@ -141,7 +146,12 @@ function recalcAll(){
         const price = parseFloat(tr.querySelector('input[name="item_price[]"]').value || '0');
         sum += qty * price;
     });
-    document.getElementById('grandTotal').textContent = '₱ ' + sum.toFixed(2);
+    const discInput = document.querySelector('input[name="discount"]');
+    const discount = discInput ? parseFloat(discInput.value || '0') : 0;
+    const net = Math.max(0, sum - discount);
+    const discountCell = document.getElementById('discountCell');
+    if (discountCell) discountCell.textContent = '₱ ' + discount.toFixed(2);
+    document.getElementById('grandTotal').textContent = '₱ ' + net.toFixed(2);
 }
 function validateItems(){
     const rows = document.querySelectorAll('#poItems tr');
