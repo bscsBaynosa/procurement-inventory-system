@@ -221,11 +221,23 @@ class PDFService
 			. '<td style="width:15%;">Rev. No.</td>'
 			. '<td style="width:25%;border-bottom:1px solid #444;">&nbsp;</td>'
 			. '<td style="width:10%;"></td>'
+					// Determine cheapest price indices (could be ties)
+					$minVal = null; $minIdxs = [];
+					for ($i=0; $i<3; $i++) {
+						if (isset($prices[$i]) && $prices[$i] !== null && $prices[$i] !== '') {
+							$val = (float)$prices[$i];
+							if ($minVal === null || $val < $minVal - 1e-9) { $minVal = $val; $minIdxs = [$i]; }
+							elseif (abs($val - $minVal) < 1e-9) { $minIdxs[] = $i; }
+						}
+					}
 			. '<td style="width:15%;">Effective Date:</td>'
 			. '<td style="width:25%;border-bottom:1px solid #444;">' . htmlspecialchars((string)($meta['effective_date'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
 			. '</tr>'
 			. '</table>';
-
+						$isCheapest = in_array($i, $minIdxs, true);
+						$cellStyle = 'text-align:center;vertical-align:top;';
+						if ($isCheapest) { $cellStyle .= 'background:#ecfdf5;border-left:3px solid #22c55e;'; }
+						$cells .= '<td style="' . $cellStyle . '">' . $name . '<br><strong>' . $price . '</strong></td>';
 		$titleRow = '<div style="text-align:center;font-size:11px;font-style:italic;">PURCHASE REQUISITION NO. <span style="font-size:14px;font-weight:700;border-bottom:1px solid #444;padding:0 48px;">' . $pr . '</span></div>';
 
 		$reqMeta = '<table width="100%" border="0" cellspacing="0" cellpadding="0" style="margin-top:6px;font-size:10px;">'
@@ -243,7 +255,8 @@ class PDFService
 			. '<td>Date Needed:</td>'
 			. '<td style="border-bottom:1px solid #444;">' . ($need !== '' ? $need : '&nbsp;') . '</td>'
 			. '<td style="text-align:right;">Date Received:</td>'
-			. '<td style="border-bottom:1px solid #444;">' . htmlspecialchars((string)($meta['date_received'] ?? ''), ENT_QUOTES, 'UTF-8') . '</td>'
+						// Distinguish awarded cell visually (green band)
+						$awardCell = '<div style="background:#dcfce7;border:1px solid #22c55e;padding:4px 2px;">' . $nm . '<br><strong>' . $pv . '</strong></div>';
 			. '</tr>'
 			. '</table>';
 
