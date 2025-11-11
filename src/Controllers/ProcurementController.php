@@ -352,10 +352,27 @@ class ProcurementController extends BaseController
             $existsSupplierCol = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='" . $supplierCol . "'")->fetchColumn();
             if (!$existsSupplierCol) { $joinUsers = false; }
         } catch (\Throwable $e) { /* ignore */ }
+        // Determine how to provide pr_number
+        $selectPr = 'po.pr_number';
+        $canJoinPR = false;
+        try {
+            $hasPoPrNumber = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='pr_number'")->fetchColumn();
+            if (!$hasPoPrNumber) {
+                $hasPoPrId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='pr_id'")->fetchColumn();
+                $hasReqId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_requests' AND column_name='request_id'")->fetchColumn();
+                $hasReqPrNumber = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_requests' AND column_name='pr_number'")->fetchColumn();
+                if ($hasPoPrId && $hasReqId && $hasReqPrNumber) { $canJoinPR = true; $selectPr = 'pr.pr_number'; }
+                else { $selectPr = "'N/A'"; }
+            }
+        } catch (\Throwable $e) { $selectPr = "'N/A'"; }
         // Build dynamic SELECT mapping legacy column names to expected aliases
-        $sqlJoin = 'SELECT po.' . $idCol . ' AS id, po.pr_number, po.po_number, po.status, COALESCE(po.total, 0) AS total, po.pdf_path, po.created_at, u.full_name AS supplier_name'
-            . ' FROM purchase_orders po JOIN users u ON u.user_id = po.' . $supplierCol;
-        $sqlNoJoin = 'SELECT po.' . $idCol . ' AS id, po.pr_number, po.po_number, po.status, COALESCE(po.total, 0) AS total, po.pdf_path, po.created_at, COALESCE(po.vendor_name, \'' . "Unknown Supplier" . '\') AS supplier_name FROM purchase_orders po';
+        $sqlJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, COALESCE(po.total, 0) AS total, po.pdf_path, po.created_at, u.full_name AS supplier_name'
+            . ' FROM purchase_orders po'
+            . ' JOIN users u ON u.user_id = po.' . $supplierCol
+            . ($canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '');
+        $sqlNoJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, COALESCE(po.total, 0) AS total, po.pdf_path, po.created_at, COALESCE(po.vendor_name, \'" . "Unknown Supplier" . "\') AS supplier_name'
+            . ' FROM purchase_orders po'
+            . ($canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '');
         // Apply filters
         $sqlJ = $sqlJoin; $sqlN = $sqlNoJoin;
         if ($where) { $sqlJ .= ' WHERE ' . implode(' AND ', $where); }
@@ -367,9 +384,9 @@ class ProcurementController extends BaseController
         $sqlN .= ' ORDER BY po.created_at DESC';
         // Try join first; if it fails due to missing column, fallback to no-join
         try {
-            $st = $pdo->prepare($sqlJ);
-            $st->execute($params);
-            $pos = $st->fetchAll();
+        $st = $pdo->prepare($sql);
+        $st->execute($params);
+        $pos = $st->fetchAll();
         } catch (\Throwable $e) {
             $st = $pdo->prepare($sqlN);
             $params2 = [];
