@@ -365,12 +365,15 @@ class ProcurementController extends BaseController
                 else { $selectPr = "'N/A'"; }
             }
         } catch (\Throwable $e) { $selectPr = "'N/A'"; }
-        // Determine total expression: prefer header po.total; else compute via items subquery
-        $totalExpr = 'COALESCE(po.total, (SELECT SUM(i.line_total) FROM purchase_order_items i WHERE i.po_id = po.' . $idCol . '), 0)';
+        // Determine total expression:
+        // - If purchase_orders.total exists, prefer it but fall back to items sum
+        // - If it doesn't exist, use items sum only (do NOT reference po.total)
+        $itemsSumExpr = '(SELECT COALESCE(SUM(i.line_total),0) FROM purchase_order_items i WHERE i.po_id = po.' . $idCol . ')';
+        $totalExpr = $itemsSumExpr; // default when po.total is absent
         try {
             $hasPoTotal = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='total'")->fetchColumn();
-            if ($hasPoTotal) { $totalExpr = 'COALESCE(po.total, 0)'; }
-        } catch (\Throwable $e) { /* keep subquery expression */ }
+            if ($hasPoTotal) { $totalExpr = 'COALESCE(po.total, ' . $itemsSumExpr . ')'; }
+        } catch (\Throwable $e) { /* keep default itemsSumExpr */ }
         // Build dynamic SELECT mapping legacy column names to expected aliases
         $sqlJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, po.pdf_path, po.created_at, u.full_name AS supplier_name'
             . ' FROM purchase_orders po'
@@ -491,7 +494,7 @@ class ProcurementController extends BaseController
             $st->execute(['id' => $id]);
             $po = $st->fetch();
         } catch (\Throwable $e) {
-            $sqlH = 'SELECT po.*, ' . $selectPr . ', COALESCE(po.vendor_name, \'" . "Unknown Supplier" . "\') AS supplier_name FROM purchase_orders po' . $joinPrSql . ' WHERE po.' . $idCol . ' = :id';
+            $sqlH = 'SELECT po.*, ' . $selectPr . ', COALESCE(po.vendor_name, \'Unknown Supplier\') AS supplier_name FROM purchase_orders po' . $joinPrSql . ' WHERE po.' . $idCol . ' = :id';
             $st = $pdo->prepare($sqlH);
             $st->execute(['id' => $id]);
             $po = $st->fetch();
