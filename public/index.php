@@ -339,33 +339,33 @@ if ($method === 'POST' && $path === '/manager/requests/send-for-approval') {
 // Procurement: Purchase Order creation
 if ($method === 'GET' && $path === '/procurement/po/create') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
-	$manager->poCreate();
+	$safeRun(static function() use ($manager){ $manager->poCreate(); });
 	exit;
 }
 if ($method === 'POST' && $path === '/procurement/po/create') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
-	$manager->poSubmit();
+	$safeRun(static function() use ($manager){ $manager->poSubmit(); });
 	exit;
 }
 
 // Procurement: Purchase Orders list (new consolidated view)
 if ($method === 'GET' && $path === '/procurement/pos') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
-	$manager->poList();
+	$safeRun(static function() use ($manager){ $manager->poList(); });
 	exit;
 }
 
 // Procurement: Purchase Order detail view
 if ($method === 'GET' && $path === '/procurement/po/view') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
-	$manager->poView();
+	$safeRun(static function() use ($manager){ $manager->poView(); });
 	exit;
 }
 
 // Procurement: Export/Regenerate PO PDF
 if ($method === 'GET' && $path === '/procurement/po/export') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
-	$manager->poExport();
+	$safeRun(static function() use ($manager){ $manager->poExport(); });
 	exit;
 }
 
