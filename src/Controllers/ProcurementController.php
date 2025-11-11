@@ -322,16 +322,34 @@ class ProcurementController extends BaseController
         if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
         $this->ensurePoTables();
         $pdo = \App\Database\Connection::resolve();
+        // Detect legacy purchase_orders schema differences (supplier column or primary key naming)
+        $supplierCol = 'supplier_id';
+        try {
+            $hasSupplierId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='supplier_id'")->fetchColumn();
+            if (!$hasSupplierId) {
+                $hasSupplier = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='supplier'")->fetchColumn();
+                if ($hasSupplier) { $supplierCol = 'supplier'; }
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+        $idCol = 'id';
+        try {
+            $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn();
+            if (!$hasId) {
+                $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn();
+                if ($hasPoId) { $idCol = 'po_id'; }
+            }
+        } catch (\Throwable $e) { /* ignore */ }
         // Optional filters
         $status = isset($_GET['status']) && $_GET['status'] !== '' ? (string)$_GET['status'] : null;
         $supplier = isset($_GET['supplier']) && $_GET['supplier'] !== '' ? (int)$_GET['supplier'] : null;
         $where = [];
         $params = [];
         if ($status !== null) { $where[] = 'po.status = :status'; $params['status'] = $status; }
-        if ($supplier !== null) { $where[] = 'po.supplier_id = :sid'; $params['sid'] = $supplier; }
-        $sql = 'SELECT po.id, po.pr_number, po.po_number, po.status, po.total, po.pdf_path, po.created_at, u.full_name AS supplier_name
+        if ($supplier !== null) { $where[] = 'po.' . $supplierCol . ' = :sid'; $params['sid'] = $supplier; }
+        // Build dynamic SELECT mapping legacy column names to expected aliases
+        $sql = 'SELECT po.' . $idCol . ' AS id, po.pr_number, po.po_number, po.status, COALESCE(po.total, 0) AS total, po.pdf_path, po.created_at, u.full_name AS supplier_name
                 FROM purchase_orders po
-                JOIN users u ON u.user_id = po.supplier_id';
+                JOIN users u ON u.user_id = po.' . $supplierCol;
         if ($where) { $sql .= ' WHERE ' . implode(' AND ', $where); }
         $sql .= ' ORDER BY po.created_at DESC';
         $st = $pdo->prepare($sql);
@@ -350,9 +368,23 @@ class ProcurementController extends BaseController
         $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
         if ($id <= 0) { header('Location: /procurement/pos'); return; }
         $pdo = \App\Database\Connection::resolve();
+        // Detect legacy schema for id / supplier column mapping
+        $supplierCol = 'supplier_id'; $idCol = 'id';
+        try {
+            $hasSupplierId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='supplier_id'")->fetchColumn();
+            if (!$hasSupplierId) {
+                $hasSupplier = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='supplier'")->fetchColumn();
+                if ($hasSupplier) { $supplierCol = 'supplier'; }
+            }
+            $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn();
+            if (!$hasId) {
+                $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn();
+                if ($hasPoId) { $idCol = 'po_id'; }
+            }
+        } catch (\Throwable $e) { /* ignore */ }
         // Load header with supplier name
         $h = null;
-        $st = $pdo->prepare('SELECT po.*, u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.supplier_id WHERE po.id = :id');
+        $st = $pdo->prepare('SELECT po.*, u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.' . $supplierCol . ' WHERE po.' . $idCol . ' = :id');
         $st->execute(['id' => $id]);
         $h = $st->fetch();
         if (!$h) { header('Location: /procurement/pos'); return; }
@@ -371,7 +403,21 @@ class ProcurementController extends BaseController
         $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
         if ($id <= 0) { header('Location: /procurement/pos'); return; }
         $pdo = \App\Database\Connection::resolve();
-        $st = $pdo->prepare('SELECT po.*, u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.supplier_id WHERE po.id = :id');
+        // Detect legacy schema for id / supplier column mapping
+        $supplierCol = 'supplier_id'; $idCol = 'id';
+        try {
+            $hasSupplierId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='supplier_id'")->fetchColumn();
+            if (!$hasSupplierId) {
+                $hasSupplier = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='supplier'")->fetchColumn();
+                if ($hasSupplier) { $supplierCol = 'supplier'; }
+            }
+            $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn();
+            if (!$hasId) {
+                $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn();
+                if ($hasPoId) { $idCol = 'po_id'; }
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+        $st = $pdo->prepare('SELECT po.*, u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.' . $supplierCol . ' WHERE po.' . $idCol . ' = :id');
         $st->execute(['id' => $id]);
         $po = $st->fetch();
         if (!$po) { header('Location: /procurement/pos'); return; }
