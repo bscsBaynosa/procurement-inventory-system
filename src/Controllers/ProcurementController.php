@@ -190,7 +190,7 @@ class ProcurementController extends BaseController
         } catch (\Throwable $ignored) {}
         // Insert PO
         // Guard against duplicate PO numbers race by retrying once if unique violation occurs
-    $ins = $pdo->prepare('INSERT INTO purchase_orders (pr_number, pr_id, po_number, supplier_id, vendor_name, vendor_address, vendor_tin, center, reference, terms, notes, deliver_to, look_for, status, total, discount, created_by, prepared_by, finance_officer, admin_name, reviewed_by, approved_by) VALUES (:pr,:prid,:po,:sid,:vn,:va,:vt,:ce,:ref,:te,:no,:dt,:lf,\'submitted\',:tot,:disc,:uid,:prep,:fo,:an,:rev,:app) RETURNING id');
+                $sqlH = 'SELECT po.*, ' . $selectPr . ', COALESCE(po.vendor_name, \'Unknown Supplier\') AS supplier_name FROM purchase_orders po' . $joinPrSql . ' WHERE po.' . $idCol . ' = :id';
         try {
             $ins->execute([
                 'pr' => $pr,
@@ -365,12 +365,18 @@ class ProcurementController extends BaseController
                 else { $selectPr = "'N/A'"; }
             }
         } catch (\Throwable $e) { $selectPr = "'N/A'"; }
+        // Determine total expression: prefer header po.total; else compute via items subquery
+        $totalExpr = 'COALESCE(po.total, (SELECT SUM(i.line_total) FROM purchase_order_items i WHERE i.po_id = po.' . $idCol . '), 0)';
+        try {
+            $hasPoTotal = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='total'")->fetchColumn();
+            if ($hasPoTotal) { $totalExpr = 'COALESCE(po.total, 0)'; }
+        } catch (\Throwable $e) { /* keep subquery expression */ }
         // Build dynamic SELECT mapping legacy column names to expected aliases
-        $sqlJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, COALESCE(po.total, 0) AS total, po.pdf_path, po.created_at, u.full_name AS supplier_name'
+        $sqlJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, po.pdf_path, po.created_at, u.full_name AS supplier_name'
             . ' FROM purchase_orders po'
             . ' JOIN users u ON u.user_id = po.' . $supplierCol
             . ($canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '');
-        $sqlNoJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, COALESCE(po.total, 0) AS total, po.pdf_path, po.created_at, COALESCE(po.vendor_name, \'" . "Unknown Supplier" . "\') AS supplier_name'
+        $sqlNoJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, po.pdf_path, po.created_at, COALESCE(po.vendor_name, \'Unknown Supplier\') AS supplier_name'
             . ' FROM purchase_orders po'
             . ($canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '');
         // Apply filters
@@ -384,7 +390,7 @@ class ProcurementController extends BaseController
         $sqlN .= ' ORDER BY po.created_at DESC';
         // Try join first; if it fails due to missing column, fallback to no-join
         try {
-        $st = $pdo->prepare($sql);
+        $st = $pdo->prepare($sqlJ);
         $st->execute($params);
         $pos = $st->fetchAll();
         } catch (\Throwable $e) {
@@ -444,7 +450,7 @@ class ProcurementController extends BaseController
             $h = $st->fetch();
         } catch (\Throwable $e) {
             // Fallback for legacy schemas without supplier column: no users join
-            $sqlH = 'SELECT po.*, ' . $selectPr . ', COALESCE(po.vendor_name, \'" . "Unknown Supplier" . "\') AS supplier_name FROM purchase_orders po' . $joinPrSql . ' WHERE po.' . $idCol . ' = :id';
+                $sqlH = 'SELECT po.*, ' . $selectPr . ', COALESCE(po.vendor_name, \'Unknown Supplier\') AS supplier_name FROM purchase_orders po' . $joinPrSql . ' WHERE po.' . $idCol . ' = :id';
             $st = $pdo->prepare($sqlH);
             $st->execute(['id' => $id]);
             $h = $st->fetch();
