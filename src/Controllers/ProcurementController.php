@@ -421,15 +421,31 @@ class ProcurementController extends BaseController
                 if ($hasPoId) { $idCol = 'po_id'; }
             }
         } catch (\Throwable $e) { /* ignore */ }
+        // Prepare joins to also provide pr_number if missing
+        $canJoinPR = false;
+        try {
+            $hasPoPrNumber = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='pr_number'")->fetchColumn();
+            if (!$hasPoPrNumber) {
+                $hasPoPrId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='pr_id'")->fetchColumn();
+                $hasReqId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_requests' AND column_name='request_id'")->fetchColumn();
+                $hasReqPrNumber = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_requests' AND column_name='pr_number'")->fetchColumn();
+                if ($hasPoPrId && $hasReqId && $hasReqPrNumber) { $canJoinPR = true; }
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+        $selectPr = "COALESCE(po.pr_number, pr.pr_number) AS pr_number";
+        if (!$canJoinPR) { $selectPr = "COALESCE(po.pr_number, 'N/A') AS pr_number"; }
+        $joinPrSql = $canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '';
         // Load header with supplier name
         $h = null;
         try {
-            $st = $pdo->prepare('SELECT po.*, u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.' . $supplierCol . ' WHERE po.' . $idCol . ' = :id');
+            $sqlH = 'SELECT po.*, ' . $selectPr . ', u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.' . $supplierCol . $joinPrSql . ' WHERE po.' . $idCol . ' = :id';
+            $st = $pdo->prepare($sqlH);
             $st->execute(['id' => $id]);
             $h = $st->fetch();
         } catch (\Throwable $e) {
-            // Fallback for legacy schemas without supplier column: no join, synthesize supplier_name from vendor_name
-            $st = $pdo->prepare('SELECT po.*, COALESCE(po.vendor_name, \'' . "Unknown Supplier" . '\') AS supplier_name FROM purchase_orders po WHERE po.' . $idCol . ' = :id');
+            // Fallback for legacy schemas without supplier column: no users join
+            $sqlH = 'SELECT po.*, ' . $selectPr . ', COALESCE(po.vendor_name, \'" . "Unknown Supplier" . "\') AS supplier_name FROM purchase_orders po' . $joinPrSql . ' WHERE po.' . $idCol . ' = :id';
+            $st = $pdo->prepare($sqlH);
             $st->execute(['id' => $id]);
             $h = $st->fetch();
         }
@@ -464,11 +480,13 @@ class ProcurementController extends BaseController
             }
         } catch (\Throwable $e) { /* ignore */ }
         try {
-            $st = $pdo->prepare('SELECT po.*, u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.' . $supplierCol . ' WHERE po.' . $idCol . ' = :id');
+            $sqlH = 'SELECT po.*, ' . $selectPr . ', u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.' . $supplierCol . $joinPrSql . ' WHERE po.' . $idCol . ' = :id';
+            $st = $pdo->prepare($sqlH);
             $st->execute(['id' => $id]);
             $po = $st->fetch();
         } catch (\Throwable $e) {
-            $st = $pdo->prepare('SELECT po.*, COALESCE(po.vendor_name, \'' . "Unknown Supplier" . '\') AS supplier_name FROM purchase_orders po WHERE po.' . $idCol . ' = :id');
+            $sqlH = 'SELECT po.*, ' . $selectPr . ', COALESCE(po.vendor_name, \'" . "Unknown Supplier" . "\') AS supplier_name FROM purchase_orders po' . $joinPrSql . ' WHERE po.' . $idCol . ' = :id';
+            $st = $pdo->prepare($sqlH);
             $st->execute(['id' => $id]);
             $po = $st->fetch();
         }
