@@ -89,6 +89,8 @@ class ProcurementController extends BaseController
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS reviewed_by VARCHAR(255)"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS approved_by VARCHAR(255)"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS discount NUMERIC(12,2) DEFAULT 0"); } catch (\Throwable $e) {}
+        // Legacy installs may predate pdf_path; add if missing (SELECT clauses must not break)
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS pdf_path TEXT"); } catch (\Throwable $e) {}
     }
 
     /** GET: Create PO form for a canvassing-approved PR */
@@ -374,12 +376,18 @@ class ProcurementController extends BaseController
             $hasPoTotal = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='total'")->fetchColumn();
             if ($hasPoTotal) { $totalExpr = 'COALESCE(po.total, ' . $itemsSumExpr . ')'; }
         } catch (\Throwable $e) { /* keep default itemsSumExpr */ }
+        // pdf_path may be absent on legacy schema; if so, expose NULL AS pdf_path to keep templates working
+        $pdfPathSelect = 'po.pdf_path';
+        try {
+            $hasPdfPath = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='pdf_path'")->fetchColumn();
+            if (!$hasPdfPath) { $pdfPathSelect = 'NULL AS pdf_path'; }
+        } catch (\Throwable $e) { $pdfPathSelect = 'NULL AS pdf_path'; }
         // Build dynamic SELECT mapping legacy column names to expected aliases
-        $sqlJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, po.pdf_path, po.created_at, u.full_name AS supplier_name'
+        $sqlJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, ' . $pdfPathSelect . ', po.created_at, u.full_name AS supplier_name'
             . ' FROM purchase_orders po'
             . ' JOIN users u ON u.user_id = po.' . $supplierCol
             . ($canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '');
-        $sqlNoJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, po.pdf_path, po.created_at, COALESCE(po.vendor_name, \'Unknown Supplier\') AS supplier_name'
+        $sqlNoJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, ' . $pdfPathSelect . ', po.created_at, COALESCE(po.vendor_name, \'Unknown Supplier\') AS supplier_name'
             . ' FROM purchase_orders po'
             . ($canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '');
         // Apply filters
