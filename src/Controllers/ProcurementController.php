@@ -91,6 +91,8 @@ class ProcurementController extends BaseController
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS discount NUMERIC(12,2) DEFAULT 0"); } catch (\Throwable $e) {}
         // Legacy installs may predate pdf_path; add if missing (SELECT clauses must not break)
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS pdf_path TEXT"); } catch (\Throwable $e) {}
+        // Legacy installs may also predate vendor_name; add silently for fallback supplier naming
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS vendor_name VARCHAR(255)"); } catch (\Throwable $e) {}
     }
 
     /** GET: Create PO form for a canvassing-approved PR */
@@ -387,7 +389,9 @@ class ProcurementController extends BaseController
             . ' FROM purchase_orders po'
             . ' JOIN users u ON u.user_id = po.' . $supplierCol
             . ($canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '');
-        $sqlNoJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, ' . $pdfPathSelect . ', po.created_at, COALESCE(po.vendor_name, \'Unknown Supplier\') AS supplier_name'
+        // For no-join path, avoid touching vendor_name entirely (legacy DBs may not have it). Use a constant placeholder.
+        $vendorNameExpr = "'Unknown Supplier'";
+        $sqlNoJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, ' . $pdfPathSelect . ', po.created_at, ' . $vendorNameExpr . ' AS supplier_name'
             . ' FROM purchase_orders po'
             . ($canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '');
         // Apply filters
