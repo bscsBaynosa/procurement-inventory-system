@@ -89,12 +89,13 @@
 
             <div style="margin-top:14px;">
                 <strong>Supplier Quotes Snapshot</strong>
-                <div class="muted" style="font-size:12px;margin:6px 0 10px;">Cheapest price per item is highlighted automatically among the selected suppliers.</div>
+                <div class="muted" style="font-size:12px;margin:6px 0 10px;">Cheapest price per item is highlighted automatically among the selected suppliers. You can override suppliers per item using the selector in each row.</div>
                 <div style="overflow:auto;">
                     <table id="priceMatrix">
                         <thead>
                             <tr>
                                 <th style="min-width:320px;">Item</th>
+                                <th style="min-width:200px;">Suppliers for this item</th>
                                 <?php foreach ($supMap as $sid => $name): ?>
                                     <th style="min-width:140px;" data-supplier-id="<?= (int)$sid ?>"><?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?></th>
                                 <?php endforeach; ?>
@@ -105,6 +106,14 @@
                         <?php foreach ($itemsForGrid as $it): $k = (string)$it['key']; ?>
                             <tr data-item-key="<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>">
                                 <td><?= htmlspecialchars((string)$it['label'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td>
+                                    <select name="item_suppliers[<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>][]" class="per-item-select" multiple size="3" style="width:100%">
+                                        <?php foreach ($suppliers as $s): ?>
+                                            <option value="<?= (int)$s['user_id'] ?>"><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <div style="font-size:11px;color:var(--muted);margin-top:4px;">Pick 3–5 for this item; empty = use global selection.</div>
+                                </td>
                                 <?php foreach ($supMap as $sid => $name): $p = isset($prices[$sid][$k]) ? (float)$prices[$sid][$k] : null; ?>
                                     <td data-supplier-id="<?= (int)$sid ?>" data-price="<?= $p !== null ? number_format($p, 2, '.', '') : '' ?>">
                                         <?= $p !== null ? ('₱ ' . number_format($p, 2)) : '—' ?>
@@ -143,18 +152,22 @@
                 const originalAction = form.getAttribute('action');
                 const originalTarget = form.getAttribute('target');
                 function recalc() {
-                    const selected = new Set(Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.getAttribute('data-supplier-id')));
+                    const globalSelected = new Set(Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.getAttribute('data-supplier-id')));
                     const table = document.getElementById('priceMatrix');
                     if (!table) return;
                     // Dim unselected supplier columns
                     const headers = table.querySelectorAll('thead th[data-supplier-id]');
                     headers.forEach(th => {
                         const sid = th.getAttribute('data-supplier-id');
-                        if (selected.size === 0 || !selected.has(sid)) th.classList.add('dim'); else th.classList.remove('dim');
+                        if (globalSelected.size === 0 || !globalSelected.has(sid)) th.classList.add('dim'); else th.classList.remove('dim');
                     });
                     const rows = table.querySelectorAll('tbody tr');
                     const totals = {};
                     rows.forEach(tr => {
+                        // Determine per-row selected suppliers (fallback to global)
+                        const perSel = tr.querySelector('select.per-item-select');
+                        const rowSelected = new Set(Array.from(perSel ? perSel.selectedOptions : []).map(o => o.value));
+                        const activeSet = rowSelected.size > 0 ? rowSelected : globalSelected;
                         // Clear previous best/dim
                         tr.querySelectorAll('td[data-supplier-id]').forEach(td => { td.classList.remove('best'); td.classList.remove('dim'); });
                         // Gather prices only for selected suppliers
@@ -165,16 +178,16 @@
                             const sid = td.getAttribute('data-supplier-id');
                             const priceStr = td.getAttribute('data-price');
                             const price = priceStr === '' ? NaN : parseFloat(priceStr);
-                            if (selected.size > 0 && !selected.has(sid)) { td.classList.add('dim'); }
-                            if (selected.size > 0 && selected.has(sid) && !isNaN(price)) { if (price < min) { min = price; minSid = sid; } }
-                            if (selected.size > 0 && selected.has(sid) && !isNaN(price)) { totals[sid] = (totals[sid] || 0) + price; }
+                            if (activeSet.size > 0 && !activeSet.has(sid)) { td.classList.add('dim'); }
+                            if (activeSet.size > 0 && activeSet.has(sid) && !isNaN(price)) { if (price < min) { min = price; minSid = sid; } }
+                            if (activeSet.size > 0 && activeSet.has(sid) && !isNaN(price)) { totals[sid] = (totals[sid] || 0) + price; }
                         });
                         if (min !== Infinity) {
                             tds.forEach(td => {
                                 const sid = td.getAttribute('data-supplier-id');
                                 const priceStr = td.getAttribute('data-price');
                                 const price = priceStr === '' ? NaN : parseFloat(priceStr);
-                                if (selected.has(sid) && !isNaN(price) && Math.abs(price - min) < 1e-9) { td.classList.add('best'); }
+                                if (activeSet.has(sid) && !isNaN(price) && Math.abs(price - min) < 1e-9) { td.classList.add('best'); }
                             });
                         }
                         // Sync per-item award select
@@ -183,7 +196,7 @@
                             // Disable options not in selected set
                             Array.from(awardSel.options).forEach(opt => {
                                 if (!opt.value) { opt.disabled = false; return; }
-                                opt.disabled = (selected.size > 0 && !selected.has(opt.value));
+                                opt.disabled = (activeSet.size > 0 && !activeSet.has(opt.value));
                             });
                             // If current choice invalid (not selected supplier), clear
                             if (awardSel.value && awardSel.options[awardSel.selectedIndex] && awardSel.options[awardSel.selectedIndex].disabled) {
@@ -191,7 +204,7 @@
                             }
                             // Auto-pick cheapest for this row if user hasn't set manually
                             if (!awardSel.dataset.userSet) {
-                                if (minSid && selected.has(minSid)) { awardSel.value = minSid; }
+                                if (minSid && activeSet.has(minSid)) { awardSel.value = minSid; }
                                 else { awardSel.value = ''; }
                             }
                         }
@@ -201,7 +214,7 @@
                         Array.from(awardSel.options).forEach(opt => {
                             const val = opt.value;
                             if (!val) { opt.disabled = false; return; }
-                            opt.disabled = (selected.size > 0 && !selected.has(val));
+                            opt.disabled = (globalSelected.size > 0 && !globalSelected.has(val));
                         });
                         // If currently selected option is disabled (no longer selected as supplier), clear it
                         if (awardSel.value && awardSel.options[awardSel.selectedIndex] && awardSel.options[awardSel.selectedIndex].disabled) {
@@ -234,12 +247,20 @@
                 document.querySelectorAll('.supplier-choice').forEach(cb => cb.addEventListener('change', recalc));
                 // Track manual changes on per-item award selects
                 document.querySelectorAll('select.award-per-item').forEach(sel => sel.addEventListener('change', function(){ this.dataset.userSet = '1'; }));
+                document.querySelectorAll('select.per-item-select').forEach(sel => sel.addEventListener('change', function(){ recalc(); }));
                 recalc();
                 // Preview flow: submit to preview endpoint in a new tab and enable Send button
                 btnPreview.addEventListener('click', function(){
                     // Basic validation before preview
                     const checked = document.querySelectorAll('.supplier-choice:checked').length;
                     if (checked < 3 || checked > 5) { alert('Please select 3–5 suppliers.'); return; }
+                    // Validate per-item overrides: if present, ensure 3–5 per item
+                    let bad = false;
+                    document.querySelectorAll('select.per-item-select').forEach(sel => {
+                        const cnt = Array.from(sel.selectedOptions).length;
+                        if (cnt !== 0 && (cnt < 3 || cnt > 5)) { bad = true; }
+                    });
+                    if (bad) { alert('Each item override must have 3–5 suppliers selected or leave empty to use global selection.'); return; }
                     // Ensure awarded vendor validity (if chosen)
                     if (awardSel && awardSel.value) {
                         const selSet = new Set(Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.value));
@@ -262,6 +283,13 @@
                         alert('Please select 3–5 suppliers.');
                         return;
                     }
+                    // Per-item overrides validation
+                    let bad = false;
+                    document.querySelectorAll('select.per-item-select').forEach(sel => {
+                        const cnt = Array.from(sel.selectedOptions).length;
+                        if (cnt !== 0 && (cnt < 3 || cnt > 5)) { bad = true; }
+                    });
+                    if (bad) { e.preventDefault(); alert('Each item override must have 3–5 suppliers selected or leave empty.'); return; }
                     // Validate awarded_to is among selected if provided
                     if (awardSel && awardSel.value) {
                         const selSet = new Set(Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.value));

@@ -29,7 +29,16 @@
     <?php require __DIR__ . '/../layouts/_sidebar.php'; ?>
     <main class="content">
         <h2 style="margin:0 0 12px 0;">Create Purchase Order • PR <?= htmlspecialchars($pr, ENT_QUOTES, 'UTF-8') ?></h2>
-        <form method="POST" action="/procurement/po/create" class="card" onsubmit="return validateItems();">
+        <?php
+        if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
+        $flashError = $_SESSION['flash_error'] ?? null; unset($_SESSION['flash_error']);
+        if (!$flashError && isset($_GET['error']) && $_GET['error'] !== '') { $flashError = (string)$_GET['error']; }
+        if (!empty($flashError)): ?>
+            <div style="margin:4px 0 12px; padding:10px 12px; border:1px solid #ef444466; background:color-mix(in oklab, #ef4444 10%, transparent); border-radius:10px;">
+                <?= htmlspecialchars((string)$flashError, ENT_QUOTES, 'UTF-8') ?>
+            </div>
+        <?php endif; ?>
+    <form method="POST" action="/procurement/po/create" class="card" onsubmit="return validateItems();">
             <input type="hidden" name="pr_number" value="<?= htmlspecialchars($pr, ENT_QUOTES, 'UTF-8') ?>" />
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
                 <div>
@@ -59,16 +68,16 @@
                     <input name="vendor_tin" />
                 </div>
                 <div>
-                    <label>Center</label>
-                    <input name="center" />
+                    <label>Center (required)</label>
+                    <input name="center" required />
                 </div>
                 <div>
                     <label>Reference</label>
                     <input name="reference" />
                 </div>
                 <div>
-                    <label>Terms of Payment</label>
-                    <input name="terms" placeholder="e.g., 30 days, COD, etc." />
+                    <label>Terms of Payment (required)</label>
+                    <input name="terms" required placeholder="e.g., 30 days, COD, etc." />
                 </div>
                 <div>
                     <label>Deliver To</label>
@@ -77,6 +86,14 @@
                 <div>
                     <label>Look For</label>
                     <input name="look_for" value="<?= htmlspecialchars((string)($_SESSION['full_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
+                </div>
+                <div>
+                    <label>Finance Officer (required)</label>
+                    <input name="finance_officer" required placeholder="Finance Officer Name" />
+                </div>
+                <div>
+                    <label>Admin Name (required)</label>
+                    <input name="admin_name" required placeholder="Administrator Name" />
                 </div>
                 <div style="grid-column:1/-1;">
                     <label>Notes & Instructions</label>
@@ -88,7 +105,7 @@
                 </div>
             </div>
             <div style="margin-top:14px;">
-                <strong>Items</strong>
+                <strong>Items (Generated from PR <?= htmlspecialchars($pr, ENT_QUOTES, 'UTF-8') ?>)</strong>
                 <table>
                     <thead><tr><th>Description</th><th style="width:12%;">Unit</th><th style="width:12%;">Qty</th><th style="width:16%;">Unit Price</th><th style="width:16%;">Line Total</th><th style="width:8%;"></th></tr></thead>
                     <tbody id="poItems">
@@ -110,8 +127,9 @@
                 </table>
                 <div style="margin-top:10px;"><button class="btn muted" type="button" onclick="addRow()">Add Item</button></div>
             </div>
-            <div style="margin-top:12px; display:flex; gap:8px;">
-                <button class="btn" type="submit">Generate PO and Send to Admin</button>
+            <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+                <button class="btn" type="submit">Save &amp; Send for Admin Approval</button>
+                <button class="btn muted" type="button" onclick="window.print()">Print Draft</button>
                 <a class="btn muted" href="/manager/requests">Cancel</a>
             </div>
         </form>
@@ -156,6 +174,11 @@ function recalcAll(){
 }
 function validateItems(){
     const rows = document.querySelectorAll('#poItems tr');
+    const required = ['center','terms','finance_officer','admin_name'];
+    for (const id of required){
+        const el = document.querySelector('[name="'+id+'"]');
+        if (!el || !el.value.trim()){ alert('Missing required field: '+id.replace('_',' ')); return false; }
+    }
     if (rows.length === 0) { alert('Add at least one item.'); return false; }
     return true;
 }

@@ -362,6 +362,13 @@ if ($method === 'GET' && $path === '/procurement/po/view') {
 	exit;
 }
 
+// Procurement: Export/Regenerate PO PDF
+if ($method === 'GET' && $path === '/procurement/po/export') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$manager->poExport();
+	exit;
+}
+
 // Procurement: RFP (Request For Payment)
 if ($method === 'GET' && $path === '/procurement/rfp/create') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }

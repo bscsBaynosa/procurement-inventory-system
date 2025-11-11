@@ -61,6 +61,24 @@
 <div class="layout">
     <?php require __DIR__ . '/../layouts/_sidebar.php'; ?>
     <main class="content">
+        <?php
+        // Flash messages (success/error) via session or query string
+        if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
+        $flashSuccess = $_SESSION['flash_success'] ?? null; unset($_SESSION['flash_success']);
+        $flashError = $_SESSION['flash_error'] ?? null; unset($_SESSION['flash_error']);
+        if (!$flashSuccess && isset($_GET['success']) && $_GET['success'] !== '') { $flashSuccess = (string)$_GET['success']; }
+        if (!$flashError && isset($_GET['error']) && $_GET['error'] !== '') { $flashError = (string)$_GET['error']; }
+        ?>
+        <?php if (!empty($flashSuccess)): ?>
+            <div style="margin:6px 0 10px; padding:10px 12px; border:1px solid #16a34a66; background:color-mix(in oklab, #22c55e 10%, transparent); border-radius:10px; color:inherit;">
+                <?= htmlspecialchars((string)$flashSuccess, ENT_QUOTES, 'UTF-8') ?>
+            </div>
+        <?php endif; ?>
+        <?php if (!empty($flashError)): ?>
+            <div style="margin:6px 0 10px; padding:10px 12px; border:1px solid #ef444466; background:color-mix(in oklab, #ef4444 10%, transparent); border-radius:10px; color:inherit;">
+                <?= htmlspecialchars((string)$flashError, ENT_QUOTES, 'UTF-8') ?>
+            </div>
+        <?php endif; ?>
         <div class="h1">
             <span>Purchase Requests</span>
             <div class="toolbar">

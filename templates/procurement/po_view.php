@@ -39,9 +39,24 @@
                 <?php if (!empty($po['pdf_path'])): ?>
                     <a class="btn primary" href="/po/download?id=<?= (int)$po['id'] ?>">Download PDF</a>
                 <?php endif; ?>
+                <a class="btn" href="/procurement/po/export?id=<?= (int)$po['id'] ?>" title="Regenerate & Export fresh PDF" target="_blank" rel="noopener">Export PDF</a>
                 <a class="btn" href="/procurement/rfp/create?po=<?= (int)$po['id'] ?>">Generate RFP</a>
             </div>
         </div>
+
+        <?php
+        if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
+        $flashSuccess = $_SESSION['flash_success'] ?? null; unset($_SESSION['flash_success']);
+        $flashError = $_SESSION['flash_error'] ?? null; unset($_SESSION['flash_error']);
+        if ($flashSuccess): ?>
+            <div style="margin:4px 0 12px; padding:10px 12px; border:1px solid #16a34a66; background:color-mix(in oklab, #22c55e 10%, transparent); border-radius:10px;">
+                <?= htmlspecialchars((string)$flashSuccess, ENT_QUOTES, 'UTF-8') ?>
+            </div>
+        <?php endif; if ($flashError): ?>
+            <div style="margin:4px 0 12px; padding:10px 12px; border:1px solid #ef444466; background:color-mix(in oklab, #ef4444 10%, transparent); border-radius:10px;">
+                <?= htmlspecialchars((string)$flashError, ENT_QUOTES, 'UTF-8') ?>
+            </div>
+        <?php endif; ?>
 
         <div class="grid" style="margin-bottom:12px;">
             <div class="card">
@@ -60,7 +75,16 @@
                 <div class="muted" style="margin-top:8px;">Created</div>
                 <div><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)$po['created_at'])), ENT_QUOTES, 'UTF-8') ?></div>
                 <div class="muted" style="margin-top:8px;">Total</div>
-                <div>₱ <?= number_format((float)($po['total'] ?? 0), 2) ?></div>
+                <div>
+                    <?php $discount = isset($po['discount']) ? (float)$po['discount'] : 0; $total = (float)($po['total'] ?? 0); ?>
+                    <?php if ($discount > 0): ?>
+                        <span style="font-size:12px;color:var(--muted);">Gross: ₱ <?= number_format($total + $discount, 2) ?></span><br>
+                        <span style="font-weight:700;">Net: ₱ <?= number_format($total, 2) ?></span><br>
+                        <span style="font-size:12px;color:var(--muted);">Discount: ₱ <?= number_format($discount, 2) ?></span>
+                    <?php else: ?>
+                        ₱ <?= number_format($total, 2) ?>
+                    <?php endif; ?>
+                </div>
             </div>
         </div>
 

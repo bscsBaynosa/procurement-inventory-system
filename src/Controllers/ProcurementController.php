@@ -71,6 +71,15 @@ class ProcurementController extends BaseController
             unit_price NUMERIC(12,2) NOT NULL DEFAULT 0,
             line_total NUMERIC(12,2) NOT NULL DEFAULT 0
         )");
+        // Add-on columns required by new PO module (idempotent).
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS pr_id BIGINT REFERENCES purchase_requests(request_id) ON DELETE SET NULL"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS prepared_by VARCHAR(255)"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS finance_officer VARCHAR(255)"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS admin_name VARCHAR(255)"); } catch (\Throwable $e) {}
+        // Optional mirror columns for signatures
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS reviewed_by VARCHAR(255)"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS approved_by VARCHAR(255)"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS discount NUMERIC(12,2) DEFAULT 0"); } catch (\Throwable $e) {}
     }
 
     /** GET: Create PO form for a canvassing-approved PR */
@@ -92,8 +101,9 @@ class ProcurementController extends BaseController
             // Fallback: use the first row's status
             $groupStatus = (string)($rows[0]['status'] ?? '');
         }
-        if ($groupStatus !== 'canvassing_approved' && $groupStatus !== 'po_rejected') {
-            header('Location: /manager/requests?error=' . rawurlencode('PO allowed only after canvassing approval'));
+        // Broaden gating: allow after canvassing_submitted as well (awaiting admin approval) for draft PO preparation
+        if (!in_array($groupStatus, ['canvassing_submitted','canvassing_approved','po_rejected'], true)) {
+            header('Location: /manager/requests?error=' . rawurlencode('PO allowed only after canvassing has been submitted or approved'));
             return;
         }
         $this->ensurePoTables();
@@ -114,12 +124,15 @@ class ProcurementController extends BaseController
         $pr = isset($_POST['pr_number']) ? trim((string)$_POST['pr_number']) : '';
         $supplierId = (int)($_POST['supplier_id'] ?? 0);
         $poNumber = isset($_POST['po_number']) ? trim((string)$_POST['po_number']) : '';
-        if ($pr === '' || $supplierId <= 0) { header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Missing+fields'); return; }
+        if ($pr === '' || $supplierId <= 0) {
+            $_SESSION['flash_error'] = 'Missing required fields (PR or Supplier).';
+            header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Missing+fields'); return; }
         // If no PO number provided, generate one; else validate format
         if ($poNumber === '') {
             try { $poNumber = $this->requests()->generateNewPoNumber(); } catch (\Throwable $e) { $poNumber = ''; }
         } else {
             if (!preg_match('/^\d{7}$/', $poNumber)) { // Expect YYYY + 3-digit sequence e.g., 2025001
+                $_SESSION['flash_error'] = 'Invalid PO number format. Expected YYYYNNN.';
                 header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Invalid+PO+number+format+(expected+YYYYNNN)'); return;
             }
         }
@@ -130,10 +143,17 @@ class ProcurementController extends BaseController
         $reference = trim((string)($_POST['reference'] ?? ''));
         $terms = trim((string)($_POST['terms'] ?? ''));
         $notes = trim((string)($_POST['notes'] ?? ''));
-    $discount = isset($_POST['discount']) ? (float)$_POST['discount'] : 0.0;
+        $discount = isset($_POST['discount']) ? (float)$_POST['discount'] : 0.0;
         $deliverTo = trim((string)($_POST['deliver_to'] ?? 'MHI Bldg., New York St., Brgy. Immaculate Concepcion, Cubao, Quezon City'));
         $lookFor = trim((string)($_POST['look_for'] ?? (string)($_SESSION['full_name'] ?? '')));
         $date = date('Y-m-d');
+        // New personnel fields (required)
+        $financeOfficer = trim((string)($_POST['finance_officer'] ?? ''));
+        $adminName = trim((string)($_POST['admin_name'] ?? ''));
+        if ($center === '' || $terms === '' || $financeOfficer === '' || $adminName === '') {
+            $_SESSION['flash_error'] = 'Required fields missing (Center, Terms, Finance Officer, Admin Name).';
+            header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Required+fields+missing'); return;
+        }
         // Items arrays
         $descs = $_POST['item_desc'] ?? [];
         $units = $_POST['item_unit'] ?? [];
@@ -150,18 +170,69 @@ class ProcurementController extends BaseController
             $line = $qty * $price; $total += $line;
             $items[] = [ 'description' => $desc, 'unit' => $unit, 'qty' => $qty, 'unit_price' => $price, 'total' => $line ];
         }
-        if (empty($items)) { header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Add+at+least+one+item'); return; }
+    if (empty($items)) { $_SESSION['flash_error'] = 'Add at least one item.'; header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Add+at+least+one+item'); return; }
         $pdo = \App\Database\Connection::resolve();
+        // Resolve pr_id for linkage
+        $prId = null;
+        try {
+            $stPid = $pdo->prepare('SELECT request_id FROM purchase_requests WHERE pr_number = :pr LIMIT 1');
+            $stPid->execute(['pr' => $pr]);
+            $prId = $stPid->fetchColumn();
+        } catch (\Throwable $ignored) {}
         // Insert PO
         // Guard against duplicate PO numbers race by retrying once if unique violation occurs
-        $ins = $pdo->prepare('INSERT INTO purchase_orders (pr_number, po_number, supplier_id, vendor_name, vendor_address, vendor_tin, center, reference, terms, notes, deliver_to, look_for, status, total, created_by) VALUES (:pr,:po,:sid,:vn,:va,:vt,:ce,:ref,:te,:no,:dt,:lf,\'submitted\',:tot,:uid) RETURNING id');
+    $ins = $pdo->prepare('INSERT INTO purchase_orders (pr_number, pr_id, po_number, supplier_id, vendor_name, vendor_address, vendor_tin, center, reference, terms, notes, deliver_to, look_for, status, total, discount, created_by, prepared_by, finance_officer, admin_name, reviewed_by, approved_by) VALUES (:pr,:prid,:po,:sid,:vn,:va,:vt,:ce,:ref,:te,:no,:dt,:lf,\'submitted\',:tot,:disc,:uid,:prep,:fo,:an,:rev,:app) RETURNING id');
         try {
-            $ins->execute(['pr' => $pr, 'po' => $poNumber, 'sid' => $supplierId, 'vn' => $vendorName ?: null, 'va' => $vendorAddress ?: null, 'vt' => $vendorTin ?: null, 'ce' => $center ?: null, 'ref' => $reference ?: null, 'te' => $terms ?: null, 'no' => $notes ?: null, 'dt' => $deliverTo ?: null, 'lf' => $lookFor ?: null, 'tot' => $total, 'uid' => (int)($_SESSION['user_id'] ?? 0)]);
+            $ins->execute([
+                'pr' => $pr,
+                'prid' => $prId ?: null,
+                'po' => $poNumber,
+                'sid' => $supplierId,
+                'vn' => $vendorName ?: null,
+                'va' => $vendorAddress ?: null,
+                'vt' => $vendorTin ?: null,
+                'ce' => $center ?: null,
+                'ref' => $reference ?: null,
+                'te' => $terms ?: null,
+                'no' => $notes ?: null,
+                'dt' => $deliverTo ?: null,
+                'lf' => $lookFor ?: null,
+                'tot' => max(0.0, $total - $discount),
+                'disc' => $discount,
+                'uid' => (int)($_SESSION['user_id'] ?? 0),
+                'prep' => (string)($_SESSION['full_name'] ?? ''),
+                'fo' => $financeOfficer,
+                'an' => $adminName,
+                'rev' => $financeOfficer,
+                'app' => $adminName,
+            ]);
         } catch (\Throwable $e) {
             // If duplicate key on po_number, generate a fresh one and retry once
             if (stripos((string)$e->getMessage(), 'duplicate') !== false) {
                 try { $poNumber = $this->requests()->generateNewPoNumber(); } catch (\Throwable $ignored) {}
-                $ins->execute(['pr' => $pr, 'po' => $poNumber, 'sid' => $supplierId, 'vn' => $vendorName ?: null, 'va' => $vendorAddress ?: null, 'vt' => $vendorTin ?: null, 'ce' => $center ?: null, 'ref' => $reference ?: null, 'te' => $terms ?: null, 'no' => $notes ?: null, 'dt' => $deliverTo ?: null, 'lf' => $lookFor ?: null, 'tot' => $total, 'uid' => (int)($_SESSION['user_id'] ?? 0)]);
+                $ins->execute([
+                    'pr' => $pr,
+                    'prid' => $prId ?: null,
+                    'po' => $poNumber,
+                    'sid' => $supplierId,
+                    'vn' => $vendorName ?: null,
+                    'va' => $vendorAddress ?: null,
+                    'vt' => $vendorTin ?: null,
+                    'ce' => $center ?: null,
+                    'ref' => $reference ?: null,
+                    'te' => $terms ?: null,
+                    'no' => $notes ?: null,
+                    'dt' => $deliverTo ?: null,
+                    'lf' => $lookFor ?: null,
+                    'tot' => max(0.0, $total - $discount),
+                    'disc' => $discount,
+                    'uid' => (int)($_SESSION['user_id'] ?? 0),
+                    'prep' => (string)($_SESSION['full_name'] ?? ''),
+                    'fo' => $financeOfficer,
+                    'an' => $adminName,
+                    'rev' => $financeOfficer,
+                    'app' => $adminName,
+                ]);
             } else { throw $e; }
         }
         $poId = (int)$ins->fetchColumn();
@@ -185,7 +256,8 @@ class ProcurementController extends BaseController
             'deliver_to' => $deliverTo,
             'look_for' => $lookFor,
             'prepared_by' => (string)($_SESSION['full_name'] ?? ''),
-            'approved_by' => '',
+            'reviewed_by' => $financeOfficer,
+            'approved_by' => $adminName,
             'items' => $items,
         ], $file);
         // Persist pdf path
@@ -203,7 +275,8 @@ class ProcurementController extends BaseController
         }
         // Update PR status
         try { $this->requests()->updateGroupStatus($pr, 'po_submitted', (int)($_SESSION['user_id'] ?? 0), 'PO submitted for admin approval'); } catch (\Throwable $ignored) {}
-        header('Location: /manager/requests?po=1');
+        $_SESSION['flash_success'] = 'Purchase Order ' . htmlspecialchars($poNumber, ENT_QUOTES, 'UTF-8') . ' created and sent for Admin approval.';
+        header('Location: /manager/requests?success=po_created');
     }
 
     public function index(): void
@@ -279,6 +352,61 @@ class ProcurementController extends BaseController
         $lt->execute(['id' => $id]);
         $lines = $lt->fetchAll();
         $this->render('procurement/po_view.php', ['po' => $h, 'items' => $lines]);
+    }
+
+    /** GET: Regenerate PO PDF and stream/download (export) */
+    public function poExport(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
+        $this->ensurePoTables();
+        $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+        if ($id <= 0) { header('Location: /procurement/pos'); return; }
+        $pdo = \App\Database\Connection::resolve();
+        $st = $pdo->prepare('SELECT po.*, u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.supplier_id WHERE po.id = :id');
+        $st->execute(['id' => $id]);
+        $po = $st->fetch();
+        if (!$po) { header('Location: /procurement/pos'); return; }
+        $it = $pdo->prepare('SELECT description, unit, qty, unit_price, line_total FROM purchase_order_items WHERE po_id = :id ORDER BY id ASC');
+        $it->execute(['id' => $id]);
+        $rows = [];
+        foreach ($it->fetchAll() as $r) {
+            $rows[] = [
+                'description' => (string)$r['description'],
+                'unit' => (string)$r['unit'],
+                'qty' => (int)$r['qty'],
+                'unit_price' => (float)$r['unit_price'],
+                'total' => (float)$r['line_total'],
+            ];
+        }
+        $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
+        if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+        $file = $dir . DIRECTORY_SEPARATOR . 'PO-' . preg_replace('/[^A-Za-z0-9_-]/','_', (string)$po['po_number']) . '.pdf';
+        $this->pdf()->generatePurchaseOrderPDFToFile([
+            'po_number' => (string)$po['po_number'],
+            'date' => date('Y-m-d', strtotime((string)($po['created_at'] ?? date('Y-m-d')))),
+            'vendor_name' => (string)($po['vendor_name'] ?? $po['supplier_name'] ?? ''),
+            'vendor_address' => (string)($po['vendor_address'] ?? ''),
+            'vendor_tin' => (string)($po['vendor_tin'] ?? ''),
+            'reference' => (string)($po['reference'] ?? ''),
+            'terms' => (string)($po['terms'] ?? ''),
+            'center' => (string)($po['center'] ?? ''),
+            'notes' => (string)($po['notes'] ?? ''),
+            'discount' => (float)($po['discount'] ?? 0),
+            'deliver_to' => (string)($po['deliver_to'] ?? ''),
+            'look_for' => (string)($po['look_for'] ?? ''),
+            'prepared_by' => (string)($po['prepared_by'] ?? ''),
+            'reviewed_by' => (string)($po['reviewed_by'] ?? ''),
+            'approved_by' => (string)($po['approved_by'] ?? ''),
+            'items' => $rows,
+        ], $file);
+        // Update stored path (best-effort)
+        try { $pdo->prepare('UPDATE purchase_orders SET pdf_path = :p, updated_at = NOW() WHERE id = :id')->execute(['p' => $file, 'id' => $id]); } catch (\Throwable $e) {}
+        if (!is_file($file)) { $_SESSION['flash_error'] = 'Failed to generate PO PDF.'; header('Location: /procurement/po/view?id=' . $id); return; }
+        $size = @filesize($file) ?: null;
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: inline; filename="' . rawurlencode('PO-' . (string)$po['po_number'] . '.pdf') . '"');
+        if ($size !== null) { header('Content-Length: ' . (string)$size); }
+        @readfile($file);
     }
 
     /** GET: Create RFP form (optionally prefilled from a PO id) */
@@ -564,10 +692,25 @@ class ProcurementController extends BaseController
         $rows = $this->requests()->getGroupDetails($pr);
         if (!$rows) { header('Location: /manager/requests'); return; }
         $pdo = \App\Database\Connection::resolve();
+        // Parse per-item supplier overrides (each item can have its own supplier subset)
+        $itemSupMap = [];
+        if (isset($_POST['item_suppliers']) && is_array($_POST['item_suppliers'])) {
+            foreach ($_POST['item_suppliers'] as $k => $arr) {
+                $key = strtolower(trim((string)$k)); if ($key === '' || !is_array($arr)) { continue; }
+                $sids = array_values(array_unique(array_map('intval', $arr)));
+                // Enforce between 3-5 when provided
+                if (count($sids) >= 3) { $itemSupMap[$key] = array_slice($sids, 0, 5); }
+            }
+        }
+        // Fetch supplier names for union of global chosen and all per-item overrides
+        $allSupIds = $chosen;
+        foreach ($itemSupMap as $arr) { foreach ($arr as $sid) { if (!in_array($sid, $allSupIds, true)) { $allSupIds[] = $sid; } } }
+        $allSupIds = array_values(array_unique(array_filter(array_map('intval', $allSupIds), static fn($v)=>$v>0)));
+        if (empty($allSupIds)) { $allSupIds = $chosen; }
         // Fetch supplier names
-        $inParams = implode(',', array_fill(0, count($chosen), '?'));
+        $inParams = implode(',', array_fill(0, count($allSupIds), '?'));
         $st = $pdo->prepare('SELECT user_id, full_name FROM users WHERE user_id IN (' . $inParams . ')');
-        $st->execute($chosen);
+        $st->execute($allSupIds);
         $map = [];
         foreach ($st->fetchAll() as $s) { $map[(int)$s['user_id']] = (string)$s['full_name']; }
         // Optional awarded vendor (must be among selected) — overall award (legacy/global)
@@ -596,11 +739,11 @@ class ProcurementController extends BaseController
                 $byNameQty[$n] = ($byNameQty[$n] ?? 0) + max(0, $qty);
             }
             $names = array_keys($byNameQty);
-            if ($names && $chosen) {
-                $inSup = implode(',', array_fill(0, count($chosen), '?'));
+            if ($names && $allSupIds) {
+                $inSup = implode(',', array_fill(0, count($allSupIds), '?'));
                 $inNames = implode(',', array_fill(0, count($names), '?'));
                 $params = [];
-                foreach ($chosen as $sid) { $params[] = (int)$sid; }
+                foreach ($allSupIds as $sid) { $params[] = (int)$sid; }
                 foreach ($names as $nm) { $params[] = $nm; }
                 $sql = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE supplier_id IN (' . $inSup . ') AND LOWER(name) IN (' . $inNames . ')';
                 $st = $pdo->prepare($sql);
@@ -639,7 +782,7 @@ class ProcurementController extends BaseController
                     $cond = [];
                     $p2 = [];
                     $cond[] = 'supplier_id IN (' . $inSup . ')';
-                    foreach ($chosen as $sid) { $p2[] = (int)$sid; }
+                    foreach ($allSupIds as $sid) { $p2[] = (int)$sid; }
                     foreach ($tokens as $t) { $cond[] = 'LOWER(name) ILIKE ?'; $p2[] = '%' . $t . '%'; }
                     $sql2 = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE ' . implode(' AND ', $cond);
                     $st2 = $pdo->prepare($sql2);
@@ -665,7 +808,7 @@ class ProcurementController extends BaseController
                         if (!isset($prices[$sid][$nm]) || $best < $prices[$sid][$nm]) { $prices[$sid][$nm] = $best; }
                     }
                 }
-                // Sum totals per supplier
+                // Sum totals per supplier (based on global chosen only, to preserve legacy totals display)
                 foreach ($prices as $sid => $pm) {
                     $sum = 0.0;
                     foreach ($byNameQty as $iname => $_qty) {
@@ -768,7 +911,8 @@ class ProcurementController extends BaseController
         $supNamesOrdered = [];
         foreach ($chosen as $sid) { if (isset($map[$sid])) { $supNamesOrdered[] = $map[$sid]; } }
         // Build per-item canvassing matrix for 5-column table (Item | S1 | S2 | S3 | Awarded To)
-        $canvassMatrix = (function() use ($rows, $chosen, $map, $prices, $awardMap) {
+        // If per-item supplier overrides exist, use those per row; else fall back to global $chosen.
+        $canvassMatrix = (function() use ($rows, $chosen, $map, $prices, $awardMap, $itemSupMap) {
             $matrix = [];
             foreach ($rows as $r) {
                 $nm = strtolower(trim((string)($r['item_name'] ?? '')));
@@ -777,9 +921,15 @@ class ProcurementController extends BaseController
                 $unit = (string)($r['unit'] ?? '');
                 $label = (string)($r['item_name'] ?? 'Item');
                 if ($qty > 0) { $label .= ' × ' . $qty . ($unit !== '' ? (' ' . $unit) : ''); }
+                // Determine per-row supplier ids (override or global), then derive names and prices aligned to 3 columns
+                $rowSupIds = isset($itemSupMap[$nm]) && is_array($itemSupMap[$nm]) && count($itemSupMap[$nm]) >= 3
+                    ? array_slice(array_values($itemSupMap[$nm]), 0, 3)
+                    : array_slice($chosen, 0, 3);
+                $rowSupNames = [];
+                foreach ($rowSupIds as $sid) { $rowSupNames[] = isset($map[$sid]) ? (string)$map[$sid] : ''; }
                 $rowPrices = [];
                 for ($i=0;$i<3;$i++) {
-                    $sid = $chosen[$i] ?? 0;
+                    $sid = $rowSupIds[$i] ?? 0;
                     $p = ($sid && isset($prices[$sid]) && isset($prices[$sid][$nm])) ? (float)$prices[$sid][$nm] : null;
                     $rowPrices[$i] = $p;
                 }
@@ -788,7 +938,7 @@ class ProcurementController extends BaseController
                 if (isset($awardMap[$nm])) {
                     $manualSid = (int)$awardMap[$nm];
                     for ($i=0;$i<3;$i++) {
-                        if (($chosen[$i] ?? 0) === $manualSid) {
+                        if (($rowSupIds[$i] ?? 0) === $manualSid) {
                             if ($rowPrices[$i] !== null) { $awardIdx = $i; }
                             break;
                         }
@@ -798,7 +948,7 @@ class ProcurementController extends BaseController
                     $minVal = null;
                     for ($i=0;$i<3;$i++) { if ($rowPrices[$i] !== null) { $v=(float)$rowPrices[$i]; if ($minVal===null || $v<$minVal){$minVal=$v;$awardIdx=$i;} } }
                 }
-                $matrix[] = ['item' => $label, 'prices' => $rowPrices, 'award_index' => $awardIdx];
+                $matrix[] = ['item' => $label, 'prices' => $rowPrices, 'award_index' => $awardIdx, 'supplier_names' => $rowSupNames];
             }
             return $matrix;
         })();
@@ -836,7 +986,7 @@ class ProcurementController extends BaseController
                 'stock_on_hand' => isset($r['stock_on_hand']) ? (int)$r['stock_on_hand'] : null,
             ];
         }
-        $this->pdf()->generatePurchaseRequisitionToFile($metaCan, $itemsCan, $file);
+    $this->pdf()->generatePurchaseRequisitionToFile($metaCan, $itemsCan, $file);
         if (!@is_file($file) || ((int)@filesize($file) <= 0)) {
             header('Location: /manager/requests/canvass?pr=' . urlencode($pr) . '&error=' . rawurlencode('Failed to write PR-Canvass PDF'));
             return;
@@ -1176,7 +1326,16 @@ class ProcurementController extends BaseController
                 $awardMap[$k2] = $sid;
             }
         }
-        $canvassMatrix = (function() use ($rows, $chosen, $prices, $awardMap) {
+        // Include per-item supplier overrides in preview too
+        $itemSupMap = [];
+        if (isset($_POST['item_suppliers']) && is_array($_POST['item_suppliers'])) {
+            foreach ($_POST['item_suppliers'] as $k => $arr) {
+                $key = strtolower(trim((string)$k)); if ($key === '' || !is_array($arr)) { continue; }
+                $sids = array_values(array_unique(array_map('intval', $arr)));
+                if (count($sids) >= 3) { $itemSupMap[$key] = array_slice($sids, 0, 5); }
+            }
+        }
+        $canvassMatrix = (function() use ($rows, $chosen, $prices, $awardMap, $itemSupMap, $map) {
             $matrix = [];
             foreach ($rows as $r) {
                 $nm = strtolower(trim((string)($r['item_name'] ?? '')));
@@ -1185,9 +1344,14 @@ class ProcurementController extends BaseController
                 $unit = (string)($r['unit'] ?? '');
                 $label = (string)($r['item_name'] ?? 'Item');
                 if ($qty > 0) { $label .= ' × ' . $qty . ($unit !== '' ? (' ' . $unit) : ''); }
+                $rowSupIds = isset($itemSupMap[$nm]) && is_array($itemSupMap[$nm]) && count($itemSupMap[$nm]) >= 3
+                    ? array_slice(array_values($itemSupMap[$nm]), 0, 3)
+                    : array_slice($chosen, 0, 3);
+                $rowSupNames = [];
+                foreach ($rowSupIds as $sid) { $rowSupNames[] = isset($map[$sid]) ? (string)$map[$sid] : ''; }
                 $rowPrices = [];
                 for ($i=0;$i<3;$i++) {
-                    $sid = $chosen[$i] ?? 0;
+                    $sid = $rowSupIds[$i] ?? 0;
                     $p = ($sid && isset($prices[$sid]) && isset($prices[$sid][$nm])) ? (float)$prices[$sid][$nm] : null;
                     $rowPrices[$i] = $p;
                 }
@@ -1196,7 +1360,7 @@ class ProcurementController extends BaseController
                 if (isset($awardMap[$nm])) {
                     $manualSid = (int)$awardMap[$nm];
                     for ($i=0;$i<3;$i++) {
-                        if (($chosen[$i] ?? 0) === $manualSid) {
+                        if (($rowSupIds[$i] ?? 0) === $manualSid) {
                             if ($rowPrices[$i] !== null) { $awardIdx = $i; }
                             break;
                         }
@@ -1206,7 +1370,7 @@ class ProcurementController extends BaseController
                     $minVal = null;
                     for ($i=0;$i<3;$i++) { if ($rowPrices[$i] !== null) { $v=(float)$rowPrices[$i]; if ($minVal===null || $v<$minVal){$minVal=$v;$awardIdx=$i;} } }
                 }
-                $matrix[] = ['item' => $label, 'prices' => $rowPrices, 'award_index' => $awardIdx];
+                $matrix[] = ['item' => $label, 'prices' => $rowPrices, 'award_index' => $awardIdx, 'supplier_names' => $rowSupNames];
             }
             return $matrix;
         })();
@@ -1296,6 +1460,7 @@ class ProcurementController extends BaseController
             })(),
             'totals' => $totalsPreview,
             'awarded_to' => $awardedPreview,
+            // Matrix may include per-row supplier_names overriding the global 3; PDF will respect this
             'matrix' => $canvassMatrix,
         ];
 
