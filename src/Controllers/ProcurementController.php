@@ -61,10 +61,19 @@ class ProcurementController extends BaseController
         try {
             $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_purchase_orders_po_number_unique ON purchase_orders (po_number)");
         } catch (\Throwable $ignored) {}
-        // purchase_order_items lines
+        // Determine the correct reference column for purchase_orders (legacy installs may use po_id instead of id)
+        $poRefCol = 'id';
+        try {
+            $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name = 'purchase_orders' AND column_name = 'id'")->fetchColumn();
+            if (!$hasId) {
+                $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name = 'purchase_orders' AND column_name = 'po_id'")->fetchColumn();
+                if ($hasPoId) { $poRefCol = 'po_id'; }
+            }
+        } catch (\Throwable $e) { /* ignore and keep default 'id' */ }
+        // purchase_order_items lines (reference detected column to avoid FK errors on legacy schemas)
         $pdo->exec("CREATE TABLE IF NOT EXISTS purchase_order_items (
             id BIGSERIAL PRIMARY KEY,
-            po_id BIGINT NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+            po_id BIGINT NOT NULL REFERENCES purchase_orders($poRefCol) ON DELETE CASCADE,
             description TEXT NOT NULL,
             unit VARCHAR(32) NOT NULL,
             qty INTEGER NOT NULL DEFAULT 0,
