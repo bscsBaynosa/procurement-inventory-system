@@ -346,15 +346,37 @@ class ProcurementController extends BaseController
         $params = [];
         if ($status !== null) { $where[] = 'po.status = :status'; $params['status'] = $status; }
         if ($supplier !== null) { $where[] = 'po.' . $supplierCol . ' = :sid'; $params['sid'] = $supplier; }
+        // If legacy schema lacks supplier column entirely, skip join and show placeholder supplier name
+        $joinUsers = true;
+        try {
+            $existsSupplierCol = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='" . $supplierCol . "'")->fetchColumn();
+            if (!$existsSupplierCol) { $joinUsers = false; }
+        } catch (\Throwable $e) { /* ignore */ }
         // Build dynamic SELECT mapping legacy column names to expected aliases
-        $sql = 'SELECT po.' . $idCol . ' AS id, po.pr_number, po.po_number, po.status, COALESCE(po.total, 0) AS total, po.pdf_path, po.created_at, u.full_name AS supplier_name
-                FROM purchase_orders po
-                JOIN users u ON u.user_id = po.' . $supplierCol;
-        if ($where) { $sql .= ' WHERE ' . implode(' AND ', $where); }
-        $sql .= ' ORDER BY po.created_at DESC';
-        $st = $pdo->prepare($sql);
-        $st->execute($params);
-        $pos = $st->fetchAll();
+        $sqlJoin = 'SELECT po.' . $idCol . ' AS id, po.pr_number, po.po_number, po.status, COALESCE(po.total, 0) AS total, po.pdf_path, po.created_at, u.full_name AS supplier_name'
+            . ' FROM purchase_orders po JOIN users u ON u.user_id = po.' . $supplierCol;
+        $sqlNoJoin = 'SELECT po.' . $idCol . ' AS id, po.pr_number, po.po_number, po.status, COALESCE(po.total, 0) AS total, po.pdf_path, po.created_at, COALESCE(po.vendor_name, \'' . "Unknown Supplier" . '\') AS supplier_name FROM purchase_orders po';
+        // Apply filters
+        $sqlJ = $sqlJoin; $sqlN = $sqlNoJoin;
+        if ($where) { $sqlJ .= ' WHERE ' . implode(' AND ', $where); }
+        // For no-join path, only keep status filter (supplier filter requires users join/column)
+        $whereNoJoin = [];
+        if ($status !== null) { $whereNoJoin[] = 'po.status = :status'; }
+        if ($whereNoJoin) { $sqlN .= ' WHERE ' . implode(' AND ', $whereNoJoin); }
+        $sqlJ .= ' ORDER BY po.created_at DESC';
+        $sqlN .= ' ORDER BY po.created_at DESC';
+        // Try join first; if it fails due to missing column, fallback to no-join
+        try {
+            $st = $pdo->prepare($sqlJ);
+            $st->execute($params);
+            $pos = $st->fetchAll();
+        } catch (\Throwable $e) {
+            $st = $pdo->prepare($sqlN);
+            $params2 = [];
+            if ($status !== null) { $params2['status'] = $status; }
+            $st->execute($params2);
+            $pos = $st->fetchAll();
+        }
         // Load suppliers for filter dropdown
         $suppliers = $pdo->query("SELECT user_id, full_name FROM users WHERE role='supplier' AND is_active=TRUE ORDER BY full_name ASC")->fetchAll();
         $this->render('procurement/po_list.php', [ 'pos' => $pos, 'filters' => ['status' => $status, 'supplier' => $supplier], 'suppliers' => $suppliers ]);
@@ -384,9 +406,16 @@ class ProcurementController extends BaseController
         } catch (\Throwable $e) { /* ignore */ }
         // Load header with supplier name
         $h = null;
-        $st = $pdo->prepare('SELECT po.*, u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.' . $supplierCol . ' WHERE po.' . $idCol . ' = :id');
-        $st->execute(['id' => $id]);
-        $h = $st->fetch();
+        try {
+            $st = $pdo->prepare('SELECT po.*, u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.' . $supplierCol . ' WHERE po.' . $idCol . ' = :id');
+            $st->execute(['id' => $id]);
+            $h = $st->fetch();
+        } catch (\Throwable $e) {
+            // Fallback for legacy schemas without supplier column: no join, synthesize supplier_name from vendor_name
+            $st = $pdo->prepare('SELECT po.*, COALESCE(po.vendor_name, \'' . "Unknown Supplier" . '\') AS supplier_name FROM purchase_orders po WHERE po.' . $idCol . ' = :id');
+            $st->execute(['id' => $id]);
+            $h = $st->fetch();
+        }
         if (!$h) { header('Location: /procurement/pos'); return; }
         // Load lines
         $lt = $pdo->prepare('SELECT description, unit, qty, unit_price, line_total FROM purchase_order_items WHERE po_id = :id ORDER BY id ASC');
@@ -417,9 +446,15 @@ class ProcurementController extends BaseController
                 if ($hasPoId) { $idCol = 'po_id'; }
             }
         } catch (\Throwable $e) { /* ignore */ }
-        $st = $pdo->prepare('SELECT po.*, u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.' . $supplierCol . ' WHERE po.' . $idCol . ' = :id');
-        $st->execute(['id' => $id]);
-        $po = $st->fetch();
+        try {
+            $st = $pdo->prepare('SELECT po.*, u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.' . $supplierCol . ' WHERE po.' . $idCol . ' = :id');
+            $st->execute(['id' => $id]);
+            $po = $st->fetch();
+        } catch (\Throwable $e) {
+            $st = $pdo->prepare('SELECT po.*, COALESCE(po.vendor_name, \'' . "Unknown Supplier" . '\') AS supplier_name FROM purchase_orders po WHERE po.' . $idCol . ' = :id');
+            $st->execute(['id' => $id]);
+            $po = $st->fetch();
+        }
         if (!$po) { header('Location: /procurement/pos'); return; }
         $it = $pdo->prepare('SELECT description, unit, qty, unit_price, line_total FROM purchase_order_items WHERE po_id = :id ORDER BY id ASC');
         $it->execute(['id' => $id]);
@@ -455,7 +490,10 @@ class ProcurementController extends BaseController
             'items' => $rows,
         ], $file);
         // Update stored path (best-effort)
-        try { $pdo->prepare('UPDATE purchase_orders SET pdf_path = :p, updated_at = NOW() WHERE id = :id')->execute(['p' => $file, 'id' => $id]); } catch (\Throwable $e) {}
+        try {
+            $stmtUp = $pdo->prepare('UPDATE purchase_orders SET pdf_path = :p, updated_at = NOW() WHERE ' . $idCol . ' = :id');
+            $stmtUp->execute(['p' => $file, 'id' => $id]);
+        } catch (\Throwable $e) {}
         if (!is_file($file)) { $_SESSION['flash_error'] = 'Failed to generate PO PDF.'; header('Location: /procurement/po/view?id=' . $id); return; }
         $size = @filesize($file) ?: null;
         header('Content-Type: application/pdf');
