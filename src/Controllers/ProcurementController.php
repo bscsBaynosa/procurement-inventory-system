@@ -123,10 +123,40 @@ class ProcurementController extends BaseController
         // Load suppliers list (optional: narrow to previously selected suppliers)
         $pdo = \App\Database\Connection::resolve();
         $suppliers = $pdo->query("SELECT user_id, full_name FROM users WHERE is_active=TRUE AND role='supplier' ORDER BY full_name ASC")->fetchAll();
-        // Preview next PO number (auto-filled like PR numbering)
+        // Prefill logic from PR + any previous PO attempt for this PR
         $poNext = '';
         try { $poNext = $this->requests()->getNextPoNumberPreview(); } catch (\Throwable $ignored) { $poNext = ''; }
-        $this->render('procurement/po_create.php', [ 'pr' => $pr, 'rows' => $rows, 'suppliers' => $suppliers, 'po_next' => $poNext ]);
+        $prefillSupplierId = null; $prefillVendorName = ''; $prefillCenter = ''; $prefillTerms = '30 days';
+        // Center inferred from branch name if present
+        $prefillCenter = (string)($rows[0]['branch_name'] ?? '');
+        // If a previous PO exists for this PR number, reuse its supplier/vendor meta to streamline retries
+        try {
+            $stPrev = $pdo->prepare("SELECT supplier_id, vendor_name, center, terms FROM purchase_orders WHERE pr_number = :pr ORDER BY created_at DESC LIMIT 1");
+            $stPrev->execute(['pr' => $pr]);
+            if ($prev = $stPrev->fetch()) {
+                $prefillSupplierId = (int)($prev['supplier_id'] ?? 0) ?: null;
+                $prefillVendorName = (string)($prev['vendor_name'] ?? '');
+                if (!empty($prev['center'])) { $prefillCenter = (string)$prev['center']; }
+                if (!empty($prev['terms'])) { $prefillTerms = (string)$prev['terms']; }
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+        // If no previous PO, optionally pre-select first supplier (if exactly one supplier active) and use its name as vendor_name
+        if ($prefillSupplierId === null && count($suppliers) === 1) {
+            $prefillSupplierId = (int)$suppliers[0]['user_id'];
+            $prefillVendorName = (string)$suppliers[0]['full_name'];
+        }
+        $this->render('procurement/po_create.php', [
+            'pr' => $pr,
+            'rows' => $rows,
+            'suppliers' => $suppliers,
+            'po_next' => $poNext,
+            'prefill' => [
+                'supplier_id' => $prefillSupplierId,
+                'vendor_name' => $prefillVendorName,
+                'center' => $prefillCenter,
+                'terms' => $prefillTerms,
+            ],
+        ]);
     }
 
     /** POST: Create PO, generate PDF, and send to Admin for approval */

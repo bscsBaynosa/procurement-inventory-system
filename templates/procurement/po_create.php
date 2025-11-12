@@ -50,14 +50,14 @@
                     <label>Supplier (Vendor)</label>
                     <select name="supplier_id" required>
                         <option value="">-- choose supplier --</option>
-                        <?php foreach ($suppliers as $s): ?>
-                            <option value="<?= (int)$s['user_id'] ?>"><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></option>
+                        <?php $prefSupplier = $prefill['supplier_id'] ?? null; foreach ($suppliers as $s): $sid=(int)$s['user_id']; ?>
+                            <option value="<?= $sid ?>" <?= ($prefSupplier && $prefSupplier === $sid) ? 'selected' : '' ?>><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></option>
                         <?php endforeach; ?>
                     </select>
                 </div>
                 <div>
                     <label>Vendor Name (override)</label>
-                    <input name="vendor_name" placeholder="If different from Supplier profile" />
+                    <input name="vendor_name" placeholder="If different from Supplier profile" value="<?= htmlspecialchars((string)($prefill['vendor_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
                 </div>
                 <div>
                     <label>Vendor Address</label>
@@ -69,7 +69,7 @@
                 </div>
                 <div>
                     <label>Center (required)</label>
-                    <input name="center" required />
+                    <input name="center" required value="<?= htmlspecialchars((string)($prefill['center'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
                 </div>
                 <div>
                     <label>Reference</label>
@@ -77,7 +77,7 @@
                 </div>
                 <div>
                     <label>Terms of Payment (required)</label>
-                    <input name="terms" required placeholder="e.g., 30 days, COD, etc." />
+                    <input name="terms" required placeholder="e.g., 30 days, COD, etc." value="<?= htmlspecialchars((string)($prefill['terms'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
                 </div>
                 <div>
                     <label>Deliver To</label>
