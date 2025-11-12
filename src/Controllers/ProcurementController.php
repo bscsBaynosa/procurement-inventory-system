@@ -2032,6 +2032,50 @@ class ProcurementController extends BaseController
                 foreach ($st->fetchAll() as $r) { $prices[(int)$r['supplier_id']] = (float)$r['price']; }
             } catch (\Throwable $e) { /* ignore */ }
         }
+        // NEW: If we have an itemName following the pattern '<size> Bondpaper' or '<size> Bond paper',
+        // attempt a structured match against supplier_items where name='Bondpaper' (supplier convention)
+        // and description encodes the size variant (A4, Short, Long, F4).
+        // This precedes generic token fallback to avoid cross-size leakage.
+        if ($itemName !== '' && empty($prices)) {
+            $nmLower = strtolower($itemName);
+            // Extract size token at start (allow optional 'bondpaper' trailing words already present)
+            if (preg_match('/^(a4|long|short|f4)\s+bond\s*paper?$/i', $itemName)) {
+                $size = strtolower(preg_replace('/\s+bond\s*paper?/i','',$nmLower));
+            } elseif (preg_match('/^(a4|long|short|f4)\s+bondpaper$/i', $itemName, $m)) {
+                $size = strtolower($m[1]);
+            } else {
+                // Try splitting last token 'bondpaper' or 'bond paper'
+                $parts = preg_split('/\s+/', $nmLower);
+                if ($parts && (end($parts) === 'bondpaper' || (count($parts)>=2 && end($parts)=='paper' && prev($parts)=='bond'))) {
+                    $size = $parts[0];
+                } else { $size = null; }
+            }
+            $sizeSyns = [];
+            if ($size === 'a4') { $sizeSyns = ['a4','210x297','210 x 297','8.27x11.69','8.3x11.7']; }
+            elseif ($size === 'long') { $sizeSyns = ['long','legal','8.5x13','8.5 x 13']; }
+            elseif ($size === 'short') { $sizeSyns = ['short','letter','8.5x11','8.5 x 11']; }
+            elseif ($size === 'f4') { $sizeSyns = ['f4','8.5x13','8.5 x 13']; }
+            if ($size && $sizeSyns) {
+                try {
+                    $p3 = [];
+                    foreach ($supplierIds as $sid) { $p3[] = (int)$sid; }
+                    // Build OR conditions over description synonyms; require name='bondpaper' to anchor base.
+                    $condDesc = [];
+                    foreach ($sizeSyns as $syn) { $condDesc[] = 'LOWER(description) = ?'; $p3[] = strtolower($syn); }
+                    // Some suppliers may store size in description with case or mixed spacing; include ILIKE variants
+                    foreach ($sizeSyns as $syn) { $condDesc[] = 'LOWER(description) ILIKE ?'; $p3[] = '%' . strtolower($syn) . '%'; }
+                    $sqlSize = 'SELECT supplier_id, price FROM supplier_items WHERE supplier_id IN (' . $in . ') AND LOWER(name) = ? AND (' . implode(' OR ', $condDesc) . ')';
+                    array_unshift($p3, 'bondpaper'); // name anchor
+                    $stSize = $pdo->prepare($sqlSize);
+                    $stSize->execute($p3);
+                    foreach ($stSize->fetchAll() as $row) {
+                        $sid = (int)$row['supplier_id'];
+                        $val = (float)$row['price'];
+                        if (!isset($prices[$sid]) || $val < $prices[$sid]) { $prices[$sid] = $val; }
+                    }
+                } catch (\Throwable $e) { /* silent */ }
+            }
+        }
         // If still empty and have an item name, attempt name-based lookup into supplier_quotes by joining inventory_items
         if (!$prices && $itemName !== '') {
             try {
@@ -2090,7 +2134,7 @@ class ProcurementController extends BaseController
                         }
                     }
                     // 3) Token match (AND across tokens), include numeric tokens like 'a4', and split 'bondpaper'.
-                    //    Additionally if tokens end with 'long' or 'a4', try to append 'bond' and 'paper' tokens to discriminate.
+                    //    Additionally, use size-specific synonyms to avoid cross-matching A4 vs Long (legal) vs Short (letter).
                     $still2 = array_values(array_filter($missing, static fn($sid)=>!isset($prices[$sid])));
                     if ($still2) {
                         $rawTokens = preg_split('/[^a-z0-9]+/i', $nm) ?: [];
@@ -2100,7 +2144,7 @@ class ProcurementController extends BaseController
                             if ($tk === '') continue;
                             if (is_numeric($tk) || strlen($tk) >= 2) { $tokens[] = $tk; }
                             if (strpos($tk, 'bondpaper') !== false) { $tokens[] = 'bond'; $tokens[] = 'paper'; }
-                            if (in_array($tk, ['long','a4'], true)) { $tokens[] = 'bond'; $tokens[] = 'paper'; }
+                            if (in_array($tk, ['long','a4','short','letter','legal'], true)) { $tokens[] = 'bond'; $tokens[] = 'paper'; }
                         }
                         $tokens = array_values(array_unique($tokens));
                         if ($tokens) {
@@ -2117,24 +2161,36 @@ class ProcurementController extends BaseController
                                 if (!isset($prices[$sid]) || $val < $prices[$sid]) { $prices[$sid] = $val; }
                             }
                         }
-                        // If still missing and we have 'long' variant, attempt a relaxed OR token search to catch mismatched spacing
+                        // 4) Size-aware synonyms (strict): require bond+paper AND one of the size variants
                         $still3 = array_values(array_filter($still2, static fn($sid)=>!isset($prices[$sid])));
-                        if ($still3 && str_contains($nm, 'long')) {
-                            $params4 = [];
-                            foreach ($still3 as $sid) { $params4[] = (int)$sid; }
-                            $params4[] = '%long%';
-                            $params4[] = '%bond%';
-                            $params4[] = '%paper%';
-                            $sql4 = 'SELECT supplier_id, price FROM supplier_items WHERE supplier_id IN ('.implode(',', array_fill(0, count($still3), '?')).') AND (LOWER(name) ILIKE ? OR LOWER(name) ILIKE ? OR LOWER(name) ILIKE ? )';
-                            try {
-                                $st4 = $pdo->prepare($sql4);
-                                $st4->execute($params4);
-                                foreach ($st4->fetchAll() as $row) {
-                                    $sid = (int)$row['supplier_id'];
-                                    $val = (float)$row['price'];
-                                    if (!isset($prices[$sid]) || $val < $prices[$sid]) { $prices[$sid] = $val; }
-                                }
-                            } catch (\Throwable $e) {}
+                        if ($still3) {
+                            $needLong = (strpos($nm, 'long') !== false) || (strpos($nm, 'legal') !== false) || (strpos($nm, '8.5x13') !== false) || (strpos($nm, '8.5 x 13') !== false);
+                            $needA4   = (strpos($nm, 'a4') !== false) || (strpos($nm, '210x297') !== false) || (strpos($nm, '210 x 297') !== false) || (strpos($nm, '8.27x11.69') !== false) || (strpos($nm, '8.3x11.7') !== false);
+                            $needShort= (strpos($nm, 'short') !== false) || (strpos($nm, 'letter') !== false) || (strpos($nm, '8.5x11') !== false) || (strpos($nm, '8.5 x 11') !== false);
+                            $orTokens = [];
+                            if ($needLong) { $orTokens = ['long','legal','8.5x13','8.5 x 13']; }
+                            elseif ($needA4) { $orTokens = ['a4','210x297','210 x 297','8.27x11.69','8.3x11.7']; }
+                            elseif ($needShort) { $orTokens = ['short','letter','8.5x11','8.5 x 11']; }
+                            // Only apply when a size family is detected to avoid accidental cross-matches
+                            if (!empty($orTokens)) {
+                                $params4 = [];
+                                foreach ($still3 as $sid) { $params4[] = (int)$sid; }
+                                // Require bond AND paper
+                                $params4[] = '%bond%';
+                                $params4[] = '%paper%';
+                                $orConds = [];
+                                foreach ($orTokens as $tok) { $orConds[] = 'LOWER(name) ILIKE ?'; $params4[] = '%'.strtolower($tok).'%'; }
+                                $sql4 = 'SELECT supplier_id, price FROM supplier_items WHERE supplier_id IN ('.implode(',', array_fill(0, count($still3), '?')).') AND LOWER(name) ILIKE ? AND LOWER(name) ILIKE ? AND (' . implode(' OR ', $orConds) . ')';
+                                try {
+                                    $st4 = $pdo->prepare($sql4);
+                                    $st4->execute($params4);
+                                    foreach ($st4->fetchAll() as $row) {
+                                        $sid = (int)$row['supplier_id'];
+                                        $val = (float)$row['price'];
+                                        if (!isset($prices[$sid]) || $val < $prices[$sid]) { $prices[$sid] = $val; }
+                                    }
+                                } catch (\Throwable $e) {}
+                            }
                         }
                     }
                 }
