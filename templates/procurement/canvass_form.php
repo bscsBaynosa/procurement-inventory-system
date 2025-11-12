@@ -53,26 +53,7 @@
         <form action="/manager/requests/canvass" method="POST" class="card" id="canvassForm">
             <input type="hidden" name="pr_number" value="<?= htmlspecialchars($pr, ENT_QUOTES, 'UTF-8') ?>" />
             <input type="hidden" name="canvass_id" id="canvassIdField" value="" />
-            <p>Select 3–5 suppliers to include in the canvassing sheet.</p>
-            <div class="grid">
-                <!-- Global supplier picker removed in per-item mode -->
-                <?php foreach ($suppliers as $s): ?>
-                    <label style="display:none"></label>
-                <?php endforeach; ?>
-            </div>
-
-            <div style="margin-top:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                <label style="display:flex; gap:8px; align-items:center;">
-                    <span style="min-width:120px;">Awarded Vendor (optional)</span>
-                    <select name="awarded_to" id="awardedSelect">
-                        <option value="">— Select —</option>
-                        <?php foreach ($suppliers as $s): ?>
-                            <option value="<?= (int)$s['user_id'] ?>"><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </label>
-                <small class="muted">Tip: pick among the selected suppliers. Unselected vendors are disabled automatically.</small>
-            </div>
+            <!-- Per-item canvassing only: global supplier picker and global award removed by design -->
 
             <?php
                 // Build item rows for table
@@ -105,16 +86,19 @@
                             <tr data-item-id="<?= $iid ?>" data-item-label="<?= htmlspecialchars((string)$it['label'], ENT_QUOTES, 'UTF-8') ?>">
                                 <td><?= htmlspecialchars((string)$it['label'], ENT_QUOTES, 'UTF-8') ?></td>
                                 <td>
-                                    <select class="supplier-select" name="item_suppliers[<?= $iid ?>][]" data-item-id="<?= $iid ?>" multiple size="4" style="width:100%" title="Pick 3–5 suppliers">
+                                    <div class="supplier-box" data-item-id="<?= $iid ?>" style="display:grid; grid-template-columns: repeat(auto-fill,minmax(180px,1fr)); gap:6px;">
                                         <?php
                                             $iid0 = (int)$it['id'];
                                             $eligibleList = isset($eligible[$iid0]) ? (array)$eligible[$iid0] : array_map(fn($x)=> (int)$x['user_id'], $suppliers);
                                             foreach ($suppliers as $s): $sid0 = (int)$s['user_id'];
                                                 if (!in_array($sid0, $eligibleList, true)) continue; ?>
-                                                <option value="<?= $sid0 ?>"><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></option>
+                                                <label style="display:flex; align-items:center; gap:6px;">
+                                                    <input type="checkbox" class="supplier-choice-row" name="item_suppliers[<?= $iid ?>][]" value="<?= $sid0 ?>" data-item-id="<?= $iid ?>" />
+                                                    <span><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></span>
+                                                </label>
                                             <?php endforeach; ?>
-                                    </select>
-                                    <div style="font-size:11px;color:var(--muted);margin-top:4px;">Select 3–5 suppliers.</div>
+                                    </div>
+                                    <div class="hint-<?= $iid ?>" style="font-size:11px;color:var(--muted);margin-top:4px;">Select 3–5 suppliers.</div>
                                 </td>
                                 <td class="quotes-cell" data-item-id="<?= $iid ?>" style="font-size:13px; line-height:1.4;">
                                     <em style="color:var(--muted);">No quotes yet</em>
@@ -148,6 +132,10 @@
                 const originalAction = form.getAttribute('action');
                 const originalTarget = form.getAttribute('target');
                 const prNumber = (new URLSearchParams(window.location.search)).get('pr') || (document.querySelector('input[name="pr_number"]').value);
+
+                function getSelectedSuppliersForItem(itemId) {
+                    return Array.from(document.querySelectorAll('.supplier-choice-row[data-item-id="' + itemId + '"]:checked')).map(cb => Number(cb.value));
+                }
 
                 async function loadQuotesForItem(itemId, supplierIds) {
                     if (!itemId || !supplierIds || supplierIds.length < 3) return; // require minimum selection
@@ -191,13 +179,24 @@
                     } catch (e) { /* ignore */ }
                 }
 
-                // Bind change events on per-item supplier selects
-                document.querySelectorAll('.supplier-select').forEach(sel => {
-                    sel.addEventListener('change', function(){
-                        const values = Array.from(this.selectedOptions).map(o=>Number(o.value));
-                        if (values.length > 5) { alert('Select at most 5 suppliers'); this.selectedIndex = -1; return; }
-                        if (values.length && values.length < 3) { /* wait until 3 chosen */ return; }
-                        loadQuotesForItem(this.dataset.itemId, values);
+                // Bind change events on per-item supplier checkboxes
+                document.querySelectorAll('.supplier-choice-row').forEach(cb => {
+                    cb.addEventListener('change', function(){
+                        const itemId = this.dataset.itemId;
+                        const values = getSelectedSuppliersForItem(itemId);
+                        if (values.length > 5) { this.checked = false; alert('Select at most 5 suppliers for this item.'); return; }
+                        const hint = document.querySelector('.hint-' + itemId);
+                        if (hint) { hint.textContent = values.length < 3 ? 'Select 3–5 suppliers.' : ' '; }
+                        if (values.length >= 3) { loadQuotesForItem(itemId, values); }
+                        // Also re-filter award options to only selected ones
+                        const awardSel = document.querySelector('.award-select[data-item-id="' + itemId + '"]');
+                        if (awardSel) {
+                            Array.from(awardSel.options).forEach(opt => {
+                                if (!opt.value) { opt.disabled = false; return; }
+                                opt.disabled = !values.includes(Number(opt.value));
+                                if (opt.disabled && awardSel.value === opt.value) { awardSel.value = ''; }
+                            });
+                        }
                     });
                 });
                 // Track manual award selection
@@ -320,10 +319,11 @@
                 btnPreview.addEventListener('click', function(){
                     // Validate each item selection has 3–5 suppliers
                     const selections = {}; let bad = false;
-                    document.querySelectorAll('.supplier-select').forEach(sel => {
-                        const vals = Array.from(sel.selectedOptions).map(o=>Number(o.value));
+                    document.querySelectorAll('.supplier-box').forEach(box => {
+                        const itemId = box.getAttribute('data-item-id');
+                        const vals = Array.from(box.querySelectorAll('.supplier-choice-row:checked')).map(cb=>Number(cb.value));
                         if (vals.length < 3 || vals.length > 5) { bad = true; }
-                        selections[sel.dataset.itemId] = vals;
+                        selections[itemId] = vals;
                     });
                     if (bad) { alert('Each item must have 3–5 suppliers selected.'); return; }
                     // Build awards map
@@ -356,8 +356,8 @@
                 document.getElementById('canvassForm').addEventListener('submit', function(e){
                     // Validate per-item selections
                     let bad = false;
-                    document.querySelectorAll('.supplier-select').forEach(sel => {
-                        const cnt = Array.from(sel.selectedOptions).length;
+                    document.querySelectorAll('.supplier-box').forEach(box => {
+                        const cnt = box.querySelectorAll('.supplier-choice-row:checked').length;
                         if (cnt < 3 || cnt > 5) { bad = true; }
                     });
                     if (bad) { e.preventDefault(); alert('Each item must have 3–5 suppliers.'); return; }
