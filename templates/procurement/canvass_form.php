@@ -55,11 +55,9 @@
             <input type="hidden" name="canvass_id" id="canvassIdField" value="" />
             <p>Select 3–5 suppliers to include in the canvassing sheet.</p>
             <div class="grid">
+                <!-- Global supplier picker removed in per-item mode -->
                 <?php foreach ($suppliers as $s): ?>
-                    <label style="display:flex; align-items:center; gap:8px; border:1px solid var(--border); border-radius:10px; padding:8px;">
-                        <input type="checkbox" name="suppliers[]" value="<?= (int)$s['user_id'] ?>" class="supplier-choice" data-supplier-id="<?= (int)$s['user_id'] ?>" />
-                        <span><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></span>
-                    </label>
+                    <label style="display:none"></label>
                 <?php endforeach; ?>
             </div>
 
@@ -77,56 +75,53 @@
             </div>
 
             <?php
-                // Build a supplier id -> name map for headers
+                // Build item rows for table
                 $supMap = [];
                 foreach ($suppliers as $s) { $supMap[(int)$s['user_id']] = (string)$s['full_name']; }
-                // Item key normalize (lower)
                 $itemsForGrid = [];
                 foreach ($rows as $r) {
-                    $nm = strtolower(trim((string)($r['item_name'] ?? '')));
                     $itemsForGrid[] = [
                         'label' => ($r['item_name'] ?? 'Item') . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''),
-                        'key' => $nm,
                         'id' => (int)($r['item_id'] ?? 0),
                     ];
                 }
             ?>
 
             <div style="margin-top:14px;">
-                <strong>Supplier Quotes Snapshot</strong>
-                <div class="muted" style="font-size:12px;margin:6px 0 10px;">Cheapest price per item is highlighted automatically among the selected suppliers. You can override suppliers per item using the selector in each row.</div>
+                <strong>Per-Item Supplier Quotes</strong>
+                <div class="muted" style="font-size:12px;margin:6px 0 10px;">Select 3–5 suppliers per item; prices load independently from stored quotes. Cheapest price per row auto-highlights.</div>
                 <div style="overflow:auto;">
-                    <table id="priceMatrix">
+                    <table id="itemQuotesTable">
                         <thead>
                             <tr>
                                 <th style="min-width:320px;">Item</th>
-                                <th style="min-width:200px;">Suppliers for this item</th>
-                                <?php foreach ($supMap as $sid => $name): ?>
-                                    <th style="min-width:140px;" data-supplier-id="<?= (int)$sid ?>"><?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?></th>
-                                <?php endforeach; ?>
-                                <th style="min-width:180px;">Awarded To</th>
+                                <th style="min-width:240px;">Suppliers (per item)</th>
+                                <th style="min-width:200px;">Quotes</th>
+                                <th style="min-width:160px;">Awarded To</th>
                             </tr>
                         </thead>
                         <tbody>
-                        <?php foreach ($itemsForGrid as $it): $k = (string)$it['key']; $iid = (int)$it['id']; ?>
-                            <tr data-item-key="<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>" data-item-id="<?= (int)$iid ?>">
+                        <?php foreach ($itemsForGrid as $it): $iid = (int)$it['id']; ?>
+                            <tr data-item-id="<?= $iid ?>" data-item-label="<?= htmlspecialchars((string)$it['label'], ENT_QUOTES, 'UTF-8') ?>">
                                 <td><?= htmlspecialchars((string)$it['label'], ENT_QUOTES, 'UTF-8') ?></td>
                                 <td>
-                                    <select name="item_suppliers[<?= $iid > 0 ? (int)$iid : htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>][]" class="per-item-select" multiple size="3" style="width:100%">
-                                        <?php foreach ($suppliers as $s): ?>
-                                            <option value="<?= (int)$s['user_id'] ?>"><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></option>
-                                        <?php endforeach; ?>
+                                    <select class="supplier-select" name="item_suppliers[<?= $iid ?>][]" data-item-id="<?= $iid ?>" multiple size="4" style="width:100%" title="Pick 3–5 suppliers">
+                                        <?php
+                                            $iid0 = (int)$it['id'];
+                                            $eligibleList = isset($eligible[$iid0]) ? (array)$eligible[$iid0] : array_map(fn($x)=> (int)$x['user_id'], $suppliers);
+                                            foreach ($suppliers as $s): $sid0 = (int)$s['user_id'];
+                                                if (!in_array($sid0, $eligibleList, true)) continue; ?>
+                                                <option value="<?= $sid0 ?>"><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></option>
+                                            <?php endforeach; ?>
                                     </select>
-                                    <div style="font-size:11px;color:var(--muted);margin-top:4px;">Pick 3–5 for this item; empty = use global selection.</div>
+                                    <div style="font-size:11px;color:var(--muted);margin-top:4px;">Select 3–5 suppliers.</div>
                                 </td>
-                                <?php foreach ($supMap as $sid => $name): $p = isset($prices[$sid][$k]) ? (float)$prices[$sid][$k] : null; ?>
-                                    <td data-supplier-id="<?= (int)$sid ?>" data-price="<?= $p !== null ? number_format($p, 2, '.', '') : '' ?>">
-                                        <?= $p !== null ? ('₱ ' . number_format($p, 2)) : '—' ?>
-                                    </td>
-                                <?php endforeach; ?>
+                                <td class="quotes-cell" data-item-id="<?= $iid ?>" style="font-size:13px; line-height:1.4;">
+                                    <em style="color:var(--muted);">No quotes yet</em>
+                                </td>
                                 <td>
-                                    <select name="item_award[<?= $iid > 0 ? (int)$iid : htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>]" class="award-per-item" data-item-key="<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>" data-item-id="<?= (int)$iid ?>">
-                                        <option value="">— Select —</option>
+                                    <select class="award-select" name="item_award[<?= $iid ?>]" data-item-id="<?= $iid ?>" style="width:100%;">
+                                        <option value="">— Auto —</option>
                                         <?php foreach ($suppliers as $s): ?>
                                             <option value="<?= (int)$s['user_id'] ?>"><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></option>
                                         <?php endforeach; ?>
@@ -137,7 +132,6 @@
                         </tbody>
                     </table>
                 </div>
-                <div id="totalsSummary" class="totals"></div>
             </div>
             <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
                 <button id="btnPreview" class="btn" type="button" title="Generate and preview canvassing PDF in a new tab">Generate Canvass Sheet</button>
@@ -147,10 +141,6 @@
         </form>
         <script>
             (function(){
-                const awardSel = document.getElementById('awardedSelect');
-                if (awardSel) {
-                    awardSel.addEventListener('change', function(){ this.dataset.userSet = '1'; });
-                }
                 const form = document.getElementById('canvassForm');
                 const btnPreview = document.getElementById('btnPreview');
                 const btnSend = document.getElementById('btnSend');
@@ -159,92 +149,59 @@
                 const originalTarget = form.getAttribute('target');
                 const prNumber = (new URLSearchParams(window.location.search)).get('pr') || (document.querySelector('input[name="pr_number"]').value);
 
-                function selectedSupplierIds() {
-                    return Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.getAttribute('data-supplier-id'));
-                }
-
-                function getItemIds() {
-                    return Array.from(document.querySelectorAll('#priceMatrix tbody tr'))
-                        .map(tr => Number(tr.getAttribute('data-item-id')))
-                        .filter(v => !Number.isNaN(v) && v > 0);
-                }
-                function getItemKeysNoId() {
-                    return Array.from(document.querySelectorAll('#priceMatrix tbody tr'))
-                        .filter(tr => {
-                            const id = Number(tr.getAttribute('data-item-id'));
-                            return Number.isNaN(id) || id <= 0;
-                        })
-                        .map(tr => tr.getAttribute('data-item-key'))
-                        .filter(k => k && k.trim() !== '');
-                }
-
-                async function fetchQuotes() {
-                    const suppliers = selectedSupplierIds();
-                    const itemIds = getItemIds();
-                    const itemKeys = getItemKeysNoId();
-                    if (!suppliers.length || (!itemIds.length && !itemKeys.length)) return;
-                    const table = document.getElementById('priceMatrix');
-                    if (!table) return;
-                    const applyById = (data) => {
-                        if (!data || !data.prices) return;
-                        const rows = table.querySelectorAll('tbody tr');
-                        rows.forEach(tr => {
-                            const iid = tr.getAttribute('data-item-id');
-                            tr.querySelectorAll('td[data-supplier-id]').forEach(td => {
-                                const sid = td.getAttribute('data-supplier-id');
-                                const p = (data.prices[sid] && data.prices[sid][iid] != null) ? Number(data.prices[sid][iid]) : null;
-                                if (p != null && !Number.isNaN(p)) {
-                                    td.setAttribute('data-price', p.toFixed(2));
-                                    td.textContent = '₱ ' + p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                } else if (!td.dataset.userEdited && (iid && Number(iid) > 0)) {
-                                    td.setAttribute('data-price', '');
-                                    td.textContent = '—';
-                                }
-                            });
-                        });
-                    };
-                    const applyByKey = (data) => {
-                        if (!data || !data.prices) return;
-                        const rows = table.querySelectorAll('tbody tr');
-                        rows.forEach(tr => {
-                            const key = tr.getAttribute('data-item-key');
-                            const iid = Number(tr.getAttribute('data-item-id'));
-                            if (!key || iid > 0) return; // only for no-id rows
-                            tr.querySelectorAll('td[data-supplier-id]').forEach(td => {
-                                const sid = td.getAttribute('data-supplier-id');
-                                const p = (data.prices[sid] && data.prices[sid][key] != null) ? Number(data.prices[sid][key]) : null;
-                                if (p != null && !Number.isNaN(p)) {
-                                    td.setAttribute('data-price', p.toFixed(2));
-                                    td.textContent = '₱ ' + p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                } else if (!td.dataset.userEdited) {
-                                    td.setAttribute('data-price', '');
-                                    td.textContent = '—';
-                                }
-                            });
-                        });
-                    };
+                async function loadQuotesForItem(itemId, supplierIds) {
+                    if (!itemId || !supplierIds || supplierIds.length < 3) return; // require minimum selection
                     try {
-                        const promises = [];
-                        if (itemIds.length) {
-                            promises.push(
-                                fetch('/manager/requests/canvass/quotes-by-id', {
-                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ pr_number: prNumber, item_ids: itemIds, suppliers: suppliers.map(Number) })
-                                }).then(r => r.ok ? r.json() : null).then(applyById)
-                            );
+                        const res = await fetch('/manager/requests/canvass/item-quotes', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ item_id: Number(itemId), supplier_ids: supplierIds.map(Number) })
+                        });
+                        if (!res.ok) return;
+                        const data = await res.json();
+                        const cell = document.querySelector(`.quotes-cell[data-item-id="${itemId}"]`);
+                        if (!cell) return;
+                        if (!data.prices || Object.keys(data.prices).length === 0) { cell.innerHTML = '<em style="color:var(--muted);">No quotes</em>'; return; }
+                        let min = null; let minSid = null;
+                        const frag = document.createDocumentFragment();
+                        Object.keys(data.prices).sort((a,b)=>data.prices[a]-data.prices[b]).forEach(sid => {
+                            const p = Number(data.prices[sid]);
+                            if (min === null || p < min - 1e-9) { min = p; minSid = sid; }
+                        });
+                        Object.keys(data.prices).forEach(sid => {
+                            const p = Number(data.prices[sid]);
+                            const div = document.createElement('div');
+                            div.textContent = 'Supplier ' + sid + ': ₱ ' + p.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+                            div.dataset.supplierId = sid;
+                            if (minSid && sid === String(minSid)) { div.style.background = 'color-mix(in oklab, var(--accent) 12%, transparent)'; div.style.borderLeft = '3px solid var(--accent)'; }
+                            frag.appendChild(div);
+                        });
+                        cell.innerHTML = '';
+                        cell.appendChild(frag);
+                        // Auto award if user hasn't chosen
+                        const awardSel = document.querySelector(`.award-select[data-item-id="${itemId}"]`);
+                        if (awardSel && !awardSel.dataset.userSet) { awardSel.value = minSid || ''; }
+                        // Filter award options to selected suppliers only
+                        if (awardSel) {
+                            Array.from(awardSel.options).forEach(opt => {
+                                if (!opt.value) { opt.disabled = false; return; }
+                                opt.disabled = !supplierIds.includes(Number(opt.value));
+                                if (opt.disabled && awardSel.value === opt.value) { awardSel.value = ''; }
+                            });
                         }
-                        if (itemKeys.length) {
-                            promises.push(
-                                fetch('/manager/requests/canvass/quotes', {
-                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ pr_number: prNumber, item_keys: itemKeys, suppliers: suppliers.map(Number) })
-                                }).then(r => r.ok ? r.json() : null).then(applyByKey)
-                            );
-                        }
-                        await Promise.all(promises);
-                        recalc();
                     } catch (e) { /* ignore */ }
                 }
+
+                // Bind change events on per-item supplier selects
+                document.querySelectorAll('.supplier-select').forEach(sel => {
+                    sel.addEventListener('change', function(){
+                        const values = Array.from(this.selectedOptions).map(o=>Number(o.value));
+                        if (values.length > 5) { alert('Select at most 5 suppliers'); this.selectedIndex = -1; return; }
+                        if (values.length && values.length < 3) { /* wait until 3 chosen */ return; }
+                        loadQuotesForItem(this.dataset.itemId, values);
+                    });
+                });
+                // Track manual award selection
+                document.querySelectorAll('.award-select').forEach(sel => sel.addEventListener('change', function(){ this.dataset.userSet = '1'; }));
 
                 // Manual price update on double-click: prompt and update cell, mark as userEdited
                 document.addEventListener('dblclick', function(ev){
@@ -361,90 +318,51 @@
                 fetchQuotes().then(()=>recalc());
                 // Preview flow: submit to preview endpoint in a new tab and enable Send button
                 btnPreview.addEventListener('click', function(){
-                    // Basic validation before preview
-                    const checked = document.querySelectorAll('.supplier-choice:checked').length;
-                    if (checked < 3 || checked > 5) { alert('Please select 3–5 suppliers.'); return; }
-                    // Validate per-item overrides: if present, ensure 3–5 per item
-                    let bad = false;
-                    document.querySelectorAll('select.per-item-select').forEach(sel => {
-                        const cnt = Array.from(sel.selectedOptions).length;
-                        if (cnt !== 0 && (cnt < 3 || cnt > 5)) { bad = true; }
+                    // Validate each item selection has 3–5 suppliers
+                    const selections = {}; let bad = false;
+                    document.querySelectorAll('.supplier-select').forEach(sel => {
+                        const vals = Array.from(sel.selectedOptions).map(o=>Number(o.value));
+                        if (vals.length < 3 || vals.length > 5) { bad = true; }
+                        selections[sel.dataset.itemId] = vals;
                     });
-                    if (bad) { alert('Each item override must have 3–5 suppliers selected or leave empty to use global selection.'); return; }
-                    // Ensure awarded vendor validity (if chosen)
-                    if (awardSel && awardSel.value) {
-                        const selSet = new Set(Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.value));
-                        if (!selSet.has(awardSel.value)) { alert('Awarded vendor must be one of the selected suppliers.'); return; }
-                    }
-                    // Ensure per-item awards (if any) are from selected suppliers; else auto will handle in backend
-                    // Build selections per item and awards
-                    const selections = {};
-                    document.querySelectorAll('#priceMatrix tbody tr').forEach(tr => {
-                        const iid = tr.getAttribute('data-item-id');
-                        const sel = tr.querySelector('select.per-item-select');
-                        const vals = sel ? Array.from(sel.selectedOptions).map(o=>Number(o.value)) : [];
-                        if (vals.length) selections[iid] = vals;
-                    });
+                    if (bad) { alert('Each item must have 3–5 suppliers selected.'); return; }
+                    // Build awards map
                     const awards = {};
-                    document.querySelectorAll('select.award-per-item').forEach(sel => {
-                        const iid = sel.getAttribute('data-item-id');
-                        if (sel.value) awards[iid] = Number(sel.value);
-                    });
-                    const suppliers = selectedSupplierIds().map(Number);
-                    // Persist canvass to DB before preview (returns canvass_id)
+                    document.querySelectorAll('.award-select').forEach(sel => { if (sel.value) { awards[sel.dataset.itemId] = Number(sel.value); } });
+                    // Union of suppliers across items (for storage compatibility)
+                    const union = new Set(); Object.values(selections).forEach(arr => arr.forEach(v => union.add(v)));
+                    const suppliers = Array.from(union.values());
                     fetch('/manager/requests/canvass/store', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ pr_number: prNumber, selections, awards, suppliers })
                     }).then(r=>r.json()).then(js => {
                         if (js && js.canvass_id) { canvassIdField.value = js.canvass_id; }
-                        // Submit to preview
+                        // Inject suppliers[] hidden inputs for preview compatibility
+                        // Clear previous
+                        Array.from(document.querySelectorAll('input[name="suppliers[]"]')).forEach(n=>n.remove());
+                        suppliers.forEach(sid => {
+                            const inp = document.createElement('input');
+                            inp.type = 'hidden'; inp.name = 'suppliers[]'; inp.value = String(sid);
+                            form.appendChild(inp);
+                        });
                         form.setAttribute('action', '/manager/requests/canvass/preview');
                         form.setAttribute('target', '_blank');
                         form.submit();
-                        // Restore and enable send
                         form.setAttribute('action', originalAction);
                         if (originalTarget !== null) { form.setAttribute('target', originalTarget); } else { form.removeAttribute('target'); }
                         btnSend.disabled = false;
-                    }).catch(()=>{
-                        alert('Failed to persist canvass. Please try again.');
-                    });
+                    }).catch(()=>{ alert('Failed to persist canvass.'); });
                 });
                 document.getElementById('canvassForm').addEventListener('submit', function(e){
-                    const checked = document.querySelectorAll('.supplier-choice:checked').length;
-                    if (checked < 3 || checked > 5) {
-                        e.preventDefault();
-                        alert('Please select 3–5 suppliers.');
-                        return;
-                    }
-                    // Per-item overrides validation
+                    // Validate per-item selections
                     let bad = false;
-                    document.querySelectorAll('select.per-item-select').forEach(sel => {
+                    document.querySelectorAll('.supplier-select').forEach(sel => {
                         const cnt = Array.from(sel.selectedOptions).length;
-                        if (cnt !== 0 && (cnt < 3 || cnt > 5)) { bad = true; }
+                        if (cnt < 3 || cnt > 5) { bad = true; }
                     });
-                    if (bad) { e.preventDefault(); alert('Each item override must have 3–5 suppliers selected or leave empty.'); return; }
-                    // Validate awarded_to is among selected if provided
-                    if (awardSel && awardSel.value) {
-                        const selSet = new Set(Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.value));
-                        if (!selSet.has(awardSel.value)) {
-                            e.preventDefault();
-                            alert('Awarded vendor must be one of the selected suppliers.');
-                            return;
-                        }
-                    }
-                    // Enforce preview has been clicked client-side
-                    if (btnSend.disabled) {
-                        e.preventDefault();
-                        alert('Please click Generate to preview the PDF before sending for approval.');
-                        return;
-                    }
-                    // Ensure canvass id exists
-                    if (!canvassIdField.value) {
-                        e.preventDefault();
-                        alert('Please click Generate Canvass Sheet first.');
-                        return;
-                    }
+                    if (bad) { e.preventDefault(); alert('Each item must have 3–5 suppliers.'); return; }
+                    if (btnSend.disabled) { e.preventDefault(); alert('Please click Generate first.'); return; }
+                    if (!canvassIdField.value) { e.preventDefault(); alert('Missing canvass id. Click Generate.'); return; }
                 });
             })();
         </script>

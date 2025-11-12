@@ -428,7 +428,7 @@ class RequestService
 		$this->ensurePrColumns();
 		$this->ensureRevisionColumns();
 		$stmt = $this->pdo->prepare(
-			"SELECT pr.request_id, pr.pr_number, pr.item_id, i0.name AS item_name, pr.quantity, pr.unit, pr.status, pr.created_at,
+			"SELECT pr.request_id, pr.pr_number, pr.item_id, i0.name AS item_name, i0.category AS item_category, pr.quantity, pr.unit, pr.status, pr.created_at,
 				pr.branch_id, b.name AS branch_name, pr.requested_by, u.full_name AS requested_by_name,
 				pr.revision_state, pr.revision_notes,
 				pr.needed_by, pr.justification,

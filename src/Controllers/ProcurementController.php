@@ -775,6 +775,17 @@ class ProcurementController extends BaseController
         // Load suppliers (users with role=supplier)
         $pdo = \App\Database\Connection::resolve();
         $suppliers = $pdo->query("SELECT user_id, full_name FROM users WHERE is_active = TRUE AND role = 'supplier' ORDER BY full_name ASC")->fetchAll();
+        // Build supplier category map (from supplier_items.category)
+        $supCats = [];
+        try {
+            $stc = $pdo->query("SELECT DISTINCT supplier_id, COALESCE(NULLIF(TRIM(LOWER(category)), ''), 'uncategorized') AS cat FROM supplier_items");
+            foreach ($stc->fetchAll() as $row) {
+                $sid = (int)$row['supplier_id'];
+                $cat = (string)$row['cat'];
+                if (!isset($supCats[$sid])) { $supCats[$sid] = []; }
+                $supCats[$sid][$cat] = true;
+            }
+        } catch (\Throwable $e) { $supCats = []; }
         // Optional: price matrix from supplier_items matched by item name (case-insensitive)
         $prices = [];
             $prices = [];
@@ -876,7 +887,25 @@ class ProcurementController extends BaseController
                     }
             }
         } catch (\Throwable $ignored) { /* supplier_items may not exist yet; ignore */ }
-        $this->render('procurement/canvass_form.php', [ 'pr' => $pr, 'rows' => $rows, 'suppliers' => $suppliers, 'prices' => $prices ]);
+        // Prepare eligible suppliers per item_id based on inventory_items.category
+        $eligibleByItem = [];
+        foreach ($rows as $r) {
+            $iid = (int)($r['item_id'] ?? 0); if ($iid <= 0) continue;
+            $cat = strtolower(trim((string)($r['item_category'] ?? '')));
+            if ($cat === '') $cat = 'uncategorized';
+            $eligible = [];
+            foreach ($suppliers as $s) {
+                $sid = (int)$s['user_id'];
+                if (isset($supCats[$sid])) {
+                    $has = false; foreach ($supCats[$sid] as $c => $_) { if ($c === $cat) { $has = true; break; } }
+                    if ($has) { $eligible[] = $sid; }
+                }
+            }
+            // If no eligible based on mapping, fallback to all suppliers
+            if (!$eligible) { foreach ($suppliers as $s) { $eligible[] = (int)$s['user_id']; } }
+            $eligibleByItem[$iid] = $eligible;
+        }
+        $this->render('procurement/canvass_form.php', [ 'pr' => $pr, 'rows' => $rows, 'suppliers' => $suppliers, 'prices' => $prices, 'eligible' => $eligibleByItem ]);
     }
 
     /** POST: Submit canvassing selection and generate a PDF, then redirect to compose with PR + Canvass attachments */
@@ -1956,6 +1985,56 @@ class ProcurementController extends BaseController
                 }
             }
             if ($min !== null) { $awarded[$iid] = $ids; }
+        }
+        echo json_encode(['prices' => $prices, 'awarded' => $awarded]);
+    }
+
+    /**
+     * POST (AJAX): Return quotes for a single item_id from supplier_quotes table.
+     * Input JSON: { item_id: int, supplier_ids: [int] }
+     * Response JSON: { prices: { supplier_id: price }, awarded: supplier_id|null }
+     */
+    public function canvassItemQuotesApi(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { http_response_code(403); header('Content-Type: application/json'); echo json_encode(['error'=>'forbidden']); return; }
+        header('Content-Type: application/json');
+        $raw = file_get_contents('php://input');
+        $payload = json_decode($raw, true);
+        if (!is_array($payload)) { http_response_code(400); echo json_encode(['error'=>'invalid_json']); return; }
+        $itemId = isset($payload['item_id']) ? (int)$payload['item_id'] : 0;
+        $supplierIds = isset($payload['supplier_ids']) && is_array($payload['supplier_ids']) ? array_values(array_unique(array_map('intval', $payload['supplier_ids']))) : [];
+        if ($itemId <= 0 || empty($supplierIds)) { http_response_code(400); echo json_encode(['error'=>'missing_fields']); return; }
+        $pdo = \App\Database\Connection::resolve();
+        // Ensure table exists
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS supplier_quotes (
+                id BIGSERIAL PRIMARY KEY,
+                item_id BIGINT NOT NULL REFERENCES inventory_items(item_id) ON DELETE CASCADE,
+                supplier_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+                price NUMERIC(14,2) NOT NULL,
+                currency VARCHAR(8),
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )");
+            // Convenience index for filtering
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_supplier_quotes_item_supplier ON supplier_quotes(item_id, supplier_id)");
+        } catch (\Throwable $e) {}
+        $in = implode(',', array_fill(0, count($supplierIds), '?'));
+        $params = [$itemId];
+        foreach ($supplierIds as $sid) { $params[] = (int)$sid; }
+        $sql = "SELECT supplier_id, price FROM supplier_quotes WHERE item_id = ? AND supplier_id IN ($in)";
+        $prices = [];
+        try {
+            $st = $pdo->prepare($sql);
+            $st->execute($params);
+            foreach ($st->fetchAll() as $r) { $prices[(int)$r['supplier_id']] = (float)$r['price']; }
+        } catch (\Throwable $e) { /* ignore */ }
+        // Pick cheapest among provided suppliers
+        $awarded = null; $min = null;
+        foreach ($supplierIds as $sid) {
+            if (!isset($prices[$sid])) { continue; }
+            $p = (float)$prices[$sid];
+            if ($min === null || $p < $min - 1e-9) { $min = $p; $awarded = $sid; }
         }
         echo json_encode(['prices' => $prices, 'awarded' => $awarded]);
     }
