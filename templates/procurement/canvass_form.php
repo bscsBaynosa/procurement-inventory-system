@@ -287,11 +287,24 @@
                     // Union of suppliers across items (for storage compatibility)
                     const union = new Set(); Object.values(selections).forEach(arr => arr.forEach(v => union.add(v)));
                     const suppliers = Array.from(union.values());
+                    // Require at least 3 distinct suppliers across all items to proceed (matches server rule)
+                    if (suppliers.length < 3) {
+                        alert('Pick at least 3 distinct suppliers across all items before generating.');
+                        return;
+                    }
                     fetch('/manager/requests/canvass/store', {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ pr_number: prNumber, selections, awards, suppliers })
-                    }).then(r=>r.json()).then(js => {
-                        if (js && js.canvass_id) { canvassIdField.value = js.canvass_id; }
+                    }).then(async r => {
+                        if (!r.ok) {
+                            let msg = 'Failed to save canvass (' + r.status + ').';
+                            try { const t = await r.text(); if (t) { msg += '\n' + t; } } catch(e){}
+                            throw new Error(msg);
+                        }
+                        return r.json();
+                    }).then(js => {
+                        if (!js || !js.canvass_id) { throw new Error('Canvass did not return an ID.'); }
+                        canvassIdField.value = js.canvass_id;
                         // Inject suppliers[] hidden inputs for preview compatibility
                         // Clear previous
                         Array.from(document.querySelectorAll('input[name="suppliers[]"]')).forEach(n=>n.remove());
@@ -306,7 +319,8 @@
                         form.setAttribute('action', originalAction);
                         if (originalTarget !== null) { form.setAttribute('target', originalTarget); } else { form.removeAttribute('target'); }
                         btnSend.disabled = false;
-                    }).catch(()=>{ alert('Failed to persist canvass.'); });
+                        btnSend.title = '';
+                    }).catch((err)=>{ alert(err && err.message ? err.message : 'Failed to persist canvass.'); btnSend.disabled = true; });
                 });
                 document.getElementById('canvassForm').addEventListener('submit', function(e){
                     // Validate per-item selections
