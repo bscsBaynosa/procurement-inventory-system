@@ -11,7 +11,7 @@
         :root{ --bg:#f8fafc; --card:#ffffff; --text:#0f172a; --muted:#64748b; --border:#e2e8f0; --accent:#22c55e; --control-h:36px; }
         html[data-theme="dark"]{ --bg:#0b0b0b; --card:#0f172a; --text:#e2e8f0; --muted:#94a3b8; --border:#1f2937; --accent:#22c55e; --control-h:36px; }
         body{ margin:0; background:var(--bg); color:var(--text); font-family:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; }
-        .layout{ display:grid; grid-template-columns: 240px 1fr; min-height:100vh; }
+    .layout{ display:grid; grid-template-columns: 240px 1fr; min-height:100vh; }
         .sidebar{ background:#fff; border-right:1px solid var(--border); padding:18px 12px; position:sticky; top:0; height:100vh; }
         html[data-theme="dark"] .sidebar{ background:#0f172a; }
         .content{ padding:18px 20px; }
@@ -34,6 +34,18 @@
         .totals{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
         .total-pill{ padding:8px 10px; border:1px solid var(--border); border-radius:999px; background:color-mix(in oklab, var(--card) 96%, var(--bg)); font-size:13px; }
         .total-pill.best{ border-color:color-mix(in oklab, var(--accent) 40%, var(--border)); background:color-mix(in oklab, var(--accent) 10%, transparent); }
+        /* Responsive improvements */
+        @media (max-width: 1200px) {
+            .layout{ grid-template-columns: 1fr; }
+            .sidebar{ display:none; }
+            .content{ padding:12px; }
+            th, td{ font-size:13px; padding:10px; }
+            .supplier-box{ grid-template-columns: repeat(auto-fill,minmax(200px,1fr)) !important; }
+        }
+        @media (max-width: 720px) {
+            .supplier-box{ grid-template-columns: 1fr !important; }
+            .btn{ min-width: unset; width: 100%; }
+        }
     </style>
 </head>
 <body>
@@ -67,6 +79,10 @@
                     ];
                 }
             ?>
+            <script>
+                // Supplier id -> name map for rendering
+                const SUP_NAMES = <?= json_encode($supMap, JSON_UNESCAPED_UNICODE) ?>;
+            </script>
 
             <div style="margin-top:14px;">
                 <strong>Per-Item Supplier Quotes</strong>
@@ -158,7 +174,8 @@
                         Object.keys(data.prices).forEach(sid => {
                             const p = Number(data.prices[sid]);
                             const div = document.createElement('div');
-                            div.textContent = 'Supplier ' + sid + ': ₱ ' + p.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
+                            const nm = SUP_NAMES && SUP_NAMES[sid] ? SUP_NAMES[sid] : ('Supplier ' + sid);
+                            div.textContent = nm + ': ₱ ' + p.toLocaleString(undefined,{minimumFractionDigits:2, maximumFractionDigits:2});
                             div.dataset.supplierId = sid;
                             if (minSid && sid === String(minSid)) { div.style.background = 'color-mix(in oklab, var(--accent) 12%, transparent)'; div.style.borderLeft = '3px solid var(--accent)'; }
                             frag.appendChild(div);
@@ -197,10 +214,22 @@
                                 if (opt.disabled && awardSel.value === opt.value) { awardSel.value = ''; }
                             });
                         }
+                        updateGenerateState();
                     });
                 });
                 // Track manual award selection
                 document.querySelectorAll('.award-select').forEach(sel => sel.addEventListener('change', function(){ this.dataset.userSet = '1'; }));
+
+                function updateGenerateState(){
+                    let ok = true;
+                    document.querySelectorAll('.supplier-box').forEach(box => {
+                        const cnt = box.querySelectorAll('.supplier-choice-row:checked').length;
+                        if (cnt < 3 || cnt > 5) { ok = false; }
+                    });
+                    btnPreview.disabled = !ok;
+                    btnPreview.title = ok ? '' : 'Select 3–5 suppliers for each item to enable preview';
+                }
+                updateGenerateState();
 
                 // Manual price update on double-click: prompt and update cell, mark as userEdited
                 document.addEventListener('dblclick', function(ev){
@@ -325,6 +354,7 @@
                         if (vals.length < 3 || vals.length > 5) { bad = true; }
                         selections[itemId] = vals;
                     });
+                    updateGenerateState();
                     if (bad) { alert('Each item must have 3–5 suppliers selected.'); return; }
                     // Build awards map
                     const awards = {};

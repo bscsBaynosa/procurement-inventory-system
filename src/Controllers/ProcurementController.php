@@ -2029,6 +2029,34 @@ class ProcurementController extends BaseController
             $st->execute($params);
             foreach ($st->fetchAll() as $r) { $prices[(int)$r['supplier_id']] = (float)$r['price']; }
         } catch (\Throwable $e) { /* ignore */ }
+        // Fallback: if some suppliers have no explicit quotes, try supplier_items fuzzy by inventory item name
+        $missing = array_values(array_filter($supplierIds, static fn($sid)=>!isset($prices[$sid])));
+        if ($missing) {
+            try {
+                // Get inventory item name and quantity context for potential tiering
+                $nm = (string)$pdo->prepare('SELECT LOWER(name) FROM inventory_items WHERE item_id = :id')->execute(['id'=>$itemId]) && ($tmp=$pdo->query('SELECT LOWER(name) FROM inventory_items WHERE item_id = '.(int)$itemId.' LIMIT 1')->fetchColumn()) ? (string)$tmp : '';
+                $nm = trim($nm);
+                if ($nm !== '') {
+                    $tokens = preg_split('/[^a-z0-9]+/i', $nm) ?: [];
+                    $tokens = array_values(array_filter(array_map('strtolower',$tokens), static fn($t)=>strlen($t)>=3));
+                    if ($tokens) {
+                        $likeConds = [];
+                        $p2 = [];
+                        foreach ($missing as $sid) { $p2[] = (int)$sid; }
+                        foreach ($tokens as $tk) { $likeConds[] = 'LOWER(name) ILIKE ?'; $p2[] = '%'.$tk.'%'; }
+                        $sql2 = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE supplier_id IN ('.implode(',', array_fill(0, count($missing), '?')).') AND (' . implode(' OR ', $likeConds) . ')';
+                        $st2 = $pdo->prepare($sql2);
+                        $st2->execute($p2);
+                        foreach ($st2->fetchAll() as $it) {
+                            $sid = (int)$it['supplier_id'];
+                            if (!in_array($sid, $missing, true)) { continue; }
+                            $base = (float)($it['price'] ?? 0);
+                            if (!isset($prices[$sid]) || $base < $prices[$sid]) { $prices[$sid] = $base; }
+                        }
+                    }
+                }
+            } catch (\Throwable $e) { /* ignore */ }
+        }
         // Pick cheapest among provided suppliers
         $awarded = null; $min = null;
         foreach ($supplierIds as $sid) {
