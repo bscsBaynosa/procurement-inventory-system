@@ -1768,19 +1768,26 @@ class ProcurementController extends BaseController
                 if (!isset($prices[$sid])) { $prices[$sid] = []; }
                 if (!isset($prices[$sid][$lname]) || $best < $prices[$sid][$lname]) { $prices[$sid][$lname] = $best; }
             }
-            // Fuzzy fallback per missing item using token ILIKE intersection
+            // Fuzzy fallback per missing item using token ILIKE matching
             $found = [];
             foreach ($prices as $sid0=>$m0){ foreach ($m0 as $nm0=>$_){ $found[$nm0]=true; } }
             $missing = array_values(array_filter($itemKeys, static fn($k)=>!isset($found[$k])));
             foreach ($missing as $miss) {
                 $tokens = preg_split('/[^a-z0-9]+/i', (string)$miss) ?: [];
                 $tokens = array_values(array_filter(array_map('strtolower', $tokens), static fn($t)=>strlen($t)>=3));
+                // Expand composite words like "bondpaper" to increase match likelihood
+                $extra = [];
+                foreach ($tokens as $tk) {
+                    if (strpos($tk, 'bondpaper') !== false) { $extra[] = 'bond'; $extra[] = 'paper'; }
+                }
+                $tokens = array_values(array_unique(array_merge($tokens, $extra)));
                 if (!$tokens) { continue; }
-                $tokens = array_slice($tokens, 0, 3);
-                $conds = ['supplier_id IN (' . $inSup . ')'];
+                $tokens = array_slice($tokens, 0, 4);
                 $params2 = [];
                 foreach ($supplierIds as $sid) { $params2[] = (int)$sid; }
-                foreach ($tokens as $tk) { $conds[] = 'LOWER(name) ILIKE ?'; $params2[] = '%' . $tk . '%'; }
+                $likeConds = [];
+                foreach ($tokens as $tk) { $likeConds[] = 'LOWER(name) ILIKE ?'; $params2[] = '%' . $tk . '%'; }
+                $conds = ['supplier_id IN (' . $inSup . ')', '(' . implode(' OR ', $likeConds) . ')'];
                 $sql2 = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE ' . implode(' AND ', $conds);
                 $st2 = $pdo->prepare($sql2);
                 $st2->execute($params2);
@@ -1899,12 +1906,19 @@ class ProcurementController extends BaseController
                 $nm = $names[$iid];
                 $tokens = preg_split('/[^a-z0-9]+/i', (string)$nm) ?: [];
                 $tokens = array_values(array_filter(array_map('strtolower', $tokens), static fn($t)=>strlen($t)>=3));
+                // Expand composite words like "bondpaper" to increase match likelihood
+                $extra = [];
+                foreach ($tokens as $tk) {
+                    if (strpos($tk, 'bondpaper') !== false) { $extra[] = 'bond'; $extra[] = 'paper'; }
+                }
+                $tokens = array_values(array_unique(array_merge($tokens, $extra)));
                 if (!$tokens) { continue; }
-                $tokens = array_slice($tokens, 0, 3);
-                $conds = ['supplier_id IN (' . $inSup . ')'];
+                $tokens = array_slice($tokens, 0, 4);
                 $p2 = [];
                 foreach ($supplierIds as $sid) { $p2[] = (int)$sid; }
-                foreach ($tokens as $tk) { $conds[] = 'LOWER(name) ILIKE ?'; $p2[] = '%' . $tk . '%'; }
+                $likeConds = [];
+                foreach ($tokens as $tk) { $likeConds[] = 'LOWER(name) ILIKE ?'; $p2[] = '%' . $tk . '%'; }
+                $conds = ['supplier_id IN (' . $inSup . ')', '(' . implode(' OR ', $likeConds) . ')'];
                 $sql2 = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE ' . implode(' AND ', $conds);
                 $st2 = $pdo->prepare($sql2);
                 $st2->execute($p2);
