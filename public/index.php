@@ -322,6 +322,17 @@ if ($method === 'POST' && $path === '/manager/requests/canvass/preview') {
 	$safeRun(static function() use ($manager){ $manager->canvassPreview(); });
 	exit;
 }
+// Canvassing AJAX endpoints (quotes fetch and store generated canvass)
+if ($method === 'POST' && $path === '/manager/requests/canvass/quotes') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { http_response_code(403); exit; }
+	$safeRun(static function() use ($manager){ $manager->canvassQuotesApi(); });
+	exit;
+}
+if ($method === 'POST' && $path === '/manager/requests/canvass/store') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { http_response_code(403); exit; }
+	$safeRun(static function() use ($manager){ $manager->canvassStore(); });
+	exit;
+}
 if ($method === 'GET' && $path === '/manager/requests/view') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
 	$safeRun(static function() use ($manager){ $manager->viewGroup(); });

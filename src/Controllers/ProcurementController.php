@@ -1681,6 +1681,172 @@ class ProcurementController extends BaseController
         @readfile($file);
     }
 
+    /**
+     * POST (AJAX): Return live supplier quotes for each requested item.
+     * Input JSON: { pr_number: string, item_keys: [string], suppliers: [int] }
+     * Response JSON: { prices: { supplier_id: { item_key: price } }, awarded: { item_key: [supplier_ids_with_min] } }
+     */
+    public function canvassQuotesApi(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { http_response_code(403); echo json_encode(['error'=>'forbidden']); return; }
+        header('Content-Type: application/json');
+        $raw = file_get_contents('php://input');
+        $payload = json_decode($raw, true);
+        if (!is_array($payload)) { http_response_code(400); echo json_encode(['error'=>'invalid_json']); return; }
+        $pr = isset($payload['pr_number']) ? trim((string)$payload['pr_number']) : '';
+        $itemKeys = isset($payload['item_keys']) && is_array($payload['item_keys']) ? array_values(array_filter(array_map(static fn($v)=>trim(strtolower((string)$v)), $payload['item_keys']), static fn($v)=>$v!=='')) : [];
+        $supplierIds = isset($payload['suppliers']) && is_array($payload['suppliers']) ? array_values(array_unique(array_map('intval', $payload['suppliers']))) : [];
+        if ($pr === '' || empty($itemKeys) || count($supplierIds) < 1) { http_response_code(400); echo json_encode(['error'=>'missing_fields']); return; }
+        // Load PR rows for quantity context
+        $rows = $this->requests()->getGroupDetails($pr);
+        if (!$rows) { http_response_code(404); echo json_encode(['error'=>'pr_not_found']); return; }
+        // Build quantity map per normalized item key
+        $qtyMap = [];
+        foreach ($rows as $r) {
+            $k = strtolower(trim((string)($r['item_name'] ?? '')));
+            if ($k==='') { continue; }
+            $qtyMap[$k] = ($qtyMap[$k] ?? 0) + (int)($r['quantity'] ?? 0);
+        }
+        // Fetch direct matches first
+        $pdo = \App\Database\Connection::resolve();
+        $prices = [];
+        try {
+            $inSup = implode(',', array_fill(0, count($supplierIds), '?'));
+            $inItems = implode(',', array_fill(0, count($itemKeys), '?'));
+            $params = [];
+            foreach ($supplierIds as $sid) { $params[] = (int)$sid; }
+            foreach ($itemKeys as $nm) { $params[] = $nm; }
+            $sql = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE supplier_id IN (' . $inSup . ') AND LOWER(name) IN (' . $inItems . ')';
+            $st = $pdo->prepare($sql);
+            $st->execute($params);
+            $rowsMatch = $st->fetchAll();
+            foreach ($rowsMatch as $it) {
+                $sid = (int)$it['supplier_id'];
+                $lname = (string)$it['lname'];
+                $base = (float)($it['price'] ?? 0);
+                $ppp = max(1, (int)($it['pieces_per_package'] ?? 1));
+                $neededPk = $ppp > 0 ? (int)ceil((int)($qtyMap[$lname] ?? 0) / $ppp) : 0;
+                $best = $base;
+                if ($neededPk > 0) {
+                    try {
+                        $tq = $pdo->prepare('SELECT min_packages, max_packages, price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC');
+                        $tq->execute(['id' => (int)$it['id']]);
+                        foreach ($tq->fetchAll() as $t) {
+                            $min = (int)$t['min_packages'];
+                            $max = $t['max_packages'] !== null ? (int)$t['max_packages'] : null;
+                            if ($neededPk >= $min && ($max === null || $neededPk <= $max)) { $best = min($best, (float)$t['price_per_package']); }
+                        }
+                    } catch (\Throwable $e) {}
+                }
+                if (!isset($prices[$sid])) { $prices[$sid] = []; }
+                if (!isset($prices[$sid][$lname]) || $best < $prices[$sid][$lname]) { $prices[$sid][$lname] = $best; }
+            }
+            // Fuzzy fallback per missing item using token ILIKE intersection
+            $found = [];
+            foreach ($prices as $sid0=>$m0){ foreach ($m0 as $nm0=>$_){ $found[$nm0]=true; } }
+            $missing = array_values(array_filter($itemKeys, static fn($k)=>!isset($found[$k])));
+            foreach ($missing as $miss) {
+                $tokens = preg_split('/[^a-z0-9]+/i', (string)$miss) ?: [];
+                $tokens = array_values(array_filter(array_map('strtolower', $tokens), static fn($t)=>strlen($t)>=3));
+                if (!$tokens) { continue; }
+                $tokens = array_slice($tokens, 0, 3);
+                $conds = ['supplier_id IN (' . $inSup . ')'];
+                $params2 = [];
+                foreach ($supplierIds as $sid) { $params2[] = (int)$sid; }
+                foreach ($tokens as $tk) { $conds[] = 'LOWER(name) ILIKE ?'; $params2[] = '%' . $tk . '%'; }
+                $sql2 = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE ' . implode(' AND ', $conds);
+                $st2 = $pdo->prepare($sql2);
+                $st2->execute($params2);
+                foreach ($st2->fetchAll() as $it) {
+                    $sid = (int)$it['supplier_id'];
+                    $base = (float)($it['price'] ?? 0);
+                    $lnameCanonical = $miss; // map under requested key
+                    $ppp = max(1, (int)($it['pieces_per_package'] ?? 1));
+                    $neededPk = $ppp > 0 ? (int)ceil((int)($qtyMap[$lnameCanonical] ?? 0) / $ppp) : 0;
+                    $best = $base;
+                    if ($neededPk > 0) {
+                        try {
+                            $tq = $pdo->prepare('SELECT min_packages, max_packages, price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC');
+                            $tq->execute(['id' => (int)$it['id']]);
+                            foreach ($tq->fetchAll() as $t) {
+                                $min = (int)$t['min_packages'];
+                                $max = $t['max_packages'] !== null ? (int)$t['max_packages'] : null;
+                                if ($neededPk >= $min && ($max === null || $neededPk <= $max)) { $best = min($best, (float)$t['price_per_package']); }
+                            }
+                        } catch (\Throwable $e) {}
+                    }
+                    if (!isset($prices[$sid])) { $prices[$sid] = []; }
+                    if (!isset($prices[$sid][$lnameCanonical]) || $best < $prices[$sid][$lnameCanonical]) { $prices[$sid][$lnameCanonical] = $best; }
+                }
+            }
+        } catch (\Throwable $e) { /* ignore, best-effort */ }
+        // Build awarded map: for each item key, list supplier IDs with min price
+        $awarded = [];
+        foreach ($itemKeys as $k) {
+            $min = null; $ids = [];
+            foreach ($supplierIds as $sid) {
+                if (isset($prices[$sid]) && isset($prices[$sid][$k])) {
+                    $p = (float)$prices[$sid][$k];
+                    if ($min === null || $p < $min - 1e-9) { $min = $p; $ids = [$sid]; }
+                    elseif ($min !== null && abs($p - $min) < 1e-9) { $ids[] = $sid; }
+                }
+            }
+            if ($min !== null) { $awarded[$k] = $ids; }
+        }
+        echo json_encode(['prices'=>$prices,'awarded'=>$awarded]);
+    }
+
+    /**
+     * POST (AJAX): Persist a generated canvass sheet with an auto ID CYYYYNNN and awarded suppliers per item.
+     * Input JSON: { pr_number: string, selections: { item_key: [supplier_ids] }, awards: { item_key: supplier_id }, suppliers: [int] }
+     * Response JSON: { canvass_id: string, status: 'ok' }
+     */
+    public function canvassStore(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { http_response_code(403); echo json_encode(['error'=>'forbidden']); return; }
+        header('Content-Type: application/json');
+        $raw = file_get_contents('php://input');
+        $payload = json_decode($raw, true);
+        if (!is_array($payload)) { http_response_code(400); echo json_encode(['error'=>'invalid_json']); return; }
+        $pr = isset($payload['pr_number']) ? trim((string)$payload['pr_number']) : '';
+        $selections = isset($payload['selections']) && is_array($payload['selections']) ? $payload['selections'] : [];
+        $awards = isset($payload['awards']) && is_array($payload['awards']) ? $payload['awards'] : [];
+        $suppliers = isset($payload['suppliers']) && is_array($payload['suppliers']) ? array_values(array_unique(array_map('intval',$payload['suppliers']))) : [];
+        if ($pr === '' || count($suppliers) < 3) { http_response_code(400); echo json_encode(['error'=>'missing_fields']); return; }
+        // Generate canvass id CYYYYNNN (sequence table)
+        $pdo = \App\Database\Connection::resolve();
+        try { $pdo->exec("CREATE TABLE IF NOT EXISTS canvass_sequences (calendar_year INTEGER PRIMARY KEY, last_value INTEGER NOT NULL DEFAULT 0, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"); } catch (\Throwable $e) {}
+        $year = (int)date('Y');
+        $pdo->beginTransaction();
+        try {
+            $pdo->prepare('INSERT INTO canvass_sequences (calendar_year,last_value) VALUES (:y,0) ON CONFLICT (calendar_year) DO NOTHING')->execute(['y'=>$year]);
+            $st = $pdo->prepare('UPDATE canvass_sequences SET last_value = last_value + 1, updated_at = NOW() WHERE calendar_year = :y RETURNING last_value');
+            $st->execute(['y'=>$year]);
+            $seq = (int)$st->fetchColumn();
+            $pdo->commit();
+        } catch (\Throwable $e) { $pdo->rollBack(); $seq = 1; }
+        $canvassId = 'C' . sprintf('%04d%03d', $year, $seq);
+        // Create storage table
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing_details (\n                canvass_id VARCHAR(16) PRIMARY KEY,\n                pr_number VARCHAR(32) NOT NULL,\n                suppliers JSONB NOT NULL,\n                selections JSONB,\n                awards JSONB,\n                created_by BIGINT,\n                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()\n            )");
+        } catch (\Throwable $e) {}
+        // Upsert (allow re-generation)
+        try {
+            $stmt = $pdo->prepare('INSERT INTO pr_canvassing_details (canvass_id, pr_number, suppliers, selections, awards, created_by) VALUES (:cid,:pr,:sup,:sel,:awd,:uid)\n                ON CONFLICT (canvass_id) DO UPDATE SET suppliers=EXCLUDED.suppliers, selections=EXCLUDED.selections, awards=EXCLUDED.awards, created_at=NOW()');
+            $stmt->execute([
+                'cid'=>$canvassId,
+                'pr'=>$pr,
+                'sup'=>json_encode($suppliers),
+                'sel'=>json_encode($selections),
+                'awd'=>json_encode($awards),
+                'uid'=>(int)($_SESSION['user_id'] ?? 0)
+            ]);
+            echo json_encode(['canvass_id'=>$canvassId,'status'=>'ok']);
+        } catch (\Throwable $e) {
+            http_response_code(500); echo json_encode(['error'=>'store_failed','detail'=>$e->getMessage()]);
+        }
+    }
+
     /** POST: Update status for a PR group */
     public function updateGroupStatus(): void
     {

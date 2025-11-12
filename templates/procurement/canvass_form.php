@@ -52,6 +52,7 @@
 
         <form action="/manager/requests/canvass" method="POST" class="card" id="canvassForm">
             <input type="hidden" name="pr_number" value="<?= htmlspecialchars($pr, ENT_QUOTES, 'UTF-8') ?>" />
+            <input type="hidden" name="canvass_id" id="canvassIdField" value="" />
             <p>Select 3–5 suppliers to include in the canvassing sheet.</p>
             <div class="grid">
                 <?php foreach ($suppliers as $s): ?>
@@ -135,7 +136,7 @@
                 <div id="totalsSummary" class="totals"></div>
             </div>
             <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
-                <button id="btnPreview" class="btn" type="button" title="Preview canvassing PDF in a new tab">Generate</button>
+                <button id="btnPreview" class="btn" type="button" title="Generate and preview canvassing PDF in a new tab">Generate Canvass Sheet</button>
                 <button id="btnSend" class="btn primary" type="submit" disabled>Send for Admin Approval</button>
                 <a class="btn" href="/manager/requests">Cancel</a>
             </div>
@@ -149,8 +150,69 @@
                 const form = document.getElementById('canvassForm');
                 const btnPreview = document.getElementById('btnPreview');
                 const btnSend = document.getElementById('btnSend');
+                const canvassIdField = document.getElementById('canvassIdField');
                 const originalAction = form.getAttribute('action');
                 const originalTarget = form.getAttribute('target');
+                const prNumber = (new URLSearchParams(window.location.search)).get('pr') || (document.querySelector('input[name="pr_number"]').value);
+
+                function selectedSupplierIds() {
+                    return Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.getAttribute('data-supplier-id'));
+                }
+
+                function getItemKeys() {
+                    return Array.from(document.querySelectorAll('#priceMatrix tbody tr')).map(tr => tr.getAttribute('data-item-key'));
+                }
+
+                async function fetchQuotes() {
+                    const suppliers = selectedSupplierIds();
+                    const items = getItemKeys();
+                    if (!suppliers.length || !items.length) return;
+                    try {
+                        const res = await fetch('/manager/requests/canvass/quotes', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ pr_number: prNumber, item_keys: items, suppliers: suppliers.map(Number) })
+                        });
+                        if (!res.ok) return;
+                        const data = await res.json();
+                        if (!data || !data.prices) return;
+                        // Update table cells with returned prices
+                        const table = document.getElementById('priceMatrix');
+                        if (!table) return;
+                        const rows = table.querySelectorAll('tbody tr');
+                        rows.forEach(tr => {
+                            const key = tr.getAttribute('data-item-key');
+                            tr.querySelectorAll('td[data-supplier-id]').forEach(td => {
+                                const sid = td.getAttribute('data-supplier-id');
+                                const p = (data.prices[sid] && data.prices[sid][key] != null) ? Number(data.prices[sid][key]) : null;
+                                if (p != null && !Number.isNaN(p)) {
+                                    td.setAttribute('data-price', p.toFixed(2));
+                                    td.textContent = '₱ ' + p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                } else if (!td.dataset.userEdited) {
+                                    // Only clear display if user hasn't manually edited this cell
+                                    td.setAttribute('data-price', '');
+                                    td.textContent = '—';
+                                }
+                            });
+                        });
+                        recalc();
+                    } catch (e) { /* ignore */ }
+                }
+
+                // Manual price update on double-click: prompt and update cell, mark as userEdited
+                document.addEventListener('dblclick', function(ev){
+                    const td = ev.target.closest('td[data-supplier-id]');
+                    if (!td) return;
+                    const current = td.getAttribute('data-price');
+                    const val = prompt('Enter price per item (numbers only):', current || '');
+                    if (val === null) return;
+                    const num = Number(String(val).replace(/[,\s]/g,''));
+                    if (Number.isNaN(num) || num < 0) { alert('Invalid number'); return; }
+                    td.setAttribute('data-price', num.toFixed(2));
+                    td.textContent = '₱ ' + num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    td.dataset.userEdited = '1';
+                    recalc();
+                });
                 function recalc() {
                     const globalSelected = new Set(Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.getAttribute('data-supplier-id')));
                     const table = document.getElementById('priceMatrix');
@@ -244,11 +306,12 @@
                         });
                     }
                 }
-                document.querySelectorAll('.supplier-choice').forEach(cb => cb.addEventListener('change', recalc));
+                document.querySelectorAll('.supplier-choice').forEach(cb => cb.addEventListener('change', function(){ fetchQuotes(); recalc(); }));
                 // Track manual changes on per-item award selects
                 document.querySelectorAll('select.award-per-item').forEach(sel => sel.addEventListener('change', function(){ this.dataset.userSet = '1'; }));
                 document.querySelectorAll('select.per-item-select').forEach(sel => sel.addEventListener('change', function(){ recalc(); }));
-                recalc();
+                // Initial fetch and calc
+                fetchQuotes().then(()=>recalc());
                 // Preview flow: submit to preview endpoint in a new tab and enable Send button
                 btnPreview.addEventListener('click', function(){
                     // Basic validation before preview
@@ -267,14 +330,38 @@
                         if (!selSet.has(awardSel.value)) { alert('Awarded vendor must be one of the selected suppliers.'); return; }
                     }
                     // Ensure per-item awards (if any) are from selected suppliers; else auto will handle in backend
-                    // Submit to preview
-                    form.setAttribute('action', '/manager/requests/canvass/preview');
-                    form.setAttribute('target', '_blank');
-                    form.submit();
-                    // Restore and enable send
-                    form.setAttribute('action', originalAction);
-                    if (originalTarget !== null) { form.setAttribute('target', originalTarget); } else { form.removeAttribute('target'); }
-                    btnSend.disabled = false;
+                    // Build selections per item and awards
+                    const selections = {};
+                    document.querySelectorAll('#priceMatrix tbody tr').forEach(tr => {
+                        const key = tr.getAttribute('data-item-key');
+                        const sel = tr.querySelector('select.per-item-select');
+                        const vals = sel ? Array.from(sel.selectedOptions).map(o=>Number(o.value)) : [];
+                        if (vals.length) selections[key] = vals;
+                    });
+                    const awards = {};
+                    document.querySelectorAll('select.award-per-item').forEach(sel => {
+                        const key = sel.getAttribute('data-item-key');
+                        if (sel.value) awards[key] = Number(sel.value);
+                    });
+                    const suppliers = selectedSupplierIds().map(Number);
+                    // Persist canvass to DB before preview (returns canvass_id)
+                    fetch('/manager/requests/canvass/store', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ pr_number: prNumber, selections, awards, suppliers })
+                    }).then(r=>r.json()).then(js => {
+                        if (js && js.canvass_id) { canvassIdField.value = js.canvass_id; }
+                        // Submit to preview
+                        form.setAttribute('action', '/manager/requests/canvass/preview');
+                        form.setAttribute('target', '_blank');
+                        form.submit();
+                        // Restore and enable send
+                        form.setAttribute('action', originalAction);
+                        if (originalTarget !== null) { form.setAttribute('target', originalTarget); } else { form.removeAttribute('target'); }
+                        btnSend.disabled = false;
+                    }).catch(()=>{
+                        alert('Failed to persist canvass. Please try again.');
+                    });
                 });
                 document.getElementById('canvassForm').addEventListener('submit', function(e){
                     const checked = document.querySelectorAll('.supplier-choice:checked').length;
@@ -303,6 +390,12 @@
                     if (btnSend.disabled) {
                         e.preventDefault();
                         alert('Please click Generate to preview the PDF before sending for approval.');
+                        return;
+                    }
+                    // Ensure canvass id exists
+                    if (!canvassIdField.value) {
+                        e.preventDefault();
+                        alert('Please click Generate Canvass Sheet first.');
                         return;
                     }
                 });
