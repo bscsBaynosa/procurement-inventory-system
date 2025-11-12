@@ -126,9 +126,13 @@ class ProcurementController extends BaseController
         // Prefill logic from PR + any previous PO attempt for this PR
         $poNext = '';
         try { $poNext = $this->requests()->getNextPoNumberPreview(); } catch (\Throwable $ignored) { $poNext = ''; }
-        $prefillSupplierId = null; $prefillVendorName = ''; $prefillCenter = ''; $prefillTerms = '30 days';
+        $prefillSupplierId = null; $prefillVendorName = ''; $prefillCenter = ''; $prefillTerms = '30 days'; $prefillAdminName='';
         // Center inferred from branch name if present
         $prefillCenter = (string)($rows[0]['branch_name'] ?? '');
+        // Auto-pick lone active admin for admin_name prefill
+        try {
+            $prefillAdminName = (string)($pdo->query("SELECT full_name FROM users WHERE role='admin' AND is_active=TRUE ORDER BY created_at ASC LIMIT 1")->fetchColumn() ?: '');
+        } catch (\Throwable $e) { $prefillAdminName=''; }
         // If a previous PO exists for this PR number, reuse its supplier/vendor meta to streamline retries
         try {
             $stPrev = $pdo->prepare("SELECT supplier_id, vendor_name, center, terms FROM purchase_orders WHERE pr_number = :pr ORDER BY created_at DESC LIMIT 1");
@@ -145,6 +149,24 @@ class ProcurementController extends BaseController
             $prefillSupplierId = (int)$suppliers[0]['user_id'];
             $prefillVendorName = (string)$suppliers[0]['full_name'];
         }
+        // Attempt to detect canvass/quoted price columns dynamically for pre-filling item unit prices
+        $candidatePriceCols = ['quoted_price','canvass_price','price','unit_price','approved_price'];
+        $detectedPriceCol = null;
+        foreach ($candidatePriceCols as $c) {
+            try {
+                $hasCol = $pdo->prepare("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_requests' AND column_name=:c");
+                $hasCol->execute(['c'=>$c]);
+                if ($hasCol->fetchColumn()) { $detectedPriceCol = $c; break; }
+            } catch (\Throwable $e) { /* ignore */ }
+        }
+        // Enrich rows with prefill_price if column exists and value numeric
+        if ($detectedPriceCol) {
+            foreach ($rows as &$r) {
+                $val = $r[$detectedPriceCol] ?? null;
+                $r['prefill_price'] = is_numeric($val) ? (float)$val : 0.0;
+            }
+            unset($r);
+        }
         $this->render('procurement/po_create.php', [
             'pr' => $pr,
             'rows' => $rows,
@@ -155,6 +177,7 @@ class ProcurementController extends BaseController
                 'vendor_name' => $prefillVendorName,
                 'center' => $prefillCenter,
                 'terms' => $prefillTerms,
+                'admin_name' => $prefillAdminName,
             ],
         ]);
     }

@@ -42,12 +42,13 @@
             <input type="hidden" name="pr_number" value="<?= htmlspecialchars($pr, ENT_QUOTES, 'UTF-8') ?>" />
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
                 <div>
-                    <label>PO Number</label>
-                    <input name="po_number" placeholder="Auto-assigned (YYYYNNN)" value="<?= isset($po_next) ? htmlspecialchars((string)$po_next, ENT_QUOTES, 'UTF-8') : '' ?>" />
-                    <div style="font-size:12px;color:var(--muted);margin-top:4px;">Leave as-is to auto-generate like PR (e.g., 2025001).</div>
+                    <label>PO Number <span style="color:#dc2626;">*</span></label>
+                    <input name="po_number_display" readonly style="background:#f1f5f9;" value="<?= isset($po_next) ? htmlspecialchars((string)$po_next, ENT_QUOTES, 'UTF-8') : '' ?>" />
+                    <input type="hidden" name="po_number" value="<?= isset($po_next) ? htmlspecialchars((string)$po_next, ENT_QUOTES, 'UTF-8') : '' ?>" />
+                    <div style="font-size:12px;color:var(--muted);margin-top:4px;">Auto-generated (YYYYNNN).</div>
                 </div>
                 <div>
-                    <label>Supplier (Vendor)</label>
+                    <label>Supplier (Vendor) <span style="color:#dc2626;">*</span></label>
                     <select name="supplier_id" required>
                         <option value="">-- choose supplier --</option>
                         <?php $prefSupplier = $prefill['supplier_id'] ?? null; foreach ($suppliers as $s): $sid=(int)$s['user_id']; ?>
@@ -68,7 +69,7 @@
                     <input name="vendor_tin" />
                 </div>
                 <div>
-                    <label>Center (required)</label>
+                    <label>Center <span style="color:#dc2626;">*</span></label>
                     <input name="center" required value="<?= htmlspecialchars((string)($prefill['center'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
                 </div>
                 <div>
@@ -76,7 +77,7 @@
                     <input name="reference" />
                 </div>
                 <div>
-                    <label>Terms of Payment (required)</label>
+                    <label>Terms of Payment <span style="color:#dc2626;">*</span></label>
                     <input name="terms" required placeholder="e.g., 30 days, COD, etc." value="<?= htmlspecialchars((string)($prefill['terms'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
                 </div>
                 <div>
@@ -88,12 +89,12 @@
                     <input name="look_for" value="<?= htmlspecialchars((string)($_SESSION['full_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
                 </div>
                 <div>
-                    <label>Finance Officer (required)</label>
+                    <label>Finance Officer <span style="color:#dc2626;">*</span></label>
                     <input name="finance_officer" required placeholder="Finance Officer Name" />
                 </div>
                 <div>
-                    <label>Admin Name (required)</label>
-                    <input name="admin_name" required placeholder="Administrator Name" />
+                    <label>Admin Name <span style="color:#dc2626;">*</span></label>
+                    <input name="admin_name" required placeholder="Administrator Name" value="<?= htmlspecialchars((string)($prefill['admin_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
                 </div>
                 <div style="grid-column:1/-1;">
                     <label>Notes & Instructions</label>
@@ -111,10 +112,10 @@
                     <tbody id="poItems">
                         <?php foreach ($rows as $r): ?>
                             <tr>
-                                <td><input name="item_desc[]" value="<?= htmlspecialchars((string)($r['item_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" /></td>
+                                <td><input name="item_desc[]" value="<?= htmlspecialchars((string)($r['item_name'] ?? $r['description'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" /></td>
                                 <td><input name="item_unit[]" value="<?= htmlspecialchars((string)($r['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" /></td>
-                                <td><input name="item_qty[]" type="number" min="1" value="<?= (int)($r['quantity'] ?? 1) ?>" oninput="recalc(this)" /></td>
-                                <td><input name="item_price[]" type="number" step="0.01" min="0" value="0" oninput="recalc(this)" /></td>
+                                <td><input name="item_qty[]" type="number" min="1" value="<?= (int)($r['quantity'] ?? $r['qty'] ?? 1) ?>" oninput="recalc(this)" /></td>
+                                <td><input name="item_price[]" type="number" step="0.01" min="0" value="<?= isset($r['prefill_price']) ? number_format((float)$r['prefill_price'],2,'.','') : (isset($r['unit_price']) ? number_format((float)$r['unit_price'],2,'.','') : '0.00') ?>" oninput="recalc(this)" /></td>
                                 <td class="line-total">₱ 0.00</td>
                                 <td><button class="btn muted" type="button" onclick="removeRow(this)">Remove</button></td>
                             </tr>
