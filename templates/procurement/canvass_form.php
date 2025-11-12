@@ -79,6 +79,7 @@
                 foreach ($rows as $r) {
                     $itemsForGrid[] = [
                         'label' => ($r['item_name'] ?? 'Item') . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''),
+                        'name'  => (string)($r['item_name'] ?? ''),
                         'id' => (int)($r['item_id'] ?? 0),
                     ];
                 }
@@ -103,7 +104,7 @@
                         </thead>
                         <tbody>
                         <?php foreach ($itemsForGrid as $it): $iid = (int)$it['id']; ?>
-                            <tr data-item-id="<?= $iid ?>" data-item-label="<?= htmlspecialchars((string)$it['label'], ENT_QUOTES, 'UTF-8') ?>">
+                            <tr data-item-id="<?= $iid ?>" data-item-label="<?= htmlspecialchars((string)$it['label'], ENT_QUOTES, 'UTF-8') ?>" data-item-name="<?= htmlspecialchars((string)($it['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>">
                                 <td><?= htmlspecialchars((string)$it['label'], ENT_QUOTES, 'UTF-8') ?></td>
                                 <td>
                                     <div class="supplier-box" data-item-id="<?= $iid ?>" style="display:grid; grid-template-columns: repeat(auto-fill,minmax(180px,1fr)); gap:6px;">
@@ -158,11 +159,14 @@
                 }
 
                 async function loadQuotesForItem(itemId, supplierIds) {
-                    if (!itemId || !supplierIds || supplierIds.length < 3) return; // require minimum selection
+                    // Allow fetching with >=1 selection for visibility; Generate remains gated at 3–5
+                    if (!supplierIds || supplierIds.length < 1) return;
                     try {
+                        const row = document.querySelector(`tr[data-item-id="${itemId}"]`);
+                        const itemName = row ? (row.getAttribute('data-item-name') || '') : '';
                         const res = await fetch('/manager/requests/canvass/item-quotes', {
                             method: 'POST', headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ item_id: Number(itemId), supplier_ids: supplierIds.map(Number) })
+                            body: JSON.stringify({ item_id: Number(itemId) || 0, item_name: itemName, supplier_ids: supplierIds.map(Number) })
                         });
                         if (!res.ok) return;
                         const data = await res.json();

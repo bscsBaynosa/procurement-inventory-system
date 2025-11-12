@@ -2002,8 +2002,9 @@ class ProcurementController extends BaseController
         $payload = json_decode($raw, true);
         if (!is_array($payload)) { http_response_code(400); echo json_encode(['error'=>'invalid_json']); return; }
         $itemId = isset($payload['item_id']) ? (int)$payload['item_id'] : 0;
+        $itemName = isset($payload['item_name']) ? trim((string)$payload['item_name']) : '';
         $supplierIds = isset($payload['supplier_ids']) && is_array($payload['supplier_ids']) ? array_values(array_unique(array_map('intval', $payload['supplier_ids']))) : [];
-        if ($itemId <= 0 || empty($supplierIds)) { http_response_code(400); echo json_encode(['error'=>'missing_fields']); return; }
+        if (($itemId <= 0 && $itemName === '') || empty($supplierIds)) { http_response_code(400); echo json_encode(['error'=>'missing_fields']); return; }
         $pdo = \App\Database\Connection::resolve();
         // Ensure table exists
         try {
@@ -2020,23 +2021,41 @@ class ProcurementController extends BaseController
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_supplier_quotes_item_supplier ON supplier_quotes(item_id, supplier_id)");
         } catch (\Throwable $e) {}
         $in = implode(',', array_fill(0, count($supplierIds), '?'));
-        $params = [$itemId];
-        foreach ($supplierIds as $sid) { $params[] = (int)$sid; }
-        $sql = "SELECT supplier_id, price FROM supplier_quotes WHERE item_id = ? AND supplier_id IN ($in)";
         $prices = [];
-        try {
-            $st = $pdo->prepare($sql);
-            $st->execute($params);
-            foreach ($st->fetchAll() as $r) { $prices[(int)$r['supplier_id']] = (float)$r['price']; }
-        } catch (\Throwable $e) { /* ignore */ }
+        if ($itemId > 0) {
+            $params = [$itemId];
+            foreach ($supplierIds as $sid) { $params[] = (int)$sid; }
+            $sql = "SELECT supplier_id, price FROM supplier_quotes WHERE item_id = ? AND supplier_id IN ($in)";
+            try {
+                $st = $pdo->prepare($sql);
+                $st->execute($params);
+                foreach ($st->fetchAll() as $r) { $prices[(int)$r['supplier_id']] = (float)$r['price']; }
+            } catch (\Throwable $e) { /* ignore */ }
+        }
+        // If still empty and have an item name, attempt name-based lookup into supplier_quotes by joining inventory_items
+        if (!$prices && $itemName !== '') {
+            try {
+                $p2 = [];
+                foreach ($supplierIds as $sid) { $p2[] = (int)$sid; }
+                $p2[] = strtolower($itemName);
+                $sql2 = "SELECT sq.supplier_id, sq.price FROM supplier_quotes sq JOIN inventory_items ii ON ii.item_id = sq.item_id WHERE sq.supplier_id IN ($in) AND LOWER(ii.name) = ?";
+                $st2 = $pdo->prepare($sql2);
+                $st2->execute($p2);
+                foreach ($st2->fetchAll() as $row) { $prices[(int)$row['supplier_id']] = (float)$row['price']; }
+            } catch (\Throwable $e) { /* ignore */ }
+        }
         // Fallback: if some suppliers have no explicit quotes, try supplier_items using a stricter item-name match
         $missing = array_values(array_filter($supplierIds, static fn($sid)=>!isset($prices[$sid])));
         if ($missing) {
             try {
-                // Get inventory item name
-                $stNm = $pdo->prepare('SELECT LOWER(name) AS nm FROM inventory_items WHERE item_id = :id');
-                $stNm->execute(['id' => $itemId]);
-                $nm = trim((string)($stNm->fetchColumn() ?: ''));
+                // Determine canonical lowercase name to match against supplier_items
+                $nm = '';
+                if ($itemId > 0) {
+                    $stNm = $pdo->prepare('SELECT LOWER(name) AS nm FROM inventory_items WHERE item_id = :id');
+                    $stNm->execute(['id' => $itemId]);
+                    $nm = trim((string)($stNm->fetchColumn() ?: ''));
+                }
+                if ($nm === '' && $itemName !== '') { $nm = strtolower($itemName); }
                 if ($nm !== '') {
                     $inSup = implode(',', array_fill(0, count($missing), '?'));
                     // 1) Exact name match
