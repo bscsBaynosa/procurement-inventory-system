@@ -84,20 +84,7 @@ if (session_status() !== PHP_SESSION_ACTIVE) {
 	session_start();
 }
 
-// Canonical domain enforcement: redirect any herokuapp.com or www host variants to pocc.live
-try {
-	$host = $_SERVER['HTTP_HOST'] ?? '';
-	// If request is hitting the Heroku default app domain or the www subdomain, 301 to apex pocc.live
-	$isHeroku = stripos($host, 'herokuapp.com') !== false;
-	$isWwwPocc = strtolower($host) === 'www.pocc.live';
-	if ($isHeroku || $isWwwPocc) {
-		$forwarded = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
-		$scheme = $forwarded !== '' ? explode(',', $forwarded)[0] : ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http');
-		$target = $scheme . '://pocc.live' . ($_SERVER['REQUEST_URI'] ?? '/');
-		header('Location: ' . $target, true, 301);
-		exit;
-	}
-} catch (\Throwable $ignored) { /* non-critical */ }
+// Canonical redirect disabled: allow access via herokuapp.com and any custom domains.
 
 $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
