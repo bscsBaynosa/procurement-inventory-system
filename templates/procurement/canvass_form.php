@@ -168,23 +168,25 @@
                         .map(tr => Number(tr.getAttribute('data-item-id')))
                         .filter(v => !Number.isNaN(v) && v > 0);
                 }
+                function getItemKeysNoId() {
+                    return Array.from(document.querySelectorAll('#priceMatrix tbody tr'))
+                        .filter(tr => {
+                            const id = Number(tr.getAttribute('data-item-id'));
+                            return Number.isNaN(id) || id <= 0;
+                        })
+                        .map(tr => tr.getAttribute('data-item-key'))
+                        .filter(k => k && k.trim() !== '');
+                }
 
                 async function fetchQuotes() {
                     const suppliers = selectedSupplierIds();
                     const itemIds = getItemIds();
-                    if (!suppliers.length || !itemIds.length) return;
-                    try {
-                        const res = await fetch('/manager/requests/canvass/quotes-by-id', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ pr_number: prNumber, item_ids: itemIds, suppliers: suppliers.map(Number) })
-                        });
-                        if (!res.ok) return;
-                        const data = await res.json();
+                    const itemKeys = getItemKeysNoId();
+                    if (!suppliers.length || (!itemIds.length && !itemKeys.length)) return;
+                    const table = document.getElementById('priceMatrix');
+                    if (!table) return;
+                    const applyById = (data) => {
                         if (!data || !data.prices) return;
-                        // Update table cells with returned prices
-                        const table = document.getElementById('priceMatrix');
-                        if (!table) return;
                         const rows = table.querySelectorAll('tbody tr');
                         rows.forEach(tr => {
                             const iid = tr.getAttribute('data-item-id');
@@ -194,13 +196,52 @@
                                 if (p != null && !Number.isNaN(p)) {
                                     td.setAttribute('data-price', p.toFixed(2));
                                     td.textContent = '₱ ' + p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                                } else if (!td.dataset.userEdited) {
-                                    // Only clear display if user hasn't manually edited this cell
+                                } else if (!td.dataset.userEdited && (iid && Number(iid) > 0)) {
                                     td.setAttribute('data-price', '');
                                     td.textContent = '—';
                                 }
                             });
                         });
+                    };
+                    const applyByKey = (data) => {
+                        if (!data || !data.prices) return;
+                        const rows = table.querySelectorAll('tbody tr');
+                        rows.forEach(tr => {
+                            const key = tr.getAttribute('data-item-key');
+                            const iid = Number(tr.getAttribute('data-item-id'));
+                            if (!key || iid > 0) return; // only for no-id rows
+                            tr.querySelectorAll('td[data-supplier-id]').forEach(td => {
+                                const sid = td.getAttribute('data-supplier-id');
+                                const p = (data.prices[sid] && data.prices[sid][key] != null) ? Number(data.prices[sid][key]) : null;
+                                if (p != null && !Number.isNaN(p)) {
+                                    td.setAttribute('data-price', p.toFixed(2));
+                                    td.textContent = '₱ ' + p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                                } else if (!td.dataset.userEdited) {
+                                    td.setAttribute('data-price', '');
+                                    td.textContent = '—';
+                                }
+                            });
+                        });
+                    };
+                    try {
+                        const promises = [];
+                        if (itemIds.length) {
+                            promises.push(
+                                fetch('/manager/requests/canvass/quotes-by-id', {
+                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ pr_number: prNumber, item_ids: itemIds, suppliers: suppliers.map(Number) })
+                                }).then(r => r.ok ? r.json() : null).then(applyById)
+                            );
+                        }
+                        if (itemKeys.length) {
+                            promises.push(
+                                fetch('/manager/requests/canvass/quotes', {
+                                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ pr_number: prNumber, item_keys: itemKeys, suppliers: suppliers.map(Number) })
+                                }).then(r => r.ok ? r.json() : null).then(applyByKey)
+                            );
+                        }
+                        await Promise.all(promises);
                         recalc();
                     } catch (e) { /* ignore */ }
                 }
@@ -291,7 +332,7 @@
                         // Auto-pick cheapest total if user hasn't set manually
                         let cheapestSid = null, cheapestTotal = Infinity;
                         Object.keys(totals).forEach(sid => { if (totals[sid] < cheapestTotal) { cheapestTotal = totals[sid]; cheapestSid = sid; } });
-                        if (cheapestSid && (!awardSel.dataset.userSet || awardSel.value === '' || !selected.has(awardSel.value))) {
+                        if (cheapestSid && (!awardSel.dataset.userSet || awardSel.value === '' || !globalSelected.has(awardSel.value))) {
                             awardSel.value = cheapestSid;
                         }
                     }
