@@ -328,6 +328,12 @@ if ($method === 'POST' && $path === '/manager/requests/canvass/quotes') {
 	$safeRun(static function() use ($manager){ $manager->canvassQuotesApi(); });
 	exit;
 }
+// New: per-item quotes by item_id (preferred)
+if ($method === 'POST' && $path === '/manager/requests/canvass/quotes-by-id') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { http_response_code(403); exit; }
+	$safeRun(static function() use ($manager){ $manager->canvassQuotesByIdApi(); });
+	exit;
+}
 if ($method === 'POST' && $path === '/manager/requests/canvass/store') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { http_response_code(403); exit; }
 	$safeRun(static function() use ($manager){ $manager->canvassStore(); });

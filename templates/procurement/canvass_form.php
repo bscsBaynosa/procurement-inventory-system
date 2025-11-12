@@ -84,7 +84,11 @@
                 $itemsForGrid = [];
                 foreach ($rows as $r) {
                     $nm = strtolower(trim((string)($r['item_name'] ?? '')));
-                    $itemsForGrid[] = [ 'label' => ($r['item_name'] ?? 'Item') . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''), 'key' => $nm ];
+                    $itemsForGrid[] = [
+                        'label' => ($r['item_name'] ?? 'Item') . ' × ' . (string)($r['quantity'] ?? 0) . ' ' . (string)($r['unit'] ?? ''),
+                        'key' => $nm,
+                        'id' => (int)($r['item_id'] ?? 0),
+                    ];
                 }
             ?>
 
@@ -104,11 +108,11 @@
                             </tr>
                         </thead>
                         <tbody>
-                        <?php foreach ($itemsForGrid as $it): $k = (string)$it['key']; ?>
-                            <tr data-item-key="<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>">
+                        <?php foreach ($itemsForGrid as $it): $k = (string)$it['key']; $iid = (int)$it['id']; ?>
+                            <tr data-item-key="<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>" data-item-id="<?= (int)$iid ?>">
                                 <td><?= htmlspecialchars((string)$it['label'], ENT_QUOTES, 'UTF-8') ?></td>
                                 <td>
-                                    <select name="item_suppliers[<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>][]" class="per-item-select" multiple size="3" style="width:100%">
+                                    <select name="item_suppliers[<?= $iid > 0 ? (int)$iid : htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>][]" class="per-item-select" multiple size="3" style="width:100%">
                                         <?php foreach ($suppliers as $s): ?>
                                             <option value="<?= (int)$s['user_id'] ?>"><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></option>
                                         <?php endforeach; ?>
@@ -121,7 +125,7 @@
                                     </td>
                                 <?php endforeach; ?>
                                 <td>
-                                    <select name="item_award[<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>]" class="award-per-item" data-item-key="<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>">
+                                    <select name="item_award[<?= $iid > 0 ? (int)$iid : htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>]" class="award-per-item" data-item-key="<?= htmlspecialchars($k, ENT_QUOTES, 'UTF-8') ?>" data-item-id="<?= (int)$iid ?>">
                                         <option value="">— Select —</option>
                                         <?php foreach ($suppliers as $s): ?>
                                             <option value="<?= (int)$s['user_id'] ?>"><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></option>
@@ -159,19 +163,21 @@
                     return Array.from(document.querySelectorAll('.supplier-choice:checked')).map(cb => cb.getAttribute('data-supplier-id'));
                 }
 
-                function getItemKeys() {
-                    return Array.from(document.querySelectorAll('#priceMatrix tbody tr')).map(tr => tr.getAttribute('data-item-key'));
+                function getItemIds() {
+                    return Array.from(document.querySelectorAll('#priceMatrix tbody tr'))
+                        .map(tr => Number(tr.getAttribute('data-item-id')))
+                        .filter(v => !Number.isNaN(v) && v > 0);
                 }
 
                 async function fetchQuotes() {
                     const suppliers = selectedSupplierIds();
-                    const items = getItemKeys();
-                    if (!suppliers.length || !items.length) return;
+                    const itemIds = getItemIds();
+                    if (!suppliers.length || !itemIds.length) return;
                     try {
-                        const res = await fetch('/manager/requests/canvass/quotes', {
+                        const res = await fetch('/manager/requests/canvass/quotes-by-id', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ pr_number: prNumber, item_keys: items, suppliers: suppliers.map(Number) })
+                            body: JSON.stringify({ pr_number: prNumber, item_ids: itemIds, suppliers: suppliers.map(Number) })
                         });
                         if (!res.ok) return;
                         const data = await res.json();
@@ -181,10 +187,10 @@
                         if (!table) return;
                         const rows = table.querySelectorAll('tbody tr');
                         rows.forEach(tr => {
-                            const key = tr.getAttribute('data-item-key');
+                            const iid = tr.getAttribute('data-item-id');
                             tr.querySelectorAll('td[data-supplier-id]').forEach(td => {
                                 const sid = td.getAttribute('data-supplier-id');
-                                const p = (data.prices[sid] && data.prices[sid][key] != null) ? Number(data.prices[sid][key]) : null;
+                                const p = (data.prices[sid] && data.prices[sid][iid] != null) ? Number(data.prices[sid][iid]) : null;
                                 if (p != null && !Number.isNaN(p)) {
                                     td.setAttribute('data-price', p.toFixed(2));
                                     td.textContent = '₱ ' + p.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -333,15 +339,15 @@
                     // Build selections per item and awards
                     const selections = {};
                     document.querySelectorAll('#priceMatrix tbody tr').forEach(tr => {
-                        const key = tr.getAttribute('data-item-key');
+                        const iid = tr.getAttribute('data-item-id');
                         const sel = tr.querySelector('select.per-item-select');
                         const vals = sel ? Array.from(sel.selectedOptions).map(o=>Number(o.value)) : [];
-                        if (vals.length) selections[key] = vals;
+                        if (vals.length) selections[iid] = vals;
                     });
                     const awards = {};
                     document.querySelectorAll('select.award-per-item').forEach(sel => {
-                        const key = sel.getAttribute('data-item-key');
-                        if (sel.value) awards[key] = Number(sel.value);
+                        const iid = sel.getAttribute('data-item-id');
+                        if (sel.value) awards[iid] = Number(sel.value);
                     });
                     const suppliers = selectedSupplierIds().map(Number);
                     // Persist canvass to DB before preview (returns canvass_id)
