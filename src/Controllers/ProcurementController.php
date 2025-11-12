@@ -1017,6 +1017,49 @@ class ProcurementController extends BaseController
                     if (!isset($prices[$sid])) { $prices[$sid] = []; }
                     if (!isset($prices[$sid][$lname]) || $best < $prices[$sid][$lname]) { $prices[$sid][$lname] = $best; }
                 }
+                // Size-aware stage for remaining names (Bondpaper with size in description)
+                $found = [];
+                foreach ($prices as $sid0 => $m0) { foreach ($m0 as $nm0 => $_) { $found[$nm0] = true; } }
+                $toFindSize = array_values(array_filter($names, static fn($nm) => !isset($found[$nm])));
+                foreach ($toFindSize as $nm) {
+                    if (!preg_match('/^(a4|long|short|f4)\s+bond\s*paper?$/i', $nm)) { continue; }
+                    $size = strtolower(preg_replace('/\s*bond\s*paper?$/i', '', $nm));
+                    $syns = [];
+                    if ($size === 'a4') { $syns = ['a4','210x297','210 x 297','8.27x11.69','8.3x11.7']; }
+                    elseif ($size === 'long') { $syns = ['long','legal','8.5x13','8.5 x 13']; }
+                    elseif ($size === 'short') { $syns = ['short','letter','8.5x11','8.5 x 11']; }
+                    elseif ($size === 'f4') { $syns = ['f4','8.5x13','8.5 x 13']; }
+                    if (!$syns) { continue; }
+                    $pS = [];
+                    foreach ($allSupIds as $sid) { $pS[] = (int)$sid; }
+                    $pS[] = 'bondpaper';
+                    $cond = [];
+                    foreach ($syns as $s) { $cond[] = 'LOWER(description) = ?'; $pS[] = strtolower($s); }
+                    foreach ($syns as $s) { $cond[] = 'LOWER(description) ILIKE ?'; $pS[] = '%' . strtolower($s) . '%'; }
+                    $sqlS = 'SELECT id, supplier_id, price, pieces_per_package FROM supplier_items WHERE supplier_id IN (' . $inSup . ') AND LOWER(name) = ? AND (' . implode(' OR ', $cond) . ')';
+                    $stS = $pdo->prepare($sqlS);
+                    $stS->execute($pS);
+                    foreach ($stS->fetchAll() as $it) {
+                        $sid = (int)$it['supplier_id'];
+                        $base = (float)($it['price'] ?? 0);
+                        $ppp = max(1, (int)($it['pieces_per_package'] ?? 1));
+                        $needPk = $ppp > 0 ? (int)ceil((int)($byNameQty[$nm] ?? 0) / $ppp) : 0;
+                        $best = $base;
+                        if ($needPk > 0) {
+                            try {
+                                $tq = $pdo->prepare('SELECT min_packages, max_packages, price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC');
+                                $tq->execute(['id' => (int)$it['id']]);
+                                foreach ($tq->fetchAll() as $t) {
+                                    $min = (int)$t['min_packages'];
+                                    $max = $t['max_packages'] !== null ? (int)$t['max_packages'] : null;
+                                    if ($needPk >= $min && ($max === null || $needPk <= $max)) { $best = min($best, (float)$t['price_per_package']); }
+                                }
+                            } catch (\Throwable $e) {}
+                        }
+                        if (!isset($prices[$sid])) { $prices[$sid] = []; }
+                        if (!isset($prices[$sid][$nm]) || $best < $prices[$sid][$nm]) { $prices[$sid][$nm] = $best; }
+                    }
+                }
                 // Fuzzy tokens for missing
                 $found = [];
                 foreach ($prices as $sid0 => $m0) { foreach ($m0 as $nm0 => $_) { $found[$nm0] = true; } }
@@ -1508,7 +1551,50 @@ class ProcurementController extends BaseController
                     if (!isset($prices[$sid])) { $prices[$sid] = []; }
                     if (!isset($prices[$sid][$lname]) || $best < $prices[$sid][$lname]) { $prices[$sid][$lname] = $best; }
                 }
-                // Fuzzy fallback for items not matched by exact LOWER(name)
+                // Size-aware stage: for names not matched exactly, try Bondpaper base name with size in description
+                $foundNames = [];
+                foreach ($prices as $sid0 => $map0) { foreach ($map0 as $nm0 => $_) { $foundNames[$nm0] = true; } }
+                $toFindSize = array_values(array_filter($names, static fn($nm) => !isset($foundNames[$nm])));
+                foreach ($toFindSize as $nm) {
+                    if (!preg_match('/^(a4|long|short|f4)\s+bond\s*paper?$/i', $nm)) { continue; }
+                    $size = strtolower(preg_replace('/\s*bond\s*paper?$/i', '', $nm));
+                    $syns = [];
+                    if ($size === 'a4') { $syns = ['a4','210x297','210 x 297','8.27x11.69','8.3x11.7']; }
+                    elseif ($size === 'long') { $syns = ['long','legal','8.5x13','8.5 x 13']; }
+                    elseif ($size === 'short') { $syns = ['short','letter','8.5x11','8.5 x 11']; }
+                    elseif ($size === 'f4') { $syns = ['f4','8.5x13','8.5 x 13']; }
+                    if (!$syns) { continue; }
+                    $pS = [];
+                    foreach ($chosen as $sid) { $pS[] = (int)$sid; }
+                    $pS[] = 'bondpaper';
+                    $cond = [];
+                    foreach ($syns as $s) { $cond[] = 'LOWER(description) = ?'; $pS[] = strtolower($s); }
+                    foreach ($syns as $s) { $cond[] = 'LOWER(description) ILIKE ?'; $pS[] = '%' . strtolower($s) . '%'; }
+                    $sqlS = 'SELECT id, supplier_id, price, pieces_per_package FROM supplier_items WHERE supplier_id IN (' . $inSup . ') AND LOWER(name) = ? AND (' . implode(' OR ', $cond) . ')';
+                    $stS = $pdo->prepare($sqlS);
+                    $stS->execute($pS);
+                    foreach ($stS->fetchAll() as $it) {
+                        $sid = (int)$it['supplier_id'];
+                        $base = (float)($it['price'] ?? 0);
+                        $ppp = max(1, (int)($it['pieces_per_package'] ?? 1));
+                        $needPk = $ppp > 0 ? (int)ceil((int)($byNameQty[$nm] ?? 0) / $ppp) : 0;
+                        $best = $base;
+                        if ($needPk > 0) {
+                            try {
+                                $tq = $pdo->prepare('SELECT min_packages, max_packages, price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC');
+                                $tq->execute(['id' => (int)$it['id']]);
+                                foreach ($tq->fetchAll() as $t) {
+                                    $min = (int)$t['min_packages'];
+                                    $max = $t['max_packages'] !== null ? (int)$t['max_packages'] : null;
+                                    if ($needPk >= $min && ($max === null || $needPk <= $max)) { $best = min($best, (float)$t['price_per_package']); }
+                                }
+                            } catch (\Throwable $e) {}
+                        }
+                        if (!isset($prices[$sid])) { $prices[$sid] = []; }
+                        if (!isset($prices[$sid][$nm]) || $best < $prices[$sid][$nm]) { $prices[$sid][$nm] = $best; }
+                    }
+                }
+                // Fuzzy fallback for any remaining items not matched yet by size-aware logic
                 $foundNames = [];
                 foreach ($prices as $sid0 => $map0) { foreach ($map0 as $nm0 => $_) { $foundNames[$nm0] = true; } }
                 $toFind = array_values(array_filter($names, static fn($nm) => !isset($foundNames[$nm])));
@@ -2057,17 +2143,16 @@ class ProcurementController extends BaseController
             elseif ($size === 'f4') { $sizeSyns = ['f4','8.5x13','8.5 x 13']; }
             if ($size && $sizeSyns) {
                 try {
-                    $p3 = [];
-                    foreach ($supplierIds as $sid) { $p3[] = (int)$sid; }
-                    // Build OR conditions over description synonyms; require name='bondpaper' to anchor base.
+                    $paramsSize = [];
+                    foreach ($supplierIds as $sid) { $paramsSize[] = (int)$sid; }
+                    $paramsSize[] = 'bondpaper'; // LOWER(name) = ?
+                    // Build OR conditions over description synonyms; prefer exact equality first, then ILIKE variants
                     $condDesc = [];
-                    foreach ($sizeSyns as $syn) { $condDesc[] = 'LOWER(description) = ?'; $p3[] = strtolower($syn); }
-                    // Some suppliers may store size in description with case or mixed spacing; include ILIKE variants
-                    foreach ($sizeSyns as $syn) { $condDesc[] = 'LOWER(description) ILIKE ?'; $p3[] = '%' . strtolower($syn) . '%'; }
+                    foreach ($sizeSyns as $syn) { $condDesc[] = 'LOWER(description) = ?'; $paramsSize[] = strtolower($syn); }
+                    foreach ($sizeSyns as $syn) { $condDesc[] = 'LOWER(description) ILIKE ?'; $paramsSize[] = '%' . strtolower($syn) . '%'; }
                     $sqlSize = 'SELECT supplier_id, price FROM supplier_items WHERE supplier_id IN (' . $in . ') AND LOWER(name) = ? AND (' . implode(' OR ', $condDesc) . ')';
-                    array_unshift($p3, 'bondpaper'); // name anchor
                     $stSize = $pdo->prepare($sqlSize);
-                    $stSize->execute($p3);
+                    $stSize->execute($paramsSize);
                     foreach ($stSize->fetchAll() as $row) {
                         $sid = (int)$row['supplier_id'];
                         $val = (float)$row['price'];
