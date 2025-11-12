@@ -2029,29 +2029,68 @@ class ProcurementController extends BaseController
             $st->execute($params);
             foreach ($st->fetchAll() as $r) { $prices[(int)$r['supplier_id']] = (float)$r['price']; }
         } catch (\Throwable $e) { /* ignore */ }
-        // Fallback: if some suppliers have no explicit quotes, try supplier_items fuzzy by inventory item name
+        // Fallback: if some suppliers have no explicit quotes, try supplier_items using a stricter item-name match
         $missing = array_values(array_filter($supplierIds, static fn($sid)=>!isset($prices[$sid])));
         if ($missing) {
             try {
-                // Get inventory item name and quantity context for potential tiering
-                $nm = (string)$pdo->prepare('SELECT LOWER(name) FROM inventory_items WHERE item_id = :id')->execute(['id'=>$itemId]) && ($tmp=$pdo->query('SELECT LOWER(name) FROM inventory_items WHERE item_id = '.(int)$itemId.' LIMIT 1')->fetchColumn()) ? (string)$tmp : '';
-                $nm = trim($nm);
+                // Get inventory item name
+                $stNm = $pdo->prepare('SELECT LOWER(name) AS nm FROM inventory_items WHERE item_id = :id');
+                $stNm->execute(['id' => $itemId]);
+                $nm = trim((string)($stNm->fetchColumn() ?: ''));
                 if ($nm !== '') {
-                    $tokens = preg_split('/[^a-z0-9]+/i', $nm) ?: [];
-                    $tokens = array_values(array_filter(array_map('strtolower',$tokens), static fn($t)=>strlen($t)>=3));
-                    if ($tokens) {
-                        $likeConds = [];
+                    $inSup = implode(',', array_fill(0, count($missing), '?'));
+                    // 1) Exact name match
+                    $p1 = [];
+                    foreach ($missing as $sid) { $p1[] = (int)$sid; }
+                    $p1[] = $nm;
+                    $sql1 = 'SELECT supplier_id, price FROM supplier_items WHERE supplier_id IN ('.$inSup.') AND LOWER(name) = ?';
+                    $st1 = $pdo->prepare($sql1);
+                    $st1->execute($p1);
+                    foreach ($st1->fetchAll() as $row) {
+                        $sid = (int)$row['supplier_id'];
+                        $val = (float)$row['price'];
+                        if (!isset($prices[$sid]) || $val < $prices[$sid]) { $prices[$sid] = $val; }
+                    }
+                    // 2) Phrase contains (ILIKE %full phrase%) for any still missing
+                    $still = array_values(array_filter($missing, static fn($sid)=>!isset($prices[$sid])));
+                    if ($still) {
                         $p2 = [];
-                        foreach ($missing as $sid) { $p2[] = (int)$sid; }
-                        foreach ($tokens as $tk) { $likeConds[] = 'LOWER(name) ILIKE ?'; $p2[] = '%'.$tk.'%'; }
-                        $sql2 = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE supplier_id IN ('.implode(',', array_fill(0, count($missing), '?')).') AND (' . implode(' OR ', $likeConds) . ')';
+                        foreach ($still as $sid) { $p2[] = (int)$sid; }
+                        $p2[] = '%'.$nm.'%';
+                        $sql2 = 'SELECT supplier_id, price FROM supplier_items WHERE supplier_id IN ('.implode(',', array_fill(0, count($still), '?')).') AND LOWER(name) ILIKE ?';
                         $st2 = $pdo->prepare($sql2);
                         $st2->execute($p2);
-                        foreach ($st2->fetchAll() as $it) {
-                            $sid = (int)$it['supplier_id'];
-                            if (!in_array($sid, $missing, true)) { continue; }
-                            $base = (float)($it['price'] ?? 0);
-                            if (!isset($prices[$sid]) || $base < $prices[$sid]) { $prices[$sid] = $base; }
+                        foreach ($st2->fetchAll() as $row) {
+                            $sid = (int)$row['supplier_id'];
+                            $val = (float)$row['price'];
+                            if (!isset($prices[$sid]) || $val < $prices[$sid]) { $prices[$sid] = $val; }
+                        }
+                    }
+                    // 3) Token match (AND across tokens), include numeric tokens like 'a4', and split 'bondpaper'
+                    $still2 = array_values(array_filter($missing, static fn($sid)=>!isset($prices[$sid])));
+                    if ($still2) {
+                        $rawTokens = preg_split('/[^a-z0-9]+/i', $nm) ?: [];
+                        $tokens = [];
+                        foreach ($rawTokens as $tk) {
+                            $tk = strtolower($tk);
+                            if ($tk === '') continue;
+                            if (is_numeric($tk) || strlen($tk) >= 2) { $tokens[] = $tk; }
+                            if (strpos($tk, 'bondpaper') !== false) { $tokens[] = 'bond'; $tokens[] = 'paper'; }
+                        }
+                        $tokens = array_values(array_unique($tokens));
+                        if ($tokens) {
+                            $params3 = [];
+                            foreach ($still2 as $sid) { $params3[] = (int)$sid; }
+                            $andConds = [];
+                            foreach ($tokens as $tk) { $andConds[] = 'LOWER(name) ILIKE ?'; $params3[] = '%'.$tk.'%'; }
+                            $sql3 = 'SELECT supplier_id, price FROM supplier_items WHERE supplier_id IN ('.implode(',', array_fill(0, count($still2), '?')).') AND '.implode(' AND ', $andConds);
+                            $st3 = $pdo->prepare($sql3);
+                            $st3->execute($params3);
+                            foreach ($st3->fetchAll() as $row) {
+                                $sid = (int)$row['supplier_id'];
+                                $val = (float)$row['price'];
+                                if (!isset($prices[$sid]) || $val < $prices[$sid]) { $prices[$sid] = $val; }
+                            }
                         }
                     }
                 }

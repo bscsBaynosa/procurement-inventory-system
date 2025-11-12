@@ -20,7 +20,7 @@
         .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:0 12px; height:var(--control-h); min-width:120px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); text-decoration:none; font-size:12px; cursor:pointer; }
         .btn.primary{ border-color: color-mix(in oklab, var(--accent) 35%, var(--border)); background: color-mix(in oklab, var(--accent) 10%, transparent); }
         select{ padding:0 10px; height:var(--control-h); border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); }
-        .grid{ display:grid; grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); gap:14px; }
+    .grid{ display:grid; grid-template-columns: repeat(auto-fill,minmax(260px,1fr)); gap:14px; }
         ul{ margin:4px 0 0 18px; }
         pre{ margin:0; white-space:pre-wrap; }
         table{ width:100%; border-collapse:separate; border-spacing:0; background:var(--card); border:1px solid var(--border); border-radius:12px; overflow:hidden; }
@@ -34,6 +34,10 @@
         .totals{ display:flex; gap:10px; flex-wrap:wrap; margin-top:10px; }
         .total-pill{ padding:8px 10px; border:1px solid var(--border); border-radius:999px; background:color-mix(in oklab, var(--card) 96%, var(--bg)); font-size:13px; }
         .total-pill.best{ border-color:color-mix(in oklab, var(--accent) 40%, var(--border)); background:color-mix(in oklab, var(--accent) 10%, transparent); }
+    /* Supplier checkbox chips */
+    .supplier-box label{ border:1px solid var(--border); background:color-mix(in oklab, var(--card) 96%, var(--bg)); border-radius:10px; padding:8px 10px; cursor:pointer; }
+    .supplier-box input{ width:16px; height:16px; }
+    .quotes-cell div{ padding:6px 8px; border-radius:8px; border:1px solid var(--border); margin-bottom:6px; background:color-mix(in oklab, var(--card) 98%, var(--bg)); }
         /* Responsive improvements */
         @media (max-width: 1200px) {
             .layout{ grid-template-columns: 1fr; }
