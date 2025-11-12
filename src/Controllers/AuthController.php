@@ -73,6 +73,17 @@ class AuthController extends BaseController
         } catch (\Throwable $e) {
             // Most common cause: database not initialized or not reachable
             error_log('[AuthController@login] ' . $e->getMessage());
+            // If the core users table doesn't exist yet, auto-redirect to setup which can bootstrap without a token
+            try {
+                $pdo = Connection::resolve();
+                $hasUsers = (bool)$pdo->query("SELECT to_regclass('public.users')")->fetchColumn();
+                if (!$hasUsers) {
+                    header('Location: /setup');
+                    return;
+                }
+            } catch (\Throwable $ignored) {
+                // Fall through to guidance page below
+            }
             $forwarded = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
             $scheme = $forwarded !== '' ? explode(',', $forwarded)[0] : ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http');
             $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
