@@ -212,7 +212,12 @@
                         if (values.length > 5) { this.checked = false; alert('Select at most 5 suppliers for this item.'); return; }
                         const hint = document.querySelector('.hint-' + itemId);
                         if (hint) { hint.textContent = values.length < 3 ? 'Select 3–5 suppliers.' : ' '; }
-                        if (values.length >= 3) { loadQuotesForItem(itemId, values); }
+                        // Fetch quotes as soon as at least one supplier is selected
+                        if (values.length >= 1) {
+                            const cell = document.querySelector(`.quotes-cell[data-item-id="${itemId}"]`);
+                            if (cell) { cell.innerHTML = '<em style="color:var(--muted);">Loading…</em>'; }
+                            loadQuotesForItem(itemId, values);
+                        }
                         // Also re-filter award options to only selected ones
                         const awardSel = document.querySelector('.award-select[data-item-id="' + itemId + '"]');
                         if (awardSel) {
@@ -239,8 +244,30 @@
                 }
                 updateGenerateState();
 
+                // On first load, auto-fetch quotes for rows that already have selections.
+                function initRowQuotes(){
+                    document.querySelectorAll('tr[data-item-id]').forEach(tr => {
+                        const itemId = tr.getAttribute('data-item-id');
+                        const selected = getSelectedSuppliersForItem(itemId);
+                        // Prefetch when 1+ selected
+                        if (selected.length >= 1) {
+                            const cell = tr.querySelector('.quotes-cell');
+                            if (cell) { cell.innerHTML = '<em style="color:var(--muted);">Loading…</em>'; }
+                            loadQuotesForItem(itemId, selected);
+                        }
+                        // Also pre-filter award options
+                        const awardSel = tr.querySelector('.award-select');
+                        if (awardSel) {
+                            Array.from(awardSel.options).forEach(opt => {
+                                if (!opt.value) { opt.disabled = false; return; }
+                                opt.disabled = !selected.includes(Number(opt.value));
+                            });
+                        }
+                    });
+                }
                 // Remove legacy global-matrix handlers (no longer used). All logic is per-item via loadQuotesForItem.
-                // Ensure initial state reflects current selections.
+                // Ensure initial state reflects current selections and enable Generate when valid.
+                initRowQuotes();
                 updateGenerateState();
                 // Preview flow: submit to preview endpoint in a new tab and enable Send button
                 btnPreview.addEventListener('click', function(){

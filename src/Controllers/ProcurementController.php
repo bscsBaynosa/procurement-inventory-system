@@ -2058,7 +2058,11 @@ class ProcurementController extends BaseController
                 if ($nm === '' && $itemName !== '') { $nm = strtolower($itemName); }
                 if ($nm !== '') {
                     $inSup = implode(',', array_fill(0, count($missing), '?'));
-                    // 1) Exact name match
+                    // Strategy order for fallback pricing:
+                    //   1) Exact name match
+                    //   2) Case-insensitive phrase contains (%full phrase%)
+                    //   3) Token AND match (including numeric tokens and splitting compound words like bondpaper)
+                    // Each stage only queries remaining missing suppliers to reduce overhead.
                     $p1 = [];
                     foreach ($missing as $sid) { $p1[] = (int)$sid; }
                     $p1[] = $nm;
@@ -2085,7 +2089,8 @@ class ProcurementController extends BaseController
                             if (!isset($prices[$sid]) || $val < $prices[$sid]) { $prices[$sid] = $val; }
                         }
                     }
-                    // 3) Token match (AND across tokens), include numeric tokens like 'a4', and split 'bondpaper'
+                    // 3) Token match (AND across tokens), include numeric tokens like 'a4', and split 'bondpaper'.
+                    //    Additionally if tokens end with 'long' or 'a4', try to append 'bond' and 'paper' tokens to discriminate.
                     $still2 = array_values(array_filter($missing, static fn($sid)=>!isset($prices[$sid])));
                     if ($still2) {
                         $rawTokens = preg_split('/[^a-z0-9]+/i', $nm) ?: [];
@@ -2095,6 +2100,7 @@ class ProcurementController extends BaseController
                             if ($tk === '') continue;
                             if (is_numeric($tk) || strlen($tk) >= 2) { $tokens[] = $tk; }
                             if (strpos($tk, 'bondpaper') !== false) { $tokens[] = 'bond'; $tokens[] = 'paper'; }
+                            if (in_array($tk, ['long','a4'], true)) { $tokens[] = 'bond'; $tokens[] = 'paper'; }
                         }
                         $tokens = array_values(array_unique($tokens));
                         if ($tokens) {
@@ -2110,6 +2116,25 @@ class ProcurementController extends BaseController
                                 $val = (float)$row['price'];
                                 if (!isset($prices[$sid]) || $val < $prices[$sid]) { $prices[$sid] = $val; }
                             }
+                        }
+                        // If still missing and we have 'long' variant, attempt a relaxed OR token search to catch mismatched spacing
+                        $still3 = array_values(array_filter($still2, static fn($sid)=>!isset($prices[$sid])));
+                        if ($still3 && str_contains($nm, 'long')) {
+                            $params4 = [];
+                            foreach ($still3 as $sid) { $params4[] = (int)$sid; }
+                            $params4[] = '%long%';
+                            $params4[] = '%bond%';
+                            $params4[] = '%paper%';
+                            $sql4 = 'SELECT supplier_id, price FROM supplier_items WHERE supplier_id IN ('.implode(',', array_fill(0, count($still3), '?')).') AND (LOWER(name) ILIKE ? OR LOWER(name) ILIKE ? OR LOWER(name) ILIKE ? )';
+                            try {
+                                $st4 = $pdo->prepare($sql4);
+                                $st4->execute($params4);
+                                foreach ($st4->fetchAll() as $row) {
+                                    $sid = (int)$row['supplier_id'];
+                                    $val = (float)$row['price'];
+                                    if (!isset($prices[$sid]) || $val < $prices[$sid]) { $prices[$sid] = $val; }
+                                }
+                            } catch (\Throwable $e) {}
                         }
                     }
                 }
