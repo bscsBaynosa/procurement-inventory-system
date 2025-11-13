@@ -200,6 +200,45 @@ class ProcurementController extends BaseController
                     $awardedBySupplier[$awardSid][$iid] = ['name'=>$name, 'unit_price'=>$unitPrice];
                 }
             } catch (\Throwable $e) {}
+            // Fallback: if no normalized per-item rows present, derive directly from awards JSON and compute prices
+            if (empty($awardedBySupplier) && !empty($awardJsonMap)) {
+                // Build mapping item_id <= from PR rows and awards JSON keys (id or name)
+                $idByLowerName = [];
+                foreach ($rows as $r) { $iid0=(int)($r['item_id']??0); $nm0=strtolower(trim((string)($r['item_name']??''))); if($iid0>0 && $nm0!==''){ $idByLowerName[$nm0]=$iid0; } }
+                $awardById = [];
+                foreach ($awardJsonMap as $k=>$sidVal) {
+                    $sidF = (int)$sidVal; if ($sidF<=0) continue;
+                    if (ctype_digit((string)$k)) { $awardById[(int)$k] = $sidF; }
+                    else { $lk = strtolower(trim((string)$k)); if(isset($idByLowerName[$lk])) { $awardById[$idByLowerName[$lk]] = $sidF; } }
+                }
+                foreach ($rows as $r) {
+                    $iid=(int)($r['item_id']??0); if($iid<=0) continue;
+                    $sid = $awardById[$iid] ?? null; if(!$sid) continue;
+                    $name = (string)($r['item_name'] ?? '');
+                    // Price resolution: 1) supplier_items exact name; 2) bondpaper synonyms; else 0
+                    $unitPrice = 0.0;
+                    try {
+                        $stP = $pdo->prepare('SELECT price FROM supplier_items WHERE supplier_id = :sid AND LOWER(name) = LOWER(:nm) ORDER BY price ASC LIMIT 1');
+                        $stP->execute(['sid'=>$sid,'nm'=>$name]);
+                        if ($pRow=$stP->fetch()) { $unitPrice = (float)($pRow['price'] ?? 0); }
+                    } catch (\Throwable $e) {}
+                    if (($unitPrice === null || $unitPrice <= 0) && preg_match('/^(a4|long|short|f4)\s+bond\s*paper?$/i', $name)) {
+                        $size = strtolower(preg_replace('/\s+bond\s*paper?/i','', strtolower($name)));
+                        $syns=[]; if($size==='a4'){ $syns=['a4','210x297','210 x 297','8.27x11.69','8.3x11.7']; } elseif($size==='long'){ $syns=['long','legal','8.5x13','8.5 x 13']; } elseif($size==='short'){ $syns=['short','letter','8.5x11','8.5 x 11']; } elseif($size==='f4'){ $syns=['f4','8.5x13','8.5 x 13']; }
+                        if ($syns) {
+                            try {
+                                $paramsB=['sid'=>$sid]; $cond=[]; foreach($syns as $s){ $cond[]='LOWER(description)=?'; $paramsB[]=strtolower($s);} foreach($syns as $s){ $cond[]='LOWER(description) ILIKE ?'; $paramsB[]='%'.strtolower($s).'%'; }
+                                $sqlB='SELECT price FROM supplier_items WHERE supplier_id = :sid AND LOWER(name)=\'bondpaper\' AND (' . implode(' OR ', $cond) . ') ORDER BY price ASC LIMIT 1';
+                                $sidVal=array_shift($paramsB); $stmtB=$pdo->prepare(str_replace(':sid','?',$sqlB)); $stmtB->execute(array_merge([$sidVal], $paramsB));
+                                if($rowB=$stmtB->fetch()){ $unitPrice=(float)($rowB['price']??0); }
+                            } catch (\Throwable $e) {}
+                        }
+                    }
+                    if ($unitPrice === null || $unitPrice < 0) { $unitPrice = 0.0; }
+                    if (!isset($awardedBySupplier[$sid])) { $awardedBySupplier[$sid] = []; }
+                    $awardedBySupplier[$sid][$iid] = ['name'=>$name, 'unit_price'=>$unitPrice];
+                }
+            }
         }
         // Awarded supplier ids and names
         $awardedSupplierIds = array_keys($awardedBySupplier);
