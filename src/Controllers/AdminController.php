@@ -211,14 +211,17 @@ class AdminController extends BaseController
         $poId = isset($_POST['po_id']) ? (int)$_POST['po_id'] : 0;
         if ($pr === '') { header('Location: /inbox?error=No+PR'); return; }
         // Find the PO
-        $st = $poId > 0
-            ? $this->pdo->prepare('SELECT id, po_number, supplier_id, pdf_path FROM purchase_orders WHERE id=:id AND pr_number=:pr')
-            : $this->pdo->prepare("SELECT id, po_number, supplier_id, pdf_path FROM purchase_orders WHERE pr_number=:pr ORDER BY created_at DESC LIMIT 1");
+        $pk = \App\Database\SchemaHelper::getPoPrimaryKey($this->pdo);
+        $selectSql = $poId > 0
+            ? ('SELECT * FROM purchase_orders WHERE ' . $pk . ' = :id AND pr_number = :pr')
+            : ("SELECT * FROM purchase_orders WHERE pr_number = :pr ORDER BY created_at DESC LIMIT 1");
+        $st = $this->pdo->prepare($selectSql);
         $st->execute($poId > 0 ? ['id' => $poId, 'pr' => $pr] : ['pr' => $pr]);
         $po = $st->fetch();
         if (!$po) { header('Location: /inbox?error=PO+not+found'); return; }
-        $this->pdo->prepare("UPDATE purchase_orders SET status='po_admin_approved', updated_at=NOW() WHERE id=:id")
-            ->execute(['id' => (int)$po['id']]);
+        $idVal = (int)($po[$pk] ?? 0);
+        $this->pdo->prepare("UPDATE purchase_orders SET status='po_admin_approved', updated_at=NOW() WHERE $pk = :id")
+            ->execute(['id' => $idVal]);
         // Notify Procurement (all) and Supplier with the PO attachment
         try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
         try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
@@ -247,14 +250,17 @@ class AdminController extends BaseController
         $poId = isset($_POST['po_id']) ? (int)$_POST['po_id'] : 0;
         $reason = trim((string)($_POST['reason'] ?? ''));
         if ($pr === '') { header('Location: /inbox?error=No+PR'); return; }
-        $st = $poId > 0
-            ? $this->pdo->prepare('SELECT id FROM purchase_orders WHERE id=:id AND pr_number=:pr')
-            : $this->pdo->prepare("SELECT id FROM purchase_orders WHERE pr_number=:pr ORDER BY created_at DESC LIMIT 1");
+        $pk = \App\Database\SchemaHelper::getPoPrimaryKey($this->pdo);
+        $selectSql = $poId > 0
+            ? ('SELECT * FROM purchase_orders WHERE ' . $pk . ' = :id AND pr_number = :pr')
+            : ("SELECT * FROM purchase_orders WHERE pr_number = :pr ORDER BY created_at DESC LIMIT 1");
+        $st = $this->pdo->prepare($selectSql);
         $st->execute($poId > 0 ? ['id' => $poId, 'pr' => $pr] : ['pr' => $pr]);
         $po = $st->fetch();
         if (!$po) { header('Location: /inbox?error=PO+not+found'); return; }
-        $this->pdo->prepare("UPDATE purchase_orders SET status='po_rejected', updated_at=NOW() WHERE id=:id")
-            ->execute(['id' => (int)$po['id']]);
+        $idVal = (int)($po[$pk] ?? 0);
+        $this->pdo->prepare("UPDATE purchase_orders SET status='po_rejected', updated_at=NOW() WHERE $pk = :id")
+            ->execute(['id' => $idVal]);
         try { $this->requests()->updateGroupStatus($pr, 'po_rejected', (int)($_SESSION['user_id'] ?? 0), $reason !== '' ? ('PO rejected: ' . $reason) : 'PO rejected'); } catch (\Throwable $ignored) {}
         header('Location: /inbox?po_rejected=1');
     }

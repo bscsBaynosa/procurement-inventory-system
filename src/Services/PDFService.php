@@ -653,7 +653,8 @@ class PDFService
 	 */
 	public function downloadPurchaseOrderPDF(array $po, string $disposition = 'attachment'): void
 	{
-		$tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'PO_' . preg_replace('/[^A-Za-z0-9_-]/','_', (string)($po['po_number'] ?? 'PO')) . '_' . substr(sha1(uniqid('', true)),0,8) . '.pdf';
+		$fname = 'PO_' . preg_replace('/[^A-Za-z0-9_-]/','_', (string)($po['po_number'] ?? 'PO')) . '_' . substr(sha1(uniqid('', true)),0,8) . '.pdf';
+		$tmp = \App\Database\SchemaHelper::resolvePdfStoragePath($fname);
 		$this->generatePurchaseOrderPDFToFile($po, $tmp);
 		if (@is_file($tmp)) {
 			header('Content-Type: application/pdf');

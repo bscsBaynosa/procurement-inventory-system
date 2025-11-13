@@ -309,7 +309,8 @@ class SupplierController extends BaseController
         try {
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS purchase_orders (id BIGSERIAL PRIMARY KEY, pr_number VARCHAR(64) NOT NULL, po_number VARCHAR(64) NOT NULL, supplier_id BIGINT NOT NULL, status VARCHAR(64) NOT NULL DEFAULT 'draft', pdf_path TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());");
         } catch (\Throwable $e) {}
-        $st = $this->pdo->prepare('SELECT id, pr_number, po_number, status, pdf_path, created_at FROM purchase_orders WHERE supplier_id = :sid ORDER BY created_at DESC');
+        $pk = \App\Database\SchemaHelper::getPoPrimaryKey($this->pdo);
+        $st = $this->pdo->prepare('SELECT ' . $pk . ' AS id, pr_number, po_number, status, pdf_path, created_at FROM purchase_orders WHERE supplier_id = :sid ORDER BY created_at DESC');
         $st->execute(['sid' => $me]);
         $pos = $st->fetchAll();
         $this->render('dashboard/supplier_pos.php', ['pos' => $pos]);
@@ -326,7 +327,8 @@ class SupplierController extends BaseController
         // Optional: attach deal PDF path from a file upload (out of scope here). We allow message only.
         if ($poId <= 0) { header('Location: /supplier/pos?error=Invalid+PO'); return; }
         // Verify ownership
-        $st = $this->pdo->prepare('SELECT pr_number FROM purchase_orders WHERE id=:id AND supplier_id=:sid');
+        $pk = \App\Database\SchemaHelper::getPoPrimaryKey($this->pdo);
+        $st = $this->pdo->prepare('SELECT pr_number FROM purchase_orders WHERE ' . $pk . ' = :id AND supplier_id = :sid');
         $st->execute(['id' => $poId, 'sid' => $me]);
         $pr = $st->fetchColumn();
         if (!$pr) { header('Location: /supplier/pos?error=Not+found'); return; }
@@ -342,7 +344,7 @@ class SupplierController extends BaseController
             foreach ($recipients as $row) { $ins->execute(['s' => $me, 'r' => (int)$row['user_id'], 'j' => $subject, 'b' => $body]); }
         }
         // Mark PO as responded
-        $this->pdo->prepare("UPDATE purchase_orders SET status='supplier_response_submitted', updated_at=NOW() WHERE id=:id")
+        $this->pdo->prepare("UPDATE purchase_orders SET status='supplier_response_submitted', updated_at=NOW() WHERE $pk = :id")
             ->execute(['id' => $poId]);
         // Update PR group status
         try { (new \App\Services\RequestService())->updateGroupStatus((string)$pr, 'supplier_response', $me, 'Supplier responded to PO'); } catch (\Throwable $ignored) {}
@@ -355,7 +357,8 @@ class SupplierController extends BaseController
         $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
         if ($id <= 0) { http_response_code(404); echo 'Not found'; return; }
         // Load PO
-        $st = $this->pdo->prepare('SELECT supplier_id, pdf_path FROM purchase_orders WHERE id = :id');
+        $pk = \App\Database\SchemaHelper::getPoPrimaryKey($this->pdo);
+        $st = $this->pdo->prepare('SELECT supplier_id, pdf_path FROM purchase_orders WHERE ' . $pk . ' = :id');
         $st->execute(['id' => $id]);
         $row = $st->fetch();
         if (!$row) { http_response_code(404); echo 'Not found'; return; }

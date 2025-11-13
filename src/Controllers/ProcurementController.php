@@ -34,15 +34,7 @@ class ProcurementController extends BaseController
     // Resolve a writable directory for generating PDFs (storage/pdf if writable, else system temp)
     private function resolveWritablePdfDir(): string
     {
-        $candidates = [];
-        $root = @realpath(__DIR__ . '/../../..') ?: null;
-        if ($root) { $candidates[] = $root . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf'; }
-        $candidates[] = sys_get_temp_dir();
-        foreach ($candidates as $dir) {
-            if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
-            if (is_dir($dir) && is_writable($dir)) { return $dir; }
-        }
-        return '.'; // last resort
+        return \App\Database\SchemaHelper::resolvePdfStoragePath(null);
     }
 
     // --- Purchase Orders ---
@@ -3708,7 +3700,8 @@ class ProcurementController extends BaseController
                         $st->execute(['po' => $poNumber]);
                         $row = $st->fetch();
                     } else {
-                        $st = $pdo->prepare('SELECT * FROM purchase_orders WHERE id = :id LIMIT 1');
+                        $pk = \App\Database\SchemaHelper::getPoPrimaryKey($pdo);
+                        $st = $pdo->prepare('SELECT * FROM purchase_orders WHERE ' . $pk . ' = :id LIMIT 1');
                         $st->execute(['id' => $poId]);
                         $row = $st->fetch();
                     }
@@ -3716,8 +3709,9 @@ class ProcurementController extends BaseController
                 if (!$row) { header('HTTP/1.1 404 Not Found'); echo 'PO not found'; return; }
                 $items = [];
                 try {
+                    $pk = \App\Database\SchemaHelper::getPoPrimaryKey($pdo);
                     $stI = $pdo->prepare('SELECT description, unit, qty, unit_price, line_total FROM purchase_order_items WHERE po_id = :id ORDER BY id ASC');
-                    $stI->execute(['id' => (int)$row['id']]);
+                    $stI->execute(['id' => (int)($row[$pk] ?? 0)]);
                     foreach ($stI->fetchAll() as $r) {
                         $items[] = ['description'=>(string)$r['description'],'unit'=>(string)$r['unit'],'qty'=>(int)$r['qty'],'unit_price'=>(float)$r['unit_price'],'total'=>(float)$r['line_total']];
                     }
@@ -3839,13 +3833,14 @@ class ProcurementController extends BaseController
                 $st->execute(['po' => $poNumber]);
                 $row = $st->fetch();
             } elseif ($poId > 0) {
-                $st = $pdo->prepare('SELECT * FROM purchase_orders WHERE id = :id LIMIT 1');
+                $pk = \App\Database\SchemaHelper::getPoPrimaryKey($pdo);
+                $st = $pdo->prepare('SELECT * FROM purchase_orders WHERE ' . $pk . ' = :id LIMIT 1');
                 $st->execute(['id' => $poId]);
                 $row = $st->fetch();
             }
         } catch (\Throwable $e) { $row = null; }
         if (!$row) { header('Location: /manager/requests?error=' . rawurlencode('PO not found')); return; }
-        $pid = (int)($row['id'] ?? 0);
+        $pid = (function() use ($pdo, $row) { try { $pk = \App\Database\SchemaHelper::getPoPrimaryKey($pdo); return (int)($row[$pk] ?? 0); } catch (\Throwable $e) { return (int)($row['id'] ?? 0); } })();
         $items = [];
         try {
             $stI = $pdo->prepare('SELECT description, unit, qty, unit_price, line_total FROM purchase_order_items WHERE po_id = :id ORDER BY id ASC');
