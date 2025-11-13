@@ -120,30 +120,89 @@ class ProcurementController extends BaseController
             return;
         }
         $this->ensurePoTables();
-        // Load suppliers list (optional: narrow to previously selected suppliers)
+        // Load suppliers list (active suppliers)
         $pdo = \App\Database\Connection::resolve();
         $suppliers = $pdo->query("SELECT user_id, full_name FROM users WHERE is_active=TRUE AND role='supplier' ORDER BY full_name ASC")->fetchAll();
-        // Prefill from PR‑Canvass awards: group items by awarded supplier, then filter items for the selected supplier
-        $awardedBySupplier = [];
-        $awardedSupplierIds = [];
+        // Unified awarding extraction:
+        //   1. Load latest pr_canvassing_details row (canvass_id, awards JSON)
+        //   2. Load all pr_canvassing_items rows for that canvass_id (may lack awarded_supplier_id)
+        //   3. For each item, determine awarded supplier (explicit, awards JSON, or cheapest quote)
+        //   4. Group items by awarded supplier and compute unit_price (awarded_price, quote price, or supplier_items lookup)
+        $canvassId = null; $awardJsonMap = [];
         try {
-            $stCan = $pdo->prepare('SELECT item_id, item_name, awarded_supplier_id, awarded_price FROM pr_canvassing_items WHERE pr_number = :pr AND awarded_supplier_id IS NOT NULL');
-            $stCan->execute(['pr' => $pr]);
-            $awards = $stCan->fetchAll();
-            if ($awards) {
-                foreach ($awards as $a) {
-                    $sid = (int)($a['awarded_supplier_id'] ?? 0); if ($sid <= 0) continue;
-                    $awardedSupplierIds[$sid] = true;
-                    if (!isset($awardedBySupplier[$sid])) { $awardedBySupplier[$sid] = []; }
-                    $awardedBySupplier[$sid][(int)($a['item_id'] ?? 0)] = [
-                        'name' => (string)($a['item_name'] ?? ''),
-                        'unit_price' => (float)($a['awarded_price'] ?? 0),
-                    ];
-                }
+            $stDet = $pdo->prepare('SELECT canvass_id, awards FROM pr_canvassing_details WHERE pr_number = :pr ORDER BY created_at DESC LIMIT 1');
+            $stDet->execute(['pr'=>$pr]);
+            if ($det = $stDet->fetch()) {
+                $canvassId = (string)($det['canvass_id'] ?? '');
+                $rawAwards = (string)($det['awards'] ?? '');
+                $dec = $rawAwards !== '' ? json_decode($rawAwards, true) : [];
+                if (is_array($dec)) { $awardJsonMap = $dec; }
             }
-        } catch (\Throwable $e) { /* no awards yet; allow manual PO */ }
-        $awardedSupplierIds = array_keys($awardedSupplierIds);
-        // Resolve supplier names for awarded suppliers
+        } catch (\Throwable $e) {}
+        $awardedBySupplier = []; // supplier_id => [ item_id => ['name'=>..., 'unit_price'=>...] ]
+        if ($canvassId !== '') {
+            try {
+                $stItems = $pdo->prepare('SELECT item_id, item_name, quotes, awarded_supplier_id, awarded_price FROM pr_canvassing_items WHERE canvass_id = :cid');
+                $stItems->execute(['cid'=>$canvassId]);
+                $itemRows = $stItems->fetchAll();
+                // Build name->id map for awards JSON resolution
+                $nameToId = [];
+                foreach ($rows as $r0) { $iid0=(int)($r0['item_id']??0); $nm0=strtolower(trim((string)($r0['item_name']??''))); if($iid0>0 && $nm0!==''){ $nameToId[$nm0]=$iid0; } }
+                foreach ($itemRows as $ir) {
+                    $iid = (int)($ir['item_id'] ?? 0); if ($iid <= 0) continue;
+                    $name = (string)($ir['item_name'] ?? '');
+                    $quotesMap = [];
+                    $rawQuotes = (string)($ir['quotes'] ?? '');
+                    if ($rawQuotes !== '') { $decQ = json_decode($rawQuotes, true); if (is_array($decQ)) { foreach ($decQ as $sid=>$p){ $quotesMap[(int)$sid] = (float)$p; } } }
+                    $explicitAwardSid = (int)($ir['awarded_supplier_id'] ?? 0) ?: null;
+                    $explicitAwardPrice = ($ir['awarded_price'] !== null) ? (float)$ir['awarded_price'] : null;
+                    // Resolve award from JSON map if explicit missing
+                    $awardSid = $explicitAwardSid;
+                    if (!$awardSid) {
+                        // JSON keys may be item_id or item_name
+                        if (isset($awardJsonMap[$iid])) { $awardSid = (int)$awardJsonMap[$iid]; }
+                        else {
+                            $lk = strtolower(trim($name));
+                            if ($lk !== '' && isset($awardJsonMap[$lk])) { $awardSid = (int)$awardJsonMap[$lk]; }
+                        }
+                    }
+                    // If still no award, choose cheapest quote
+                    if (!$awardSid && $quotesMap) {
+                        asort($quotesMap); $awardSid = (int)array_key_first($quotesMap);
+                    }
+                    if (!$awardSid || $awardSid <= 0) { continue; }
+                    // Resolve unit price
+                    $unitPrice = $explicitAwardPrice;
+                    if ($unitPrice === null) { $unitPrice = $quotesMap[$awardSid] ?? null; }
+                    if ($unitPrice === null || $unitPrice <= 0) {
+                        // Attempt supplier_items lookup
+                        try {
+                            $stP = $pdo->prepare('SELECT price FROM supplier_items WHERE supplier_id = :sid AND LOWER(name) = LOWER(:nm) ORDER BY price ASC LIMIT 1');
+                            $stP->execute(['sid'=>$awardSid,'nm'=>$name]);
+                            if ($pRow=$stP->fetch()) { $unitPrice = (float)($pRow['price'] ?? 0); }
+                        } catch (\Throwable $e) {}
+                        // Size-aware bondpaper variant
+                        if (($unitPrice === null || $unitPrice <= 0) && preg_match('/^(a4|long|short|f4)\s+bond\s*paper?$/i', $name)) {
+                            $size = strtolower(preg_replace('/\s+bond\s*paper?/i','', strtolower($name)));
+                            $syns=[]; if($size==='a4'){ $syns=['a4','210x297','210 x 297','8.27x11.69','8.3x11.7']; } elseif($size==='long'){ $syns=['long','legal','8.5x13','8.5 x 13']; } elseif($size==='short'){ $syns=['short','letter','8.5x11','8.5 x 11']; } elseif($size==='f4'){ $syns=['f4','8.5x13','8.5 x 13']; }
+                            if ($syns) {
+                                try {
+                                    $paramsB=['sid'=>$awardSid]; $cond=[]; foreach($syns as $s){ $cond[]='LOWER(description)=?'; $paramsB[]=strtolower($s);} foreach($syns as $s){ $cond[]='LOWER(description) ILIKE ?'; $paramsB[]='%'.strtolower($s).'%'; }
+                                    $sqlB='SELECT price FROM supplier_items WHERE supplier_id = :sid AND LOWER(name)=\'bondpaper\' AND (' . implode(' OR ', $cond) . ') ORDER BY price ASC LIMIT 1';
+                                    $sidVal=array_shift($paramsB); $stmtB=$pdo->prepare(str_replace(':sid','?',$sqlB)); $stmtB->execute(array_merge([$sidVal], $paramsB));
+                                    if($rowB=$stmtB->fetch()){ $unitPrice=(float)($rowB['price']??0); }
+                                } catch (\Throwable $e) {}
+                            }
+                        }
+                    }
+                    if ($unitPrice === null || $unitPrice < 0) { $unitPrice = 0.0; }
+                    if (!isset($awardedBySupplier[$awardSid])) { $awardedBySupplier[$awardSid] = []; }
+                    $awardedBySupplier[$awardSid][$iid] = ['name'=>$name, 'unit_price'=>$unitPrice];
+                }
+            } catch (\Throwable $e) {}
+        }
+        // Awarded supplier ids and names
+        $awardedSupplierIds = array_keys($awardedBySupplier);
         $awardedSupplierNames = [];
         if ($awardedSupplierIds) {
             $in = implode(',', array_fill(0, count($awardedSupplierIds), '?'));
@@ -151,110 +210,28 @@ class ProcurementController extends BaseController
                 $stSn = $pdo->prepare('SELECT user_id, full_name FROM users WHERE user_id IN (' . $in . ')');
                 $stSn->execute(array_map('intval', $awardedSupplierIds));
                 foreach ($stSn->fetchAll() as $row) { $awardedSupplierNames[(int)$row['user_id']] = (string)$row['full_name']; }
-            } catch (\Throwable $e) { /* ignore */ }
+            } catch (\Throwable $e) {}
         }
-        // Choose which supplier this PO form is for (query param takes priority)
+        // Choose selected supplier
         $selectedSupplierId = null;
         if ($awardedSupplierIds) {
             $qsSupplier = isset($_GET['supplier']) ? (int)$_GET['supplier'] : 0;
             if ($qsSupplier > 0 && in_array($qsSupplier, $awardedSupplierIds, true)) { $selectedSupplierId = $qsSupplier; }
             else { $selectedSupplierId = $awardedSupplierIds[0]; }
         }
-        // Build PO item rows filtered to the selected supplier with unit prices from canvass
+        // Build poItems
         $poItems = [];
         if ($selectedSupplierId !== null && isset($awardedBySupplier[$selectedSupplierId])) {
-            $awardItems = $awardedBySupplier[$selectedSupplierId]; // keyed by item_id
             foreach ($rows as $r) {
-                $iid = (int)($r['item_id'] ?? 0);
-                if ($iid > 0 && isset($awardItems[$iid])) {
-                    $poItems[] = [
-                        'description' => (string)($r['item_name'] ?? ''),
-                        'unit' => (string)($r['unit'] ?? ''),
-                        'qty' => (int)($r['quantity'] ?? 0),
-                        'unit_price' => (float)$awardItems[$iid]['unit_price'],
-                    ];
-                }
+                $iid = (int)($r['item_id'] ?? 0); if ($iid<=0) continue;
+                if (!isset($awardedBySupplier[$selectedSupplierId][$iid])) continue;
+                $poItems[] = [
+                    'description' => (string)($r['item_name'] ?? ''),
+                    'unit' => (string)($r['unit'] ?? ''),
+                    'qty' => (int)($r['quantity'] ?? 0),
+                    'unit_price' => (float)$awardedBySupplier[$selectedSupplierId][$iid]['unit_price'],
+                ];
             }
-        }
-        // Fallback path: if no per-item awards table entries exist, derive from pr_canvassing_details JSON awards map
-        if (empty($poItems)) {
-            try {
-                $stDet = $pdo->prepare('SELECT suppliers, selections, awards FROM pr_canvassing_details WHERE pr_number = :pr ORDER BY created_at DESC LIMIT 1');
-                $stDet->execute(['pr' => $pr]);
-                if ($det = $stDet->fetch()) {
-                    $awardsJson = (string)($det['awards'] ?? '');
-                    $awardMapRaw = $awardsJson !== '' ? json_decode($awardsJson, true) : [];
-                    if (is_array($awardMapRaw) && !empty($awardMapRaw)) {
-                        // Normalize keys (may be item_id or name). Build map item_id->supplier_id.
-                        $idByLowerName = [];
-                        foreach ($rows as $r) { $iid0=(int)($r['item_id']??0); $nm0=strtolower(trim((string)($r['item_name']??''))); if($iid0>0 && $nm0!==''){ $idByLowerName[$nm0]=$iid0; } }
-                        $awardByIdFallback = [];
-                        foreach ($awardMapRaw as $k=>$sidVal) {
-                            $sidF = (int)$sidVal; if ($sidF<=0) continue;
-                            if (ctype_digit((string)$k)) { $awardByIdFallback[(int)$k] = $sidF; }
-                            else { $lk = strtolower(trim((string)$k)); if(isset($idByLowerName[$lk])) { $awardByIdFallback[$idByLowerName[$lk]] = $sidF; } }
-                        }
-                        // Determine supplier set from awards
-                        $awSupIds = [];
-                        foreach ($awardByIdFallback as $iidF=>$sidF) { $awSupIds[$sidF]=true; }
-                        $awSupIds = array_keys($awSupIds);
-                        if ($awSupIds) {
-                            // Prefer explicit supplier query param; else first awarded supplier
-                            if ($selectedSupplierId === null) {
-                                $selectedSupplierId = in_array((int)($_GET['supplier'] ?? 0), $awSupIds, true) ? (int)$_GET['supplier'] : (int)$awSupIds[0];
-                            }
-                            $lockSupplier = true;
-                            $prefillSupplierId = $selectedSupplierId;
-                            // Attempt to compute unit prices per awarded item (exact match or size-aware bondpaper variant)
-                            $priceCache = [];
-                            foreach ($rows as $r) {
-                                $iid = (int)($r['item_id'] ?? 0); if ($iid<=0) continue;
-                                $sidAward = $awardByIdFallback[$iid] ?? null; if ($sidAward === null || $sidAward !== $selectedSupplierId) continue;
-                                $name = trim((string)($r['item_name'] ?? ''));
-                                $qty = (int)($r['quantity'] ?? 0);
-                                $unit = (string)($r['unit'] ?? '');
-                                $unitPrice = 0.0;
-                                // Try direct supplier_items name match
-                                try {
-                                    $stP = $pdo->prepare('SELECT price, description FROM supplier_items WHERE supplier_id = :sid AND LOWER(name) = LOWER(:nm) ORDER BY price ASC LIMIT 1');
-                                    $stP->execute(['sid'=>$selectedSupplierId, 'nm'=>$name]);
-                                    if ($rowP = $stP->fetch()) { $unitPrice = (float)($rowP['price'] ?? 0); }
-                                } catch (\Throwable $e) {}
-                                // Size-aware bondpaper matching if name ends with Bondpaper
-                                if ($unitPrice <= 0 && preg_match('/^(a4|long|short|f4)\s+bond\s*paper?$/i', $name)) {
-                                    $size = strtolower(preg_replace('/\s+bond\s*paper?/i','', strtolower($name)));
-                                    $syns = [];
-                                    if ($size==='a4') { $syns=['a4','210x297','210 x 297','8.27x11.69','8.3x11.7']; }
-                                    elseif ($size==='long') { $syns=['long','legal','8.5x13','8.5 x 13']; }
-                                    elseif ($size==='short') { $syns=['short','letter','8.5x11','8.5 x 11']; }
-                                    elseif ($size==='f4') { $syns=['f4','8.5x13','8.5 x 13']; }
-                                    if ($syns) {
-                                        try {
-                                            $paramsB = ['sid'=>$selectedSupplierId];
-                                            $cond = [];
-                                            foreach ($syns as $s) { $cond[] = 'LOWER(description) = ?'; $paramsB[] = strtolower($s); }
-                                            foreach ($syns as $s) { $cond[] = 'LOWER(description) ILIKE ?'; $paramsB[] = '%'.strtolower($s).'%'; }
-                                            $sqlB = 'SELECT price FROM supplier_items WHERE supplier_id = :sid AND LOWER(name)=\'bondpaper\' AND (' . implode(' OR ', $cond) . ') ORDER BY price ASC LIMIT 1';
-                                            // Build dynamic params (first param sid named, rest positional) – adapt by splitting named and positional executes
-                                            $sidVal = array_shift($paramsB);
-                                            $pdoStmt = $pdo->prepare(str_replace(':sid', '?', $sqlB));
-                                            $pdoStmt->execute(array_merge([$sidVal], $paramsB));
-                                            if ($rowBP = $pdoStmt->fetch()) { $unitPrice = (float)($rowBP['price'] ?? 0); }
-                                        } catch (\Throwable $e) {}
-                                    }
-                                }
-                                if ($unitPrice < 0) { $unitPrice = 0.0; }
-                                $poItems[] = [
-                                    'description' => $name,
-                                    'unit' => $unit,
-                                    'qty' => $qty,
-                                    'unit_price' => $unitPrice,
-                                ];
-                            }
-                        }
-                    }
-                }
-            } catch (\Throwable $e) { /* ignore fallback errors */ }
         }
         // Prefill logic from PR + any previous PO attempt for this PR
         $poNext = '';
