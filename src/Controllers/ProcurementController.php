@@ -124,6 +124,20 @@ class ProcurementController extends BaseController
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS pdf_path TEXT"); } catch (\Throwable $e) {}
         // Legacy installs may also predate vendor_name; add silently for fallback supplier naming
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS vendor_name VARCHAR(255)"); } catch (\Throwable $e) {}
+        // Additional vendor / meta columns that may be missing on very old schemas
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS vendor_address TEXT"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS vendor_tin VARCHAR(64)"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS deliver_to TEXT"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS look_for VARCHAR(255)"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS center VARCHAR(128)"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS reference VARCHAR(255)"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS terms TEXT"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS notes TEXT"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS status VARCHAR(64) DEFAULT 'draft'"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS total NUMERIC(14,2) DEFAULT 0"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS created_by BIGINT REFERENCES users(user_id) ON DELETE RESTRICT"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()"); } catch (\Throwable $e) {}
     }
 
     /** GET: Create PO form for a canvassing-approved PR */
