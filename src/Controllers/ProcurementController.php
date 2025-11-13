@@ -3671,6 +3671,7 @@ class ProcurementController extends BaseController
         $discount = isset($_POST['discount']) ? (float)$_POST['discount'] : 0.0;
         $deliverTo = trim((string)($_POST['deliver_to'] ?? ''));
         $lookFor = trim((string)($_POST['look_for'] ?? ''));
+        if ($lookFor === '') { $lookFor = (string)($_SESSION['full_name'] ?? ''); }
         $prNumber = trim((string)($_POST['pr_number'] ?? ''));
 
         // Items arrays

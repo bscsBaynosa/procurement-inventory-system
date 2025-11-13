@@ -576,16 +576,16 @@ class PDFService
 			. '</table>';
 
 		// Notes & Instructions block
-		$userNameLine = $prepared !== '' ? '[' . $prepared . ']' : '[USER\'S NAME]';
-		$procurementNameLine = $prepared !== '' ? '[' . $prepared . ']' : '[PROCUREMENT NAME]';
+		// Per requirement: show user's name under the title and show LOOK FOR: [PROCUREMENT NAME]
+		$userNameLine = $prepared !== '' ? $prepared : '[USER\'S NAME]';
+		$lookupName = $lookFor !== '' ? $lookFor : ($prepared !== '' ? $prepared : '[PROCUREMENT NAME]');
 		$notesBlock = '<div style="border:1px solid #000;background:#f1f5f9;margin-top:8px;padding:6px;font-size:9px;">'
 			. '<div style="text-align:center;font-weight:700;">NOTES & INSTRUCTIONS:</div>'
-			. '<div style="text-align:center;margin-top:4px;font-weight:600;">' . $userNameLine . '</div>'
+			. '<div style="text-align:center;margin-top:4px;font-weight:600;">' . htmlspecialchars($userNameLine, ENT_QUOTES, 'UTF-8') . '</div>'
 			. '<div style="text-align:center;margin-top:6px;font-size:10px;">PLEASE DELIVER TO:</div>'
 			. '<div style="text-align:center;font-size:10px;font-weight:700;color:#b91c1c;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
 			. '<div style="text-align:center;font-size:9px;">' . $deliverTo . '</div>'
-			. '<div style="text-align:center;font-size:9px;margin-top:2px;">LOOK FOR: ' . $lookFor . '</div>'
-			. '<div style="text-align:center;font-size:9px;margin-top:4px;font-weight:600;">' . $procurementNameLine . '</div>'
+			. '<div style="text-align:center;font-size:9px;margin-top:2px;">LOOK FOR: ' . htmlspecialchars($lookupName, ENT_QUOTES, 'UTF-8') . '</div>'
 			. '</div>';
 
 		$conditionsText = '<div style="text-align:center;font-weight:700;margin-bottom:4px;">CONDITIONS</div>'
@@ -594,26 +594,32 @@ class PDFService
 			. 'Acceptance of this PO constitutes a contract between Vendor and Vendee. The Philippine Oncology Center Corporation reserves the right to cancel this PO without notice for failure of the vendor to comply with the above terms and conditions and other supplementary agreement, e.g. Purchasing Guidelines.'
 			. '</div>';
 
-		// Signatures
-		$sigColLeft = '<table width="100%" cellspacing="0" cellpadding="4" style="font-size:10px;">'
-			. '<tr><td style="width:50%;vertical-align:top;">'
-			. '  <div style="font-size:10px;">PREPARED BY:</div><div style="height:40px;"></div><div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($prepared ?: '&nbsp;') . '<br><small>PROCUREMENT & GEN. SERVICES</small></div>'
-			. '  <div style="margin-top:16px;font-size:10px;">REVIEWED BY:</div><div style="height:40px;"></div><div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($financeOfficer ?: '&nbsp;') . '<br><small>FINANCE OFFICER</small></div>'
-			. '  <div style="margin-top:16px;font-size:10px;">APPROVED BY:</div><div style="height:40px;"></div><div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($adminName ?: '&nbsp;') . '<br><small>ADMINISTRATOR</small></div>'
-			. '</td>'
-			. '<td style="vertical-align:top;">'
-			. $conditionsText
+		// Signatories block: two columns with clear borders and spacing like the reference
+		$leftCol = '<div style="font-size:10px;">PREPARED BY:</div>'
+			. '<div style="height:40px;"></div>'
+			. '<div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($prepared ?: '&nbsp;') . '<br><small>PROCUREMENT &amp; GEN. SERVICES</small></div>'
+			. '<div style="margin-top:16px;font-size:10px;">PREPARED BY:</div>'
+			. '<div style="height:40px;"></div>'
+			. '<div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($financeOfficer ?: '&nbsp;') . '<br><small>FINANCE OFFICER</small></div>'
+			. '<div style="margin-top:16px;font-size:10px;">PREPARED BY:</div>'
+			. '<div style="height:40px;"></div>'
+			. '<div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($adminName ?: '&nbsp;') . '<br><small>ADMINISTRATOR</small></div>';
+
+		$rightCol = $conditionsText
 			. '<div style="margin-top:12px;height:40px;"></div>'
 			. '<div style="border-top:1px solid #000;text-align:center;padding-top:4px;font-size:10px;font-weight:600;">SUPPLIER / SUPPLIER’S REPRESENTATIVE<br>SIGNATURE OVER PRINTED NAME</div>'
-			. '<div style="margin-top:10px;font-size:10px;display:flex;justify-content:space-between;">'
-			. '<div>PREPARED BY:</div><div>DATE</div>'
-			. '</div>'
-			. '</td>'
+			. '<table width="100%" border="0" cellspacing="0" cellpadding="4" style="margin-top:10px;font-size:10px;">'
+			. '<tr>'
+			. '<td style="width:60%;">PREPARED BY:</td>'
+			. '<td style="text-align:right;">DATE</td>'
 			. '</tr>'
 			. '</table>';
 
-		$signaturesTable = '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="margin-top:8px;">'
-			. '<tr><td>' . $sigColLeft . '</td></tr>'
+		$signaturesTable = '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="margin-top:8px;font-size:10px; table-layout:fixed;">'
+			. '<tr>'
+			. '<td style="width:60%;vertical-align:top;">' . $leftCol . '</td>'
+			. '<td style="width:40%;vertical-align:top;">' . $rightCol . '</td>'
+			. '</tr>'
 			. '</table>';
 
 		$html = $logoHtml . $headerTitle . $vendorMeta . $itemsTable . $notesBlock . $signaturesTable;
