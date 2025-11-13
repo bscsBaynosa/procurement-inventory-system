@@ -506,8 +506,8 @@ class PDFService
 			}
 		}
 
-		$headerTitle = '<div style="text-align:center;font-weight:800;font-size:16px;letter-spacing:.5px;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
-			. '<div style="text-align:center;font-size:10px;margin:2px 0 6px 0;">Basement, Marian Medical Arts Bldg., Dahlia Street, West Fairview, Quezon City</div>'
+		$headerTitle = '<div style="text-align:center;font-weight:800;font-size:16px;letter-spacing:.5px;">Philippine Oncology Center Corporation</div>'
+			. '<div style="text-align:center;font-size:10px;margin:2px 0 6px 0;">Address: Basement, Marian Medical Arts Bldg., Dahlia Street, West Fairview, Quezon City</div>'
 			. '<div style="text-align:center;font-weight:800;letter-spacing:.5px;margin-bottom:6px;">PURCHASE ORDER</div>';
 
 		// Vendor vs PO meta boxes
@@ -570,7 +570,7 @@ class PDFService
 			. '</thead>'
 			. '<tbody>' . $rowsHtml . '</tbody>'
 			. '<tfoot>'
-			. '<tr><td colspan="4" style="text-align:right;font-weight:600;">DISCOUNT</td><td style="text-align:right;">' . ($discount>0?('P '.number_format($discount,2)):'&nbsp;') . '</td></tr>'
+			. '<tr><td colspan="4" style="text-align:center;font-weight:600;">DISCOUNTED</td><td style="text-align:right;">' . ($discount>0?('P '.number_format($discount,2)):'&nbsp;') . '</td></tr>'
 			. '<tr><td colspan="4" style="text-align:right;font-weight:800;">TOTAL:</td><td style="text-align:right;font-weight:800;">P ' . number_format($grand,2) . '</td></tr>'
 			. '</tfoot>'
 			. '</table>';
