@@ -599,10 +599,10 @@ class PDFService
 			$nm = ($name !== '') ? $name : '&nbsp;';
 			$borderBottom = $isLast ? '' : 'border-bottom:1px solid #000;';
 			return '<tr>'
-				. '<td style="vertical-align:top;padding:6px 6px 4px 6px;' . $borderBottom . '">'
+				. '<td style="vertical-align:top;padding:8px 8px 6px 8px;' . $borderBottom . '">'
 					. '<div style="font-size:10px;">' . $label . '</div>'
-					. '<div style="height:48px;"></div>'
-					. '<div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . $nm . '<br><span style="font-weight:400;">' . $role . '</span></div>'
+					. '<div style="height:72px;"></div>'
+					. '<div style="border-top:1px solid #000;padding-top:6px;text-align:center;font-size:10px;font-weight:600;">' . $nm . '<br><span style="font-weight:400;">' . $role . '</span></div>'
 				. '</td>'
 			. '</tr>';
 		};
