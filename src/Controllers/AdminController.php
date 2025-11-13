@@ -1139,6 +1139,126 @@ class AdminController extends BaseController
                 } catch (\Throwable $ignored) {}
             }
             $this->requests()->updateGroupStatus($pr, 'canvassing_approved', (int)($_SESSION['user_id'] ?? 0), 'Canvassing approved by Admin');
+            // Ensure PR-Canvass snapshot is persisted (details + items). If missing, reconstruct and save.
+            try {
+                // Short-circuit if already present
+                $chk = $this->pdo->prepare('SELECT 1 FROM pr_canvassing_details WHERE pr_number = :pr LIMIT 1');
+                $has = false; try { $chk->execute(['pr'=>$pr]); $has = (bool)$chk->fetchColumn(); } catch (\Throwable $ignored) { $has = false; }
+                if (!$has) {
+                    // Gather supplier IDs from legacy pr_canvassing (ids or names), otherwise fallback to active suppliers
+                    $supplierIds = [];
+                    $names = [];
+                    try {
+                        $stCv = $this->pdo->prepare('SELECT supplier1_id, supplier2_id, supplier3_id, supplier1, supplier2, supplier3 FROM pr_canvassing WHERE pr_number = :pr');
+                        $stCv->execute(['pr'=>$pr]);
+                        if ($cv = $stCv->fetch()) {
+                            foreach (['supplier1_id','supplier2_id','supplier3_id'] as $k) { $v = isset($cv[$k]) ? (int)$cv[$k] : 0; if ($v > 0) { $supplierIds[] = $v; } }
+                            foreach (['supplier1','supplier2','supplier3'] as $k) { if (!empty($cv[$k])) { $names[] = strtolower(trim((string)$cv[$k])); } }
+                        }
+                    } catch (\Throwable $ignored) {}
+                    $supplierIds = array_values(array_unique(array_filter(array_map('intval',$supplierIds), static fn($v)=>$v>0)));
+                    if (empty($supplierIds) && !empty($names)) {
+                        $in = implode(',', array_fill(0, count($names), '?'));
+                        try {
+                            $stMap = $this->pdo->prepare('SELECT user_id, LOWER(full_name) AS lname FROM users WHERE role=\'supplier\' AND is_active=TRUE AND LOWER(full_name) IN (' . $in . ')');
+                            $stMap->execute($names);
+                            foreach ($stMap->fetchAll() as $r) { $supplierIds[] = (int)$r['user_id']; }
+                        } catch (\Throwable $ignored) {}
+                        $supplierIds = array_values(array_unique(array_filter($supplierIds, static fn($v)=>$v>0)));
+                    }
+                    if (empty($supplierIds)) {
+                        // Fallback to all active suppliers (bounded by 50 to stay safe)
+                        try {
+                            $stAll = $this->pdo->query("SELECT user_id FROM users WHERE role='supplier' AND is_active=TRUE ORDER BY user_id ASC LIMIT 50");
+                            foreach ($stAll->fetchAll() as $r) { $supplierIds[] = (int)$r['user_id']; }
+                        } catch (\Throwable $ignored) {}
+                        $supplierIds = array_values(array_unique(array_filter($supplierIds, static fn($v)=>$v>0)));
+                    }
+                    // Load PR items
+                    $rows = (new \App\Services\RequestService($this->pdo))->getGroupDetails($pr);
+                    // Generate canvass_id
+                    try { $this->pdo->exec("CREATE TABLE IF NOT EXISTS canvass_sequences (calendar_year INTEGER PRIMARY KEY, last_value INTEGER NOT NULL DEFAULT 0, updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"); } catch (\Throwable $ignored) {}
+                    $year = (int)date('Y');
+                    try { $this->pdo->prepare('INSERT INTO canvass_sequences (calendar_year,last_value) VALUES (:y,0) ON CONFLICT (calendar_year) DO NOTHING')->execute(['y'=>$year]); } catch (\Throwable $ignored) {}
+                    $stSeq = $this->pdo->prepare('UPDATE canvass_sequences SET last_value = last_value + 1, updated_at = NOW() WHERE calendar_year = :y RETURNING last_value');
+                    $stSeq->execute(['y'=>$year]); $seqVal = (int)$stSeq->fetchColumn(); if ($seqVal <= 0) { $seqVal = 1; }
+                    $canvassId = 'C' . sprintf('%04d%03d', $year, $seqVal);
+                    // Ensure tables
+                    try { $this->pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing_details (canvass_id VARCHAR(16) PRIMARY KEY, pr_number VARCHAR(32) NOT NULL, suppliers JSONB NOT NULL, selections JSONB, awards JSONB, created_by BIGINT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"); } catch (\Throwable $ignored) {}
+                    try { $this->pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing_items (id BIGSERIAL PRIMARY KEY, canvass_id VARCHAR(16) NOT NULL, pr_number VARCHAR(32) NOT NULL, item_id BIGINT NOT NULL, item_name VARCHAR(255), suppliers JSONB, selected_suppliers JSONB, quotes JSONB, awarded_supplier_id BIGINT, awarded_price NUMERIC(14,2), created_by BIGINT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"); } catch (\Throwable $ignored) {}
+                    // Compute per-item quotes and awards for chosen suppliers
+                    $lowerById = []; $qtyById = []; $nameById = [];
+                    foreach ($rows as $r) { $iid=(int)($r['item_id']??0); if($iid<=0) continue; $nm=(string)($r['item_name']??''); $lower=strtolower(trim($nm)); $lowerById[$iid]=$lower; $nameById[$iid]=$nm; $qtyById[$iid]=($qtyById[$iid]??0)+(int)($r['quantity']??0); }
+                    $quotesByItem = []; $awardByItem = []; $awPriceByItem = [];
+                    if ($lowerById && $supplierIds) {
+                        $inSup = implode(',', array_fill(0, count($supplierIds), '?'));
+                        $namesLower = array_values(array_unique(array_values($lowerById)));
+                        $byName = [];
+                        if ($namesLower) {
+                            $inNames = implode(',', array_fill(0, count($namesLower), '?'));
+                            $params = []; foreach($supplierIds as $sid){ $params[]=(int)$sid; } foreach($namesLower as $nm){ $params[]=$nm; }
+                            $sql = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE supplier_id IN (' . $inSup . ') AND LOWER(name) IN (' . $inNames . ')';
+                            $st = $this->pdo->prepare($sql); $st->execute($params);
+                            foreach ($st->fetchAll() as $it) { $byName[(string)$it['lname']][] = $it; }
+                        }
+                        foreach ($lowerById as $iid=>$lname) {
+                            $needQty = (int)($qtyById[$iid] ?? 0);
+                            $pp = [];
+                            if (isset($byName[$lname])) {
+                                foreach ($byName[$lname] as $it) {
+                                    $sid=(int)$it['supplier_id']; if(!in_array($sid,$supplierIds,true)) continue;
+                                    $base=(float)($it['price']??0); $ppp=max(1,(int)($it['pieces_per_package']??1)); $needPk=$ppp>0?(int)ceil($needQty/$ppp):0; $best=$base;
+                                    if ($needPk>0) {
+                                        try { $tq=$this->pdo->prepare('SELECT min_packages,max_packages,price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC'); $tq->execute(['id'=>(int)$it['id']]); foreach($tq->fetchAll() as $t){ $min=(int)$t['min_packages']; $max=$t['max_packages']!==null?(int)$t['max_packages']:null; if($needPk>=$min && ($max===null || $needPk<=$max)){ $best=min($best,(float)$t['price_per_package']); } } } catch(\Throwable $ignored){}
+                                    }
+                                    if(!isset($pp[$sid]) || $best < $pp[$sid]){ $pp[$sid]=$best; }
+                                }
+                            }
+                            // Bondpaper size-aware fallback
+                            if (empty($pp) && preg_match('/^(a4|long|short|f4)\s+bond\s*paper?$/i', (string)($nameById[$iid] ?? ''))) {
+                                $size=strtolower(preg_replace('/\s+bond\s*paper?/i','', strtolower((string)($nameById[$iid] ?? ''))));
+                                $syns=[]; if($size==='a4'){ $syns=['a4','210x297','210 x 297','8.27x11.69','8.3x11.7']; } elseif($size==='long'){ $syns=['long','legal','8.5x13','8.5 x 13']; } elseif($size==='short'){ $syns=['short','letter','8.5x11','8.5 x 11']; } elseif($size==='f4'){ $syns=['f4','8.5x13','8.5 x 13']; }
+                                $conds=[]; $params2=[]; $conds[]='supplier_id IN (' . $inSup . ')'; foreach($supplierIds as $sid){ $params2[]=(int)$sid; }
+                                $conds[]="(LOWER(name)='bondpaper' OR LOWER(name) ILIKE '%bond%paper%')";
+                                foreach($syns as $s){ $conds[]='LOWER(description)=?'; $params2[]=strtolower($s);} foreach($syns as $s){ $conds[]='LOWER(description) ILIKE ?'; $params2[]='%'.strtolower($s).'%'; }
+                                $sql2='SELECT id,supplier_id,price,pieces_per_package FROM supplier_items WHERE ' . implode(' AND ', $conds);
+                                $st2=$this->pdo->prepare($sql2); $st2->execute($params2);
+                                foreach($st2->fetchAll() as $it){ $sid=(int)$it['supplier_id']; $base=(float)($it['price']??0); $ppp=max(1,(int)($it['pieces_per_package']??1)); $needPk=$ppp>0?(int)ceil($needQty/$ppp):0; $best=$base; if($needPk>0){ try{ $tq=$this->pdo->prepare('SELECT min_packages,max_packages,price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC'); $tq->execute(['id'=>(int)$it['id']]); foreach($tq->fetchAll() as $t){ $min=(int)$t['min_packages']; $max=$t['max_packages']!==null?(int)$t['max_packages']:null; if($needPk>=$min && ($max===null || $needPk<=$max)){ $best=min($best,(float)$t['price_per_package']); } } } catch(\Throwable $ignored){} } if(!isset($pp[$sid]) || $best < $pp[$sid]){ $pp[$sid]=$best; }
+                                }
+                            }
+                            if (!empty($pp)) {
+                                asort($pp); $awardSid=(int)array_key_first($pp); $awardPrice=(float)$pp[$awardSid];
+                                $quotesByItem[$iid] = $pp; $awardByItem[$iid] = $awardSid; $awPriceByItem[$iid] = $awardPrice;
+                            }
+                        }
+                    }
+                    // Persist
+                    $this->pdo->beginTransaction();
+                    try {
+                        $insD = $this->pdo->prepare('INSERT INTO pr_canvassing_details (canvass_id, pr_number, suppliers, selections, awards, created_by) VALUES (:cid,:pr,:sup,:sel,:awd,:uid)');
+                        $awardsJson = json_encode($awardByItem ?: new \stdClass());
+                        $insD->execute(['cid'=>$canvassId,'pr'=>$pr,'sup'=>json_encode($supplierIds),'sel'=>null,'awd'=>$awardsJson,'uid'=>(int)($_SESSION['user_id'] ?? 0)]);
+                        if (!empty($quotesByItem)) {
+                            $insI = $this->pdo->prepare('INSERT INTO pr_canvassing_items (canvass_id, pr_number, item_id, item_name, suppliers, selected_suppliers, quotes, awarded_supplier_id, awarded_price, created_by) VALUES (:cid,:pr,:iid,:nm,:sup,:sel,:qt,:aw,:ap,:uid)');
+                            foreach ($quotesByItem as $iid=>$map) {
+                                $insI->execute([
+                                    'cid'=>$canvassId,
+                                    'pr'=>$pr,
+                                    'iid'=>$iid,
+                                    'nm'=>$nameById[$iid] ?? 'Item',
+                                    'sup'=>json_encode($supplierIds),
+                                    'sel'=>null,
+                                    'qt'=>json_encode($map),
+                                    'aw'=>$awardByItem[$iid] ?? null,
+                                    'ap'=>isset($awPriceByItem[$iid]) ? (float)$awPriceByItem[$iid] : null,
+                                    'uid'=>(int)($_SESSION['user_id'] ?? 0),
+                                ]);
+                            }
+                        }
+                        $this->pdo->commit();
+                    } catch (\Throwable $ex) { $this->pdo->rollBack(); /* if persisting fails, continue but do not crash approval */ }
+                }
+            } catch (\Throwable $ignored) {}
             // Record canvassing approver for PR-Canvass PDF signature
             try {
                 $this->pdo->exec("CREATE TABLE IF NOT EXISTS pr_canvassing (

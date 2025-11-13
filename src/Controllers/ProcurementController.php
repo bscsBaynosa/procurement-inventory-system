@@ -145,6 +145,14 @@ class ProcurementController extends BaseController
                 $stItems = $pdo->prepare('SELECT item_id, item_name, quotes, awarded_supplier_id, awarded_price FROM pr_canvassing_items WHERE canvass_id = :cid');
                 $stItems->execute(['cid'=>$canvassId]);
                 $itemRows = $stItems->fetchAll();
+                // If nothing found by canvass_id (older data), fallback to pr_number
+                if (!$itemRows) {
+                    try {
+                        $stItemsPr = $pdo->prepare('SELECT item_id, item_name, quotes, awarded_supplier_id, awarded_price FROM pr_canvassing_items WHERE pr_number = :pr ORDER BY created_at DESC');
+                        $stItemsPr->execute(['pr'=>$pr]);
+                        $itemRows = $stItemsPr->fetchAll();
+                    } catch (\Throwable $e) {}
+                }
                 // Build name->id map for awards JSON resolution
                 $nameToId = [];
                 foreach ($rows as $r0) { $iid0=(int)($r0['item_id']??0); $nm0=strtolower(trim((string)($r0['item_name']??''))); if($iid0>0 && $nm0!==''){ $nameToId[$nm0]=$iid0; } }
@@ -170,7 +178,10 @@ class ProcurementController extends BaseController
                     if (!$awardSid && $quotesMap) {
                         asort($quotesMap); $awardSid = (int)array_key_first($quotesMap);
                     }
-                    if (!$awardSid || $awardSid <= 0) { continue; }
+                    if (!$awardSid || $awardSid <= 0) {
+                        // As a last resort, skip only if we truly cannot map; otherwise continue to next
+                        continue;
+                    }
                     // Resolve unit price
                     $unitPrice = $explicitAwardPrice;
                     if ($unitPrice === null) { $unitPrice = $quotesMap[$awardSid] ?? null; }
@@ -188,10 +199,22 @@ class ProcurementController extends BaseController
                             if ($syns) {
                                 try {
                                     $paramsB=['sid'=>$awardSid]; $cond=[]; foreach($syns as $s){ $cond[]='LOWER(description)=?'; $paramsB[]=strtolower($s);} foreach($syns as $s){ $cond[]='LOWER(description) ILIKE ?'; $paramsB[]='%'.strtolower($s).'%'; }
-                                    $sqlB='SELECT price FROM supplier_items WHERE supplier_id = :sid AND LOWER(name)=\'bondpaper\' AND (' . implode(' OR ', $cond) . ') ORDER BY price ASC LIMIT 1';
+                                    // Allow name ILIKE variants for bond paper
+                                    $sqlB='SELECT price FROM supplier_items WHERE supplier_id = :sid AND (LOWER(name)=\'bondpaper\' OR LOWER(name) ILIKE \'%bond%paper%\') AND (' . implode(' OR ', $cond) . ') ORDER BY price ASC LIMIT 1';
                                     $sidVal=array_shift($paramsB); $stmtB=$pdo->prepare(str_replace(':sid','?',$sqlB)); $stmtB->execute(array_merge([$sidVal], $paramsB));
                                     if($rowB=$stmtB->fetch()){ $unitPrice=(float)($rowB['price']??0); }
                                 } catch (\Throwable $e) {}
+                            }
+                        }
+                        // Generic fuzzy fallback on name/description tokens
+                        if ($unitPrice === null || $unitPrice <= 0) {
+                            $tokens = preg_split('/[^a-z0-9]+/i', strtolower($name)) ?: [];
+                            $tokens = array_values(array_filter($tokens, static fn($t)=>strlen($t)>=3));
+                            if ($tokens) {
+                                $conds = ['supplier_id = ?']; $params = [$awardSid];
+                                foreach ($tokens as $t) { $conds[] = '(LOWER(name) ILIKE ? OR LOWER(description) ILIKE ?)'; $params[]='%'.$t.'%'; $params[]='%'.$t.'%'; }
+                                $sql = 'SELECT price FROM supplier_items WHERE ' . implode(' AND ', $conds) . ' ORDER BY price ASC LIMIT 1';
+                                try { $stF = $pdo->prepare($sql); $stF->execute($params); if($rF=$stF->fetch()){ $unitPrice=(float)($rF['price']??0); } } catch (\Throwable $e) {}
                             }
                         }
                     }
@@ -303,6 +326,81 @@ class ProcurementController extends BaseController
                             }
                             // Choose cheapest and build awardedBySupplier
                             foreach ($lowerById as $iid=>$lname){ if(empty($pp[$iid])) continue; asort($pp[$iid]); $awardSid=(int)array_key_first($pp[$iid]); $price=(float)$pp[$iid][$awardSid]; if(!isset($awardedBySupplier[$awardSid])){ $awardedBySupplier[$awardSid]=[]; } $awardedBySupplier[$awardSid][$iid]=['name'=>$nameById[$iid]??'Item','unit_price'=>$price]; }
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
+        // Ultimate fallback: compute cheapest supplier across ALL active suppliers if canvass data is missing
+        if (empty($awardedBySupplier)) {
+            try {
+                // Cap suppliers to prevent pathological IN-lists; prefer all active suppliers
+                $activeSuppliers = $suppliers; // fetched earlier
+                if ($activeSuppliers) {
+                    $supplierIds = array_map(static fn($s) => (int)$s['user_id'], $activeSuppliers);
+                    $supplierIds = array_values(array_filter($supplierIds, static fn($v)=>$v>0));
+                    if ($supplierIds) {
+                        $lowerById = []; $qtyById = []; $nameById = [];
+                        foreach ($rows as $r) {
+                            $iid=(int)($r['item_id']??0); if($iid<=0) continue;
+                            $nm=(string)($r['item_name']??''); $lower=strtolower(trim($nm));
+                            $lowerById[$iid]=$lower; $nameById[$iid]=$nm; $qtyById[$iid]=($qtyById[$iid]??0)+(int)($r['quantity']??0);
+                        }
+                        if ($lowerById) {
+                            $inSup = implode(',', array_fill(0, count($supplierIds), '?'));
+                            $namesLower = array_values(array_unique(array_values($lowerById)));
+                            // Exact LOWER(name) matches
+                            $pp = []; // iid => sid => price
+                            if ($namesLower) {
+                                $inNames = implode(',', array_fill(0, count($namesLower), '?'));
+                                $params=[]; foreach($supplierIds as $sid){ $params[]=(int)$sid; } foreach($namesLower as $nm){ $params[]=$nm; }
+                                $sql='SELECT id,supplier_id,LOWER(name) AS lname,price,pieces_per_package FROM supplier_items WHERE supplier_id IN (' . $inSup . ') AND LOWER(name) IN (' . $inNames . ')';
+                                $st=$pdo->prepare($sql); $st->execute($params);
+                                $byName=[]; foreach($st->fetchAll() as $it){ $byName[(string)$it['lname']][]=$it; }
+                                foreach ($lowerById as $iid=>$lname) {
+                                    $needQty=(int)($qtyById[$iid]??0);
+                                    if (isset($byName[$lname])) {
+                                        foreach ($byName[$lname] as $it) {
+                                            $sid=(int)$it['supplier_id']; $base=(float)($it['price']??0);
+                                            $ppp=max(1,(int)($it['pieces_per_package']??1)); $needPk=$ppp>0?(int)ceil($needQty/$ppp):0; $best=$base;
+                                            if ($needPk>0) { try { $tq=$pdo->prepare('SELECT min_packages,max_packages,price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC'); $tq->execute(['id'=>(int)$it['id']]); foreach($tq->fetchAll() as $t){ $min=(int)$t['min_packages']; $max=$t['max_packages']!==null?(int)$t['max_packages']:null; if($needPk>=$min && ($max===null || $needPk<=$max)){ $best=min($best,(float)$t['price_per_package']); } } } catch(\Throwable $e){} }
+                                            if(!isset($pp[$iid])){ $pp[$iid]=[]; }
+                                            if(!isset($pp[$iid][$sid]) || $best < $pp[$iid][$sid]){ $pp[$iid][$sid]=$best; }
+                                        }
+                                    }
+                                }
+                            }
+                            // Bondpaper size-aware
+                            foreach ($lowerById as $iid=>$lname) {
+                                if (!empty($pp[$iid])) continue; // already priced
+                                $label = $nameById[$iid] ?? '';
+                                if (!preg_match('/^(a4|long|short|f4)\s+bond\s*paper?$/i', (string)$label)) { continue; }
+                                $size=strtolower(preg_replace('/\s+bond\s*paper?/i','', strtolower((string)$label)));
+                                $syns=[]; if($size==='a4'){ $syns=['a4','210x297','210 x 297','8.27x11.69','8.3x11.7']; } elseif($size==='long'){ $syns=['long','legal','8.5x13','8.5 x 13']; } elseif($size==='short'){ $syns=['short','letter','8.5x11','8.5 x 11']; } elseif($size==='f4'){ $syns=['f4','8.5x13','8.5 x 13']; }
+                                $conds=[]; $params2=[]; $conds[]='supplier_id IN (' . $inSup . ')'; foreach($supplierIds as $sid){ $params2[]=(int)$sid; }
+                                $conds[]="(LOWER(name)='bondpaper' OR LOWER(name) ILIKE '%bond%paper%')";
+                                foreach($syns as $s){ $conds[]='LOWER(description)=?'; $params2[]=strtolower($s);} foreach($syns as $s){ $conds[]='LOWER(description) ILIKE ?'; $params2[]='%'.strtolower($s).'%'; }
+                                $sql2='SELECT id,supplier_id,price,pieces_per_package FROM supplier_items WHERE ' . implode(' AND ', $conds);
+                                $st2=$pdo->prepare($sql2); $st2->execute($params2);
+                                foreach($st2->fetchAll() as $it){ $sid=(int)$it['supplier_id']; $base=(float)($it['price']??0); $ppp=max(1,(int)($it['pieces_per_package']??1)); $needPk=$ppp>0?(int)ceil(($qtyById[$iid]??0)/$ppp):0; $best=$base; if($needPk>0){ try{ $tq=$pdo->prepare('SELECT min_packages,max_packages,price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC'); $tq->execute(['id'=>(int)$it['id']]); foreach($tq->fetchAll() as $t){ $min=(int)$t['min_packages']; $max=$t['max_packages']!==null?(int)$t['max_packages']:null; if($needPk>=$min && ($max===null || $needPk<=$max)){ $best=min($best,(float)$t['price_per_package']); } } } catch(\Throwable $e){} } if(!isset($pp[$iid])){ $pp[$iid]=[]; } if(!isset($pp[$iid][$sid]) || $best<$pp[$iid][$sid]){ $pp[$iid][$sid]=$best; }
+                                }
+                            }
+                            // Generic fuzzy token search for any remaining unpriced items
+                            $toPrice = array_values(array_filter(array_keys($lowerById), static fn($iid)=>empty($pp[$iid])));
+                            foreach ($toPrice as $iid) {
+                                $label = $nameById[$iid] ?? '';
+                                $tokens = preg_split('/[^a-z0-9]+/i', (string)$label) ?: [];
+                                $tokens = array_values(array_filter(array_map('strtolower',$tokens), static fn($t)=>strlen($t)>=3));
+                                if (!$tokens) { continue; }
+                                $conds=[]; $params3=[]; $conds[]='supplier_id IN (' . $inSup . ')'; foreach($supplierIds as $sid){ $params3[]=(int)$sid; }
+                                foreach ($tokens as $t) { $conds[]='(LOWER(name) ILIKE ? OR LOWER(description) ILIKE ?)'; $params3[]='%'.$t.'%'; $params3[]='%'.$t.'%'; }
+                                $sql3='SELECT id,supplier_id,price,pieces_per_package FROM supplier_items WHERE ' . implode(' AND ', $conds);
+                                $st3=$pdo->prepare($sql3); $st3->execute($params3);
+                                foreach($st3->fetchAll() as $it){ $sid=(int)$it['supplier_id']; $base=(float)($it['price']??0); $ppp=max(1,(int)($it['pieces_per_package']??1)); $needPk=$ppp>0?(int)ceil(($qtyById[$iid]??0)/$ppp):0; $best=$base; if($needPk>0){ try{ $tq=$pdo->prepare('SELECT min_packages,max_packages,price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC'); $tq->execute(['id'=>(int)$it['id']]); foreach($tq->fetchAll() as $t){ $min=(int)$t['min_packages']; $max=$t['max_packages']!==null?(int)$t['max_packages']:null; if($needPk>=$min && ($max===null || $needPk<=$max)){ $best=min($best,(float)$t['price_per_package']); } } } catch(\Throwable $e){} } if(!isset($pp[$iid])){ $pp[$iid]=[]; } if(!isset($pp[$iid][$sid]) || $best<$pp[$iid][$sid]){ $pp[$iid][$sid]=$best; }
+                                }
+                            }
+                            // Choose cheapest suppliers per item and build awardedBySupplier
+                            foreach ($pp as $iid=>$map) { if (!$map) continue; asort($map); $sid=(int)array_key_first($map); $price=(float)$map[$sid]; if(!isset($awardedBySupplier[$sid])){ $awardedBySupplier[$sid]=[]; } $awardedBySupplier[$sid][$iid]=['name'=>$nameById[$iid]??'Item','unit_price'=>$price]; }
                         }
                     }
                 }
