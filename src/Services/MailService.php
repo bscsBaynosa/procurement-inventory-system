@@ -4,12 +4,15 @@ namespace App\Services;
 
 class MailService
 {
+    private ?string $lastError = null;
+
     /**
      * Send an email; supports SMTP via env (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_SECURE)
      * or falls back to PHP mail(). In both cases, we log the outcome for visibility.
      */
     public function send(string $to, string $subject, string $body, ?string $from = null): bool
     {
+        $this->lastError = null;
         $fromEmail = $from ?: (getenv('MAIL_FROM') ?: 'no-reply@local');
         $fromName = getenv('MAIL_FROM_NAME') ?: '';
 
@@ -34,8 +37,29 @@ class MailService
         $ok = @mail($to, $subject, $body, $headers);
         if (!$ok) {
             error_log('[MailService] mail() failed; to=' . $to . ' subject=' . $subject);
+            $this->noteError('mail() fallback failed when sending to ' . $to);
+        } else {
+            $this->lastError = null;
         }
         return $ok;
+    }
+
+    public function lastError(): ?string
+    {
+        return $this->lastError;
+    }
+
+    private function noteError(string $message): void
+    {
+        $message = trim($message);
+        if ($message === '') {
+            return;
+        }
+        if ($this->lastError === null) {
+            $this->lastError = $message;
+        } else {
+            $this->lastError .= ' | ' . $message;
+        }
     }
 
     private function sendSmtp(
@@ -69,6 +93,7 @@ class MailService
         ]);
         $fp = @stream_socket_client($address, $errno, $errstr, 15, STREAM_CLIENT_CONNECT, $context);
         if (!$fp) {
+            $this->noteError('SMTP connect failed: ' . $errno . ' ' . $errstr);
             error_log('[MailService][SMTP] connect failed: ' . $errno . ' ' . $errstr);
             return false;
         }
@@ -96,6 +121,7 @@ class MailService
 
         $greet = $read();
         if (!preg_match('/^220\b/', $greet)) {
+            $this->noteError('SMTP handshake failed: ' . trim($greet));
             error_log('[MailService][SMTP] bad greeting: ' . trim($greet));
             fclose($fp);
             return false;
@@ -106,6 +132,7 @@ class MailService
             // Try HELO
             $helo = $cmd('HELO ' . gethostname());
             if (!preg_match('/^250\b/', $helo)) {
+                $this->noteError('SMTP EHLO/HELO rejected: ' . trim($ehlo));
                 error_log('[MailService][SMTP] EHLO/HELO failed: ' . trim($ehlo));
                 fclose($fp); return false;
             }
@@ -114,16 +141,19 @@ class MailService
         if ($useStartTls) {
             $tlsResp = $cmd('STARTTLS');
             if (!preg_match('/^220\b/', $tlsResp)) {
+                $this->noteError('SMTP STARTTLS failed: ' . trim($tlsResp));
                 error_log('[MailService][SMTP] STARTTLS failed: ' . trim($tlsResp));
                 fclose($fp); return false;
             }
             if (!stream_socket_enable_crypto($fp, true, STREAM_CRYPTO_METHOD_TLS_CLIENT)) {
+                $this->noteError('SMTP TLS negotiation failed');
                 error_log('[MailService][SMTP] TLS negotiation failed');
                 fclose($fp); return false;
             }
             // Re-issue EHLO after STARTTLS
             $ehlo = $cmd('EHLO ' . gethostname());
             if (!preg_match('/^250\b/', $ehlo)) {
+                $this->noteError('SMTP EHLO after STARTTLS failed: ' . trim($ehlo));
                 error_log('[MailService][SMTP] EHLO after STARTTLS failed: ' . trim($ehlo));
                 fclose($fp); return false;
             }
@@ -132,28 +162,43 @@ class MailService
         if ($user !== '' && $pass !== '') {
             $auth = $cmd('AUTH LOGIN');
             if (!preg_match('/^334\b/', $auth)) {
+                $this->noteError('SMTP AUTH LOGIN not accepted: ' . trim($auth));
                 error_log('[MailService][SMTP] AUTH LOGIN not accepted: ' . trim($auth));
                 fclose($fp); return false;
             }
             $uResp = $cmd(base64_encode($user));
             if (!preg_match('/^334\b/', $uResp)) {
+                $this->noteError('SMTP username rejected: ' . trim($uResp));
                 error_log('[MailService][SMTP] username rejected: ' . trim($uResp));
                 fclose($fp); return false;
             }
             $pResp = $cmd(base64_encode($pass));
             if (!preg_match('/^235\b/', $pResp)) {
+                $this->noteError('SMTP password rejected: ' . trim($pResp));
                 error_log('[MailService][SMTP] password rejected: ' . trim($pResp));
                 fclose($fp); return false;
             }
         }
 
         $fromHeader = ($fromName !== '' ? $fromName . ' <' . $fromEmail . '>' : $fromEmail);
-        $mh = $cmd('MAIL FROM: <' . $fromEmail . '>');
-        if (!preg_match('/^250\b/', $mh)) { error_log('[MailService][SMTP] MAIL FROM failed: ' . trim($mh)); fclose($fp); return false; }
+        $mh = $cmd('MAIL FROM: <' . $fromEmail . '>' );
+        if (!preg_match('/^250\b/', $mh)) {
+            $this->noteError('SMTP MAIL FROM failed: ' . trim($mh));
+            error_log('[MailService][SMTP] MAIL FROM failed: ' . trim($mh));
+            fclose($fp); return false;
+        }
         $rh = $cmd('RCPT TO: <' . $to . '>');
-        if (!preg_match('/^250\b/', $rh)) { error_log('[MailService][SMTP] RCPT TO failed: ' . trim($rh)); fclose($fp); return false; }
+        if (!preg_match('/^250\b/', $rh)) {
+            $this->noteError('SMTP RCPT TO failed: ' . trim($rh));
+            error_log('[MailService][SMTP] RCPT TO failed: ' . trim($rh));
+            fclose($fp); return false;
+        }
         $dh = $cmd('DATA');
-        if (!preg_match('/^354\b/', $dh)) { error_log('[MailService][SMTP] DATA not accepted: ' . trim($dh)); fclose($fp); return false; }
+        if (!preg_match('/^354\b/', $dh)) {
+            $this->noteError('SMTP DATA not accepted: ' . trim($dh));
+            error_log('[MailService][SMTP] DATA not accepted: ' . trim($dh));
+            fclose($fp); return false;
+        }
 
         $headers = '';
         $headers .= 'From: ' . $fromHeader . "\r\n";
@@ -165,7 +210,11 @@ class MailService
         $msg = $headers . "\r\n" . $body . "\r\n.";
         fwrite($fp, $msg . "\r\n");
         $dr = $read();
-        if (!preg_match('/^250\b/', $dr)) { error_log('[MailService][SMTP] message not accepted: ' . trim($dr)); fclose($fp); return false; }
+        if (!preg_match('/^250\b/', $dr)) {
+            $this->noteError('SMTP message not accepted: ' . trim($dr));
+            error_log('[MailService][SMTP] message not accepted: ' . trim($dr));
+            fclose($fp); return false;
+        }
         $quit = $cmd('QUIT');
         fclose($fp);
         return true;

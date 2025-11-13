@@ -13,7 +13,6 @@ class AuthController extends BaseController
     private int $otpResendCooldown = 45;
     private int $otpMaxAttempts = 5;
     private int $otpMaxResends = 5;
-    private bool $otpShowCode = false;
 
     public function __construct(?AuthService $auth = null)
     {
@@ -21,13 +20,6 @@ class AuthController extends BaseController
         $this->auth = $auth; // may be null
         if (session_status() !== PHP_SESSION_ACTIVE) {
             @session_start();
-        }
-        $flag = getenv('OTP_SHOW_CODE');
-        if ($flag !== false) {
-            $this->otpShowCode = in_array(strtolower((string)$flag), ['1','true','yes','on'], true);
-        } else {
-            $env = strtolower((string)(getenv('APP_ENV') ?: ''));
-            $this->otpShowCode = $env !== 'production' && $env !== 'prod';
         }
     }
 
@@ -185,8 +177,9 @@ class AuthController extends BaseController
             $this->showLanding(null, null, null, 'forgot', [
                 'identifier' => $identifier,
                 'forgot_success' => $context['sent'] ? 'We sent a one-time code to your email.' : null,
+                'forgot_error' => $context['sent'] ? null : ($context['message'] ?? 'We could not send the email. Please contact the administrator.'),
                 'otp' => $context,
-                'otp_error' => $context['sent'] ? null : 'We could not send the email. Please contact the administrator.',
+                'otp_error' => null,
             ]);
         } catch (\Throwable $e) {
             error_log('[AuthController@requestOtp] ' . $e->getMessage());
@@ -383,7 +376,8 @@ class AuthController extends BaseController
                 'otp' => $context,
                 'identifier' => $identifier,
                 'forgot_success' => $context['sent'] ? 'We sent you a new code.' : null,
-                'otp_error' => $context['sent'] ? null : 'We could not send the email. Please contact the administrator.',
+                'forgot_error' => $context['sent'] ? null : ($context['message'] ?? 'We could not send the email. Please contact the administrator.'),
+                'otp_error' => null,
             ]);
         } catch (\Throwable $e) {
             error_log('[AuthController@resendOtp] ' . $e->getMessage());
@@ -426,7 +420,6 @@ class AuthController extends BaseController
             'expires_at_ts' => $session['expires_at_ts'] ?? null,
             'resend_wait' => 0,
             'resend_disabled' => false,
-            'code_plain' => $session['code_plain'] ?? null,
         ];
         $base['sent'] = array_key_exists('sent', $overrides) ? (bool)$overrides['sent'] : true;
         if (!empty($session['last_sent_at'])) {
@@ -481,6 +474,18 @@ class AuthController extends BaseController
         $body = "Hello {$user['username']},\n\nUse this one-time code to sign in:\n\n{$code}\n\nThe code expires in {$minutes} minute" . ($minutes === 1 ? '' : 's') . ".\nIf you did not request this, you can ignore this email.\n";
         $mail = new MailService();
         $sent = $mail->send($email, 'Your one-time sign-in code', $body);
+        $mailError = $mail->lastError();
+        $cleanMailError = null;
+        if ($mailError !== null) {
+            $cleanMailError = preg_replace('/(password|pwd|pass|secret)=([^\s]+)/i', '$1=***', (string)$mailError);
+            $cleanMailError = trim((string)$cleanMailError);
+            if ($cleanMailError === '') {
+                $cleanMailError = null;
+            }
+        }
+        if (!$sent && $mailError) {
+            error_log('[AuthController@issueOtp] Mail send failed: ' . $mailError);
+        }
 
         $resendCount = $resend ? (int)(($_SESSION['login_otp']['resend_count'] ?? 0) + 1) : 0;
 
@@ -494,23 +499,17 @@ class AuthController extends BaseController
             'expires_at' => $expiresIso,
             'last_sent_at' => time(),
             'resend_count' => $resendCount,
-            'code_plain' => $this->otpShowCode ? $code : null,
         ];
         if (!$sent) {
             $_SESSION['login_otp']['last_sent_at'] = time() - $this->otpResendCooldown;
         }
 
-        $contextExtras = [
+        $context = $this->otpViewContext($_SESSION['login_otp'], [
             'sent' => $sent,
             'message' => $sent
                 ? 'We sent a one-time code to your email.'
-                : 'We could not send the email. Please contact the administrator.',
-        ];
-        if (!$sent && $this->otpShowCode) {
-            $contextExtras['code_plain'] = $code;
-            $contextExtras['message'] = 'Email delivery failed, but you can use the code shown below.';
-        }
-        $context = $this->otpViewContext($_SESSION['login_otp'], $contextExtras);
+                : ('We could not send the email. Please contact the administrator.' . ($cleanMailError ? ' Details: ' . $cleanMailError : '')),
+        ]);
         $context['otp_id'] = $otpId;
 
         return $context;

@@ -393,9 +393,6 @@ foreach ($cats as $c): ?>
             <form action="/auth/forgot/verify" method="POST" class="otp-actions" autocomplete="off">
                 <label for="otpCode" style="font-weight:700;color:#0f172a;">Verification Code</label>
                 <input id="otpCode" name="otp_code" class="otp-input" inputmode="numeric" pattern="\d*" maxlength="6" autocomplete="one-time-code" required />
-<?php if (!empty($otpContext['code_plain'])): ?>
-                <div class="otp-hint" style="font-size:14px;color:#0f172a;background:#fef3c7;border:1px solid #fcd34d;padding:10px;border-radius:10px;">Use this temporary code: <strong><?= htmlspecialchars((string)$otpContext['code_plain'], ENT_QUOTES, 'UTF-8') ?></strong></div>
-<?php endif; ?>
                 <button type="submit" class="btn btn-primary">Sign in with code</button>
             </form>
             <form action="/auth/forgot/resend" method="POST" class="otp-actions" style="margin-top:12px;">
