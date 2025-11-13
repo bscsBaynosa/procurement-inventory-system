@@ -41,6 +41,12 @@
                 <?php endif; ?>
                 <a class="btn" href="/procurement/po/export?id=<?= (int)$po['id'] ?>" title="Regenerate & Export fresh PDF" target="_blank" rel="noopener">Export PDF</a>
                 <a class="btn" href="/procurement/rfp/create?po=<?= (int)$po['id'] ?>">Generate RFP</a>
+                    <?php if ((string)($po['status'] ?? '') === 'po_admin_approved'): ?>
+                        <form method="POST" action="/procurement/po/send" style="display:inline;">
+                            <input type="hidden" name="id" value="<?= (int)$po['id'] ?>" />
+                            <button type="submit" class="btn primary" title="Send approved PO to supplier">Send to Supplier</button>
+                        </form>
+                    <?php endif; ?>
             </div>
         </div>
 

@@ -506,8 +506,9 @@ class PDFService
 			}
 		}
 
-		$headerTitle = '<div style="text-align:center;font-weight:800;font-size:16px;letter-spacing:.5px;">Philippine Oncology Center Corporation</div>'
-			. '<div style="text-align:center;font-size:10px;margin:2px 0 8px 0;">Address: Basement, Marian Medical Arts Bldg., Dahlia Street, West Fairview, Quezon City</div>';
+		$headerTitle = '<div style="text-align:center;font-weight:800;font-size:16px;letter-spacing:.5px;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
+			. '<div style="text-align:center;font-size:10px;margin:2px 0 6px 0;">Basement, Marian Medical Arts Bldg., Dahlia Street, West Fairview, Quezon City</div>'
+			. '<div style="text-align:center;font-weight:800;letter-spacing:.5px;margin-bottom:6px;">PURCHASE ORDER</div>';
 
 		// Vendor vs PO meta boxes
 		$vendorMeta = '<table width="100%" border="1" cellspacing="0" cellpadding="5" style="font-size:10px;">'
@@ -565,7 +566,7 @@ class PDFService
 			. '</thead>'
 			. '<tbody>' . $rowsHtml . '</tbody>'
 			. '<tfoot>'
-			. '<tr><td colspan="4" style="text-align:right;font-weight:600;">DISCOUNTED</td><td style="text-align:right;">' . ($discount>0?('₱ '.number_format($discount,2)):'&nbsp;') . '</td></tr>'
+			. '<tr><td colspan="4" style="text-align:right;font-weight:600;">DISCOUNT</td><td style="text-align:right;">' . ($discount>0?('₱ '.number_format($discount,2)):'&nbsp;') . '</td></tr>'
 			. '<tr><td colspan="4" style="text-align:right;font-weight:800;">TOTAL:</td><td style="text-align:right;font-weight:800;">₱ ' . number_format($grand,2) . '</td></tr>'
 			. '</tfoot>'
 			. '</table>';
@@ -593,8 +594,8 @@ class PDFService
 		$sigColLeft = '<table width="100%" cellspacing="0" cellpadding="4" style="font-size:10px;">'
 			. '<tr><td style="width:50%;vertical-align:top;">'
 			. '  <div style="font-size:10px;">PREPARED BY:</div><div style="height:40px;"></div><div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($prepared ?: '&nbsp;') . '<br><small>PROCUREMENT & GEN. SERVICES</small></div>'
-			. '  <div style="margin-top:16px;font-size:10px;">PREPARED BY:</div><div style="height:40px;"></div><div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($financeOfficer ?: '&nbsp;') . '<br><small>FINANCE OFFICER</small></div>'
-			. '  <div style="margin-top:16px;font-size:10px;">PREPARED BY:</div><div style="height:40px;"></div><div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($adminName ?: '&nbsp;') . '<br><small>ADMINISTRATOR</small></div>'
+			. '  <div style="margin-top:16px;font-size:10px;">REVIEWED BY:</div><div style="height:40px;"></div><div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($financeOfficer ?: '&nbsp;') . '<br><small>FINANCE OFFICER</small></div>'
+			. '  <div style="margin-top:16px;font-size:10px;">APPROVED BY:</div><div style="height:40px;"></div><div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($adminName ?: '&nbsp;') . '<br><small>ADMINISTRATOR</small></div>'
 			. '</td>'
 			. '<td style="vertical-align:top;">'
 			. $conditionsText

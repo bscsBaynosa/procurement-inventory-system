@@ -35,3 +35,5 @@ Route::middleware(['auth', 'isManager'])->group(function () {
 
 // Purchase Order PDF download (server-rendered official layout)
 Route::get('/procurement/po/download', [ProcurementController::class, 'poDownload'])->middleware('auth');
+// Send approved PO to Supplier
+Route::post('/procurement/po/send', [ProcurementController::class, 'poSendToSupplier'])->middleware('auth');

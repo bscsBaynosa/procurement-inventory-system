@@ -231,9 +231,7 @@ class AdminController extends BaseController
             $ins = $this->pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)');
             foreach ($man as $row) { $ins->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$row['user_id'], 'j' => $subject, 'b' => $body, 'an' => ($file !== '' ? basename($file) : null), 'ap' => ($file !== '' ? $file : null)]); }
         }
-        // Supplier recipient
-        $ins2 = $this->pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)');
-        $ins2->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$po['supplier_id'], 'j' => 'New Purchase Order • ' . (string)$po['po_number'], 'b' => 'A PO has been issued to you. Please review and respond with your terms.', 'an' => ($file !== '' ? basename($file) : null), 'ap' => ($file !== '' ? $file : null)]);
+        // Do not auto-send to Supplier; Procurement will send after Admin approval.
         // Update PR group status
         try { $this->requests()->updateGroupStatus($pr, 'po_admin_approved', (int)($_SESSION['user_id'] ?? 0), 'PO approved by admin'); } catch (\Throwable $ignored) {}
         header('Location: /inbox?po_approved=1');

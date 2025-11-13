@@ -1132,6 +1132,7 @@ class ProcurementController extends BaseController
             $st->execute(['id' => $poId]);
             if ($row = $st->fetch()) {
                 $prefill['po_number'] = (string)$row['po_number'];
+                
                 $prefill['pr_number'] = $prefill['pr_number'] ?: (string)($row['pr_number'] ?? '');
                 $prefill['pay_to'] = (string)($row['vendor_name'] ?? '');
                 $prefill['total'] = (float)($row['total'] ?? 0);
@@ -1139,6 +1140,81 @@ class ProcurementController extends BaseController
             }
         }
         $this->render('procurement/rfp_create.php', ['rfp' => $prefill]);
+    }
+
+    /** POST: Send an Admin-approved PO to the awarded Supplier (attaches official PDF). */
+    public function poSendToSupplier(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
+        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        if ($id <= 0) { $_SESSION['flash_error'] = 'Invalid PO id'; header('Location: /procurement/pos'); return; }
+        $pdo = \App\Database\Connection::resolve();
+        // Load PO
+        $st = $pdo->prepare('SELECT id, pr_number, po_number, supplier_id, status, pdf_path FROM purchase_orders WHERE id = :id');
+        $st->execute(['id' => $id]);
+        $po = $st->fetch();
+        if (!$po) { $_SESSION['flash_error'] = 'PO not found'; header('Location: /procurement/pos'); return; }
+        $status = (string)($po['status'] ?? '');
+        if (!in_array($status, ['po_admin_approved','submitted','draft'], true)) {
+            $_SESSION['flash_error'] = 'PO not ready to send to supplier';
+            header('Location: /procurement/po/view?id=' . (int)$po['id']);
+            return;
+        }
+        $pdf = (string)($po['pdf_path'] ?? '');
+        if ($pdf === '' || !is_file($pdf)) {
+            // Try to regenerate quickly and proceed
+            try {
+                $stH = $pdo->prepare('SELECT * FROM purchase_orders WHERE id = :id');
+                $stH->execute(['id' => (int)$po['id']]);
+                $row = $stH->fetch();
+                if ($row) {
+                    $items = [];
+                    $stI = $pdo->prepare('SELECT description, unit, qty, unit_price, line_total FROM purchase_order_items WHERE po_id = :id ORDER BY id ASC');
+                    $stI->execute(['id' => (int)$po['id']]);
+                    foreach ($stI->fetchAll() as $r) { $items[] = ['description'=>(string)$r['description'],'unit'=>(string)$r['unit'],'qty'=>(int)$r['qty'],'unit_price'=>(float)$r['unit_price'],'total'=>(float)$r['line_total']]; }
+                    $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
+                    if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+                    $pdf = $dir . DIRECTORY_SEPARATOR . 'PO-' . preg_replace('/[^A-Za-z0-9_-]/','_', (string)$row['po_number']) . '.pdf';
+                    $this->pdf()->generatePurchaseOrderPDFToFile([
+                        'po_number' => (string)$row['po_number'],
+                        'date' => date('Y-m-d', strtotime((string)($row['created_at'] ?? date('Y-m-d')))),
+                        'vendor_name' => (string)($row['vendor_name'] ?? ''),
+                        'vendor_address' => (string)($row['vendor_address'] ?? ''),
+                        'vendor_tin' => (string)($row['vendor_tin'] ?? ''),
+                        'reference' => (string)($row['reference'] ?? ''),
+                        'terms' => (string)($row['terms'] ?? ''),
+                        'center' => (string)($row['center'] ?? ''),
+                        'notes' => (string)($row['notes'] ?? ''),
+                        'discount' => isset($row['discount']) ? (float)$row['discount'] : 0.0,
+                        'deliver_to' => (string)($row['deliver_to'] ?? ''),
+                        'look_for' => (string)($row['look_for'] ?? ''),
+                        'prepared_by' => (string)($row['prepared_by'] ?? ''),
+                        'reviewed_by' => (string)($row['finance_officer'] ?? ''),
+                        'approved_by' => (string)($row['admin_name'] ?? ''),
+                        'items' => $items,
+                    ], $pdf);
+                    $pdo->prepare('UPDATE purchase_orders SET pdf_path=:p, updated_at=NOW() WHERE id=:id')->execute(['p' => $pdf, 'id' => (int)$po['id']]);
+                }
+            } catch (\Throwable $e) {}
+        }
+        if ($pdf === '' || !is_file($pdf)) { $_SESSION['flash_error'] = 'PO PDF not found'; header('Location: /procurement/po/view?id=' . (int)$po['id']); return; }
+        // Ensure messages attachment columns
+        try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
+        // Send to supplier
+        $ins = $pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)');
+        $ins->execute([
+            's' => (int)($_SESSION['user_id'] ?? 0),
+            'r' => (int)$po['supplier_id'],
+            'j' => 'New Purchase Order • ' . (string)$po['po_number'],
+            'b' => 'Please see the attached approved Purchase Order. Kindly review and respond with your terms.',
+            'an' => basename($pdf),
+            'ap' => $pdf,
+        ]);
+        // Update PO status to indicate it was sent to supplier
+        try { $pdo->prepare("UPDATE purchase_orders SET status='sent_to_supplier', updated_at=NOW() WHERE id=:id")->execute(['id' => (int)$po['id']]); } catch (\Throwable $e) {}
+        $_SESSION['flash_success'] = 'PO sent to supplier.';
+        header('Location: /procurement/po/view?id=' . (int)$po['id']);
     }
 
     /** POST: Submit RFP, generate PDF, send to Admin via message */

@@ -38,7 +38,7 @@
         </div>
         <form class="filters" method="GET" action="/procurement/pos">
             <label>Status
-                <?php $statuses = ['', 'submitted','po_admin_approved','po_rejected','supplier_response_submitted','draft']; ?>
+                <?php $statuses = ['', 'submitted','po_admin_approved','sent_to_supplier','po_rejected','supplier_response_submitted','draft']; ?>
                 <select name="status">
                     <option value="">All</option>
                     <?php foreach ($statuses as $s): $sel=((string)($filters['status'] ?? '')===(string)$s); ?>
@@ -82,6 +82,12 @@
                         <td>
                             <?php if (!empty($p['pdf_path'])): ?>
                                 <a class="btn" href="/procurement/po/download?id=<?= (int)$p['id'] ?>">Download</a>
+                                <?php if ((string)($p['status'] ?? '') === 'po_admin_approved'): ?>
+                                    <form method="POST" action="/procurement/po/send" style="display:inline;margin-left:6px;">
+                                        <input type="hidden" name="id" value="<?= (int)$p['id'] ?>" />
+                                        <button type="submit" class="btn primary">Send</button>
+                                    </form>
+                                <?php endif; ?>
                             <?php else: ?>
                                 <span class="muted">—</span>
                             <?php endif; ?>
