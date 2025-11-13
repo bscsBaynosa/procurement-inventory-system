@@ -771,7 +771,16 @@ class ProcurementController extends BaseController
             $prId = $stPid->fetchColumn();
         } catch (\Throwable $ignored) {}
         // Insert PO header; return newly created PO id
-        // Use RETURNING id for modern schemas; fallback handled by ensurePoTables
+        // Detect primary key column name for RETURNING (legacy schemas may use po_id)
+        $poPkCol = 'id';
+        try {
+            $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn();
+            if (!$hasId) {
+                $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn();
+                if ($hasPoId) { $poPkCol = 'po_id'; }
+            }
+        } catch (\Throwable $e) { /* keep default 'id' */ }
+        // Use RETURNING <pk> depending on detected schema
         $ins = $pdo->prepare('INSERT INTO purchase_orders (
                 pr_number, pr_id, po_number, supplier_id,
                 vendor_name, vendor_address, vendor_tin,
@@ -788,7 +797,7 @@ class ProcurementController extends BaseController
                 :tot, :disc,
                 :uid, :prep, :fo, :an,
                 :rev, :app
-            ) RETURNING id');
+            ) RETURNING ' . $poPkCol);
         // Guard against duplicate PO numbers race by retrying once if unique violation occurs
         try {
             $ins->execute([
@@ -844,6 +853,14 @@ class ProcurementController extends BaseController
             } else { throw $e; }
         }
         $poId = (int)$ins->fetchColumn();
+        // Fallback: if no id returned (rare), resolve by unique po_number
+        if ($poId <= 0) {
+            try {
+                $stGet = $pdo->prepare('SELECT ' . $poPkCol . ' FROM purchase_orders WHERE po_number = :po LIMIT 1');
+                $stGet->execute(['po' => $poNumber]);
+                $poId = (int)($stGet->fetchColumn() ?: 0);
+            } catch (\Throwable $e) { /* ignore */ }
+        }
         $lineIns = $pdo->prepare('INSERT INTO purchase_order_items (po_id, description, unit, qty, unit_price, line_total) VALUES (:po,:d,:u,:q,:p,:t)');
         foreach ($items as $it) { $lineIns->execute(['po' => $poId, 'd' => $it['description'], 'u' => $it['unit'], 'q' => $it['qty'], 'p' => $it['unit_price'], 't' => $it['total']]); }
         // Generate PDF to storage
