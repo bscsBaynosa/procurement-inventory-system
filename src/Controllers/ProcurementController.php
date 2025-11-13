@@ -2519,7 +2519,8 @@ class ProcurementController extends BaseController
         } catch (\Throwable $e) {}
         // Upsert (allow re-generation) into pr_canvassing_details
         try {
-            $stmt = $pdo->prepare('INSERT INTO pr_canvassing_details (canvass_id, pr_number, suppliers, selections, awards, created_by) VALUES (:cid,:pr,:sup,:sel,:awd,:uid)\n                ON CONFLICT (canvass_id) DO UPDATE SET suppliers=EXCLUDED.suppliers, selections=EXCLUDED.selections, awards=EXCLUDED.awards, created_at=NOW()');
+            // Fix SQL: remove literal \n sequence that caused syntax error in Postgres
+            $stmt = $pdo->prepare('INSERT INTO pr_canvassing_details (canvass_id, pr_number, suppliers, selections, awards, created_by) VALUES (:cid,:pr,:sup,:sel,:awd,:uid) ON CONFLICT (canvass_id) DO UPDATE SET suppliers=EXCLUDED.suppliers, selections=EXCLUDED.selections, awards=EXCLUDED.awards, created_at=NOW()');
             $stmt->execute([
                 'cid'=>$canvassId,
                 'pr'=>$pr,
