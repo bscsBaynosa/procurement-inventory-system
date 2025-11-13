@@ -449,14 +449,16 @@ class PDFService
 	}
 
 	/**
-	 * Generate a Purchase Order PDF file closely matching the provided form.
-	 * @param array $po Associative data: po_number, date, vendor_name, vendor_address, vendor_tin, reference, terms, center, items[], notes, deliver_to, look_for, prepared_by, reviewed_by (optional), approved_by
-	 *                  Each item: [description, unit, qty, unit_price, total]
-	 * @param string $filePath Destination absolute file path
+	 * Generate a Purchase Order PDF file following the official POCC layout.
+	 * Input keys: po_number, date, vendor_name, vendor_address, vendor_tin, reference, terms, center,
+	 * items[], discount, notes, deliver_to, look_for, prepared_by, reviewed_by, approved_by.
+	 * Each item: description, unit, qty, unit_price, total (optional; computed if missing).
 	 */
 	public function generatePurchaseOrderPDFToFile(array $po, string $filePath): void
 	{
-		$mpdf = new Mpdf(['format' => 'A4', 'orientation' => 'P', 'margin_left' => 8, 'margin_right' => 8, 'margin_top' => 8, 'margin_bottom' => 8]);
+		$mpdf = new Mpdf(['format' => 'A4', 'orientation' => 'P', 'margin_left' => 10, 'margin_right' => 10, 'margin_top' => 10, 'margin_bottom' => 10]);
+
+		// Sanitize inputs
 		$poNum = htmlspecialchars((string)($po['po_number'] ?? ''));
 		$date = htmlspecialchars((string)($po['date'] ?? date('Y-m-d')));
 		$vendor = htmlspecialchars((string)($po['vendor_name'] ?? ''));
@@ -473,36 +475,58 @@ class PDFService
 		$approved = htmlspecialchars((string)($po['approved_by'] ?? ''), ENT_QUOTES, 'UTF-8');
 		$discount = isset($po['discount']) ? (float)$po['discount'] : 0.0;
 
-		// Header (Title + Address)
-		$header = '<div style="text-align:center;font-weight:800;font-size:18px;">Philippine Oncology Center Corporation</div>'
-				. '<div style="text-align:center;font-size:10px;margin-bottom:6px;">Address: Basement, Marian Medical Arts Bldg., Dahlia Street, West Fairview, Quezon City</div>';
+		// Header with logo (try to embed pocc-logo.svg if available)
+		$root = @realpath(__DIR__ . '/../../');
+		$public = $root ? ($root . DIRECTORY_SEPARATOR . 'public') : null;
+		$cand = [];
+		if ($root) { $cand[] = $root . DIRECTORY_SEPARATOR . 'logo.png'; }
+		if ($public) {
+			$cand[] = $public . DIRECTORY_SEPARATOR . 'logo.png';
+			$cand[] = $public . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'logo.png';
+		}
+		$cand[] = ($public ? $public : (__DIR__ . '/../../public')) . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'pocc-logo.svg';
+		$logoHtml = '';
+		foreach ($cand as $p) {
+			if (@is_file($p)) {
+				$data = @file_get_contents($p);
+				if ($data !== false) {
+					$mime = (strtolower(substr($p, -4)) === '.svg') ? 'image/svg+xml' : 'image/png';
+					$src = 'data:' . $mime . ';base64,' . base64_encode($data);
+					$logoHtml = '<div style="text-align:center;margin-bottom:4px;"><img src="' . $src . '" width="52" height="52" /></div>';
+					break;
+				}
+			}
+		}
 
-		// Top two-column block: Vendor (left) vs PO Meta (right)
+		$header = '<div style="text-align:center;font-weight:800;font-size:14px;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
+				. '<div style="height:1px;background:#000;margin:6px 0 6px 0;"></div>';
+
+		// Top section: Vendor vs PO Meta
 		$top = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-bottom:6px; font-size:11px;">'
 			 . '<tr>'
 			 . '  <td style="width:55%;vertical-align:top;">'
 			 . '    <table width="100%" border="0" cellspacing="0" cellpadding="4">'
-			 . '      <tr><td style="width:26%;">VENDOR:</td><td style="border:1px solid #999;height:24px;">' . $vendor . '</td></tr>'
-			 . '      <tr><td>ADDRESS:</td><td style="border:1px solid #999;height:38px;">' . $addr . '</td></tr>'
-			 . '      <tr><td>VAT/TIN:</td><td style="border:1px solid #999;height:24px;">' . $tin . '</td></tr>'
+			 . '      <tr><td style="width:26%;">VENDOR:</td><td style="border:1px solid #999;height:22px;">' . $vendor . '</td></tr>'
+			 . '      <tr><td>ADDRESS:</td><td style="border:1px solid #999;height:36px;">' . $addr . '</td></tr>'
+			 . '      <tr><td>VAT/TIN:</td><td style="border:1px solid #999;height:22px;">' . $tin . '</td></tr>'
 			 . '    </table>'
 			 . '  </td>'
 			 . '  <td style="vertical-align:top;">'
 			 . '    <table width="100%" border="0" cellspacing="0" cellpadding="4" style="font-size:11px;">'
-			 . '      <tr><td style="width:45%;">PURCHASE ORDER NO.</td><td style="border:1px solid #999; text-align:right; height:22px;">' . $poNum . '</td></tr>'
-			 . '      <tr><td>CENTER</td><td style="border:1px solid #999; height:22px;">' . $center . '</td></tr>'
-			 . '      <tr><td>DATE</td><td style="border:1px solid #999; height:22px; text-align:right;">' . $date . '</td></tr>'
-			 . '      <tr><td>REFERENCE:</td><td style="border:1px solid #999; height:22px;">' . $ref . '</td></tr>'
-			 . '      <tr><td>TERMS OF PAYMENT</td><td style="border:1px solid #999; height:22px;">' . $terms . '</td></tr>'
+			 . '      <tr><td style="width:45%;">PURCHASE ORDER NO.</td><td style="border:1px solid #999; text-align:right; height:20px;">' . $poNum . '</td></tr>'
+			 . '      <tr><td>CENTER</td><td style="border:1px solid #999; height:20px;">' . $center . '</td></tr>'
+			 . '      <tr><td>DATE</td><td style="border:1px solid #999; height:20px; text-align:right;">' . $date . '</td></tr>'
+			 . '      <tr><td>REFERENCE:</td><td style="border:1px solid #999; height:20px;">' . $ref . '</td></tr>'
+			 . '      <tr><td>TERMS OF PAYMENT</td><td style="border:1px solid #999; height:20px;">' . $terms . '</td></tr>'
 			 . '    </table>'
 			 . '  </td>'
 			 . '</tr>'
 			 . '</table>';
 
-		// Items table with padding rows, DISCOUNTED row, and TOTAL row
+		// Items table
 		$itemsRows = '';
 		$total = 0.0;
-		foreach (($po['items'] ?? []) as $it) {
+		foreach ((array)($po['items'] ?? []) as $it) {
 			$desc = htmlspecialchars((string)($it['description'] ?? ''), ENT_QUOTES, 'UTF-8');
 			$unit = htmlspecialchars((string)($it['unit'] ?? ''), ENT_QUOTES, 'UTF-8');
 			$qty = (int)($it['qty'] ?? 0);
@@ -511,13 +535,13 @@ class PDFService
 			$total += $line;
 			$itemsRows .= '<tr>'
 				. '<td>' . $desc . '</td>'
-				. '<td style="text-align:center; width:8%;">' . $unit . '</td>'
-				. '<td style="text-align:center; width:8%;">' . $qty . '</td>'
+				. '<td style="text-align:center; width:10%;">' . $unit . '</td>'
+				. '<td style="text-align:center; width:10%;">' . $qty . '</td>'
 				. '<td style="text-align:right; width:15%;">' . number_format($price, 2) . '</td>'
 				. '<td style="text-align:right; width:15%;">' . number_format($line, 2) . '</td>'
 				. '</tr>';
 		}
-		// Pad rows to keep the form look
+		// Maintain minimum visible rows to preserve form look
 		$minRows = 8;
 		$currentRows = substr_count($itemsRows, '<tr>');
 		for ($i = $currentRows; $i < $minRows; $i++) {
@@ -529,8 +553,8 @@ class PDFService
 						. '<td>&nbsp;</td>'
 						. '</tr>';
 		}
-		$discountFmt = $discount > 0 ? ('₱ ' . number_format($discount, 2)) : '&nbsp;';
 		$grand = max(0.0, $total - $discount);
+		$discountFmt = $discount > 0 ? ('₱ ' . number_format($discount, 2)) : '&nbsp;';
 		$itemsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="font-size:11px;">'
 					. '<thead><tr>'
 					. '<th>ITEM DESCRIPTION</th>'
@@ -546,46 +570,41 @@ class PDFService
 					. '</tfoot>'
 					. '</table>';
 
-		// Notes & Instructions block styled as a gray band, with Deliver To and Look For
-		$notesBlock = '<div style="border:1px solid #999; background:#f3f4f6; padding:6px; margin-top:6px; font-size:10px;">'
-					. '<div style="font-weight:700; text-align:center;">NOTES & INSTRUCTIONS:</div>'
-					. '<div style="margin-top:4px;">' . ($notes !== '' ? $notes : '&nbsp;') . '</div>'
-					. '<div style="text-align:center; margin-top:6px;">'
-					. '  <div style="font-weight:700;">PLEASE DELIVER TO:</div>'
-					. '  <div><span style="font-weight:700;">PHILIPPINE ONCOLOGY CENTER CORPORATION</span></div>'
-					. '  <div>' . $deliverTo . '</div>'
-					. '  <div>LOOK FOR: <span style="font-weight:700;">' . $lookFor . '</span></div>'
-					. '</div>'
-					. '</div>';
+		// Notes & Instructions + Deliver To
+		$notesBlock = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px; font-size:10px;">'
+					. '<tr><td style="width:22%;font-weight:700;">NOTES & INSTRUCTIONS:</td><td>' . ($notes !== '' ? $notes : '&nbsp;') . '</td></tr>'
+					. '<tr><td style="font-weight:700;">PLEASE DELIVER TO:</td><td>'
+					. 'PHILIPPINE ONCOLOGY CENTER CORPORATION<br>' . $deliverTo . '<br>LOOK FOR: <span style="font-weight:700;">' . $lookFor . '</span>'
+					. '</td></tr>'
+					. '</table>';
 
-		// Signature and Conditions area — two columns
+		// Conditions and signatures
 		$conditionsText = '<div style="text-align:center;font-weight:700;margin-bottom:4px;">CONDITIONS</div>'
 			. '<div style="font-size:9px; line-height:1.3;">'
-			. 'The PO number & date must be shown on the invoice and/or statement of account. At least two (2) copies '
-			. 'of delivery receipts / or invoice must accompany the delivery. Goods or merchandises must be supplied '
-			. 'risk-free. Acceptance of the PO constitutes a contract between Vendor and Vendee. The Philippine Oncology '
-			. 'Center Corporation reserves the right to cancel this PO without notice for failure of the vendor to comply '
-			. 'with the above terms and conditions and other supplementary agreements e.g. Purchasing Guidelines.'
+			. 'The PO number & date must be shown on the invoice and/or statement of account. At least two (2) copies of delivery receipts or invoice must accompany the delivery. '
+			. 'Goods or merchandises must be supplied risk-free. Acceptance of the PO constitutes a contract between Vendor and Vendee. '
+			. 'The Philippine Oncology Center Corporation reserves the right to cancel this PO without notice for failure of the vendor to comply with the above terms and conditions '
+			. 'and other supplementary agreements e.g. Purchasing Guidelines.'
 			. '</div>';
 
-		$sigCell = function(string $title, string $name, string $subtitle): string {
+		$sigCell = function(string $label, string $name, string $subtitle): string {
 			$n = $name !== '' ? htmlspecialchars($name, ENT_QUOTES, 'UTF-8') : '&nbsp;';
 			$sub = $subtitle !== '' ? htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8') : '&nbsp;';
 			return '<div style="margin-bottom:10px;">'
-				 . '  <div style="font-size:10px;">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</div>'
-				 . '  <div style="height:40px;"></div>'
+				 . '  <div style="font-size:10px;">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</div>'
+				 . '  <div style="height:38px;"></div>'
 				 . '  <div style="border-top:1px solid #999; text-align:center; padding-top:6px; font-size:10px;">' . $n . '<br><small>' . $sub . '</small></div>'
 				 . '</div>';
 		};
 
 		$leftSigs = $sigCell('PREPARED BY:', $prepared, 'PROCUREMENT & GEN. SERVICES')
-				  . $sigCell('PREPARED BY:', $reviewed, 'FINANCE OFFICER')
-				  . $sigCell('PREPARED BY:', '', '')
-				  . $sigCell('PREPARED BY:', $approved, 'ADMINISTRATOR');
+				  . $sigCell('CHECKED BY:', $reviewed, 'FINANCE OFFICER')
+				  . $sigCell('REVIEWED BY:', '', '')
+				  . $sigCell('APPROVED BY:', $approved, 'ADMINISTRATOR');
 
 		$supplierSig = '<div style="margin-top:12px;">'
-					 . '  <div style="height:40px;"></div>'
-					 . '  <div style="border-top:1px solid #999; text-align:center; padding-top:6px; font-size:10px;">SUPPLIER / SUPPLIERS REPRESENTATIVE<br>SIGNATURE OVER PRINTED NAME</div>'
+					 . '  <div style="height:38px;"></div>'
+					 . '  <div style="border-top:1px solid #999; text-align:center; padding-top:6px; font-size:10px;">SUPPLIER / SUPPLIER’S REPRESENTATIVE<br>SIGNATURE OVER PRINTED NAME</div>'
 					 . '</div>'
 					 . '<div style="margin-top:12px; font-size:10px; display:flex; justify-content:space-between;">'
 					 . '  <div>PREPARED BY:</div><div>DATE</div>'
@@ -598,7 +617,7 @@ class PDFService
 						. '  </tr>'
 						. '</table>';
 
-		$html = $header . $top . $itemsTable . $notesBlock . $sigConditions;
+		$html = $logoHtml . $header . $top . $itemsTable . $notesBlock . $sigConditions;
 		$mpdf->WriteHTML($html);
 		$mpdf->Output($filePath, 'F');
 	}
