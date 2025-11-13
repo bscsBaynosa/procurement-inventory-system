@@ -78,6 +78,10 @@ class AuthService
 			->execute(['ip' => $ip ?: null, 'id' => $user['user_id']]);
 
 		$action = $reason !== '' ? $reason : 'login';
+		$allowedActions = ['login', 'logout'];
+		if (!in_array($action, $allowedActions, true)) {
+			$action = 'login';
+		}
 		$this->recordAuthActivity((int)$user['user_id'], $action, $ip, $userAgent);
 
 		if (session_status() !== PHP_SESSION_ACTIVE) {
