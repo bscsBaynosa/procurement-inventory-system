@@ -31,6 +31,20 @@ class ProcurementController extends BaseController
     private function inventory(): InventoryService { return $this->inventory ??= new InventoryService(); }
     private function pdf(): PDFService { return $this->pdf ??= new PDFService(); }
 
+    // Resolve a writable directory for generating PDFs (storage/pdf if writable, else system temp)
+    private function resolveWritablePdfDir(): string
+    {
+        $candidates = [];
+        $root = @realpath(__DIR__ . '/../../..') ?: null;
+        if ($root) { $candidates[] = $root . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf'; }
+        $candidates[] = sys_get_temp_dir();
+        foreach ($candidates as $dir) {
+            if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+            if (is_dir($dir) && is_writable($dir)) { return $dir; }
+        }
+        return '.'; // last resort
+    }
+
     // --- Purchase Orders ---
     private function ensurePoTables(): void
     {
@@ -866,8 +880,7 @@ class ProcurementController extends BaseController
         $lineIns = $pdo->prepare('INSERT INTO purchase_order_items (po_id, description, unit, qty, unit_price, line_total) VALUES (:po,:d,:u,:q,:p,:t)');
         foreach ($items as $it) { $lineIns->execute(['po' => $poId, 'd' => $it['description'], 'u' => $it['unit'], 'q' => $it['qty'], 'p' => $it['unit_price'], 't' => $it['total']]); }
         // Generate PDF to storage
-        $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
-        if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+        $dir = $this->resolveWritablePdfDir();
         $file = $dir . DIRECTORY_SEPARATOR . 'PO-' . preg_replace('/[^A-Za-z0-9_-]/','_', $poNumber) . '.pdf';
         $this->pdf()->generatePurchaseOrderPDFToFile([
             'po_number' => $poNumber,
@@ -1138,8 +1151,7 @@ class ProcurementController extends BaseController
                 'total' => (float)$r['line_total'],
             ];
         }
-        $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
-        if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+        $dir = $this->resolveWritablePdfDir();
         $file = $dir . DIRECTORY_SEPARATOR . 'PO-' . preg_replace('/[^A-Za-z0-9_-]/','_', (string)$po['po_number']) . '.pdf';
         $this->pdf()->generatePurchaseOrderPDFToFile([
             'po_number' => (string)$po['po_number'],
@@ -1236,8 +1248,7 @@ class ProcurementController extends BaseController
                     $stI = $pdo->prepare('SELECT description, unit, qty, unit_price, line_total FROM purchase_order_items WHERE po_id = :id ORDER BY id ASC');
                     $stI->execute(['id' => (int)$po['id']]);
                     foreach ($stI->fetchAll() as $r) { $items[] = ['description'=>(string)$r['description'],'unit'=>(string)$r['unit'],'qty'=>(int)$r['qty'],'unit_price'=>(float)$r['unit_price'],'total'=>(float)$r['line_total']]; }
-                    $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
-                    if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+                    $dir = $this->resolveWritablePdfDir();
                     $pdf = $dir . DIRECTORY_SEPARATOR . 'PO-' . preg_replace('/[^A-Za-z0-9_-]/','_', (string)$row['po_number']) . '.pdf';
                     $this->pdf()->generatePurchaseOrderPDFToFile([
                         'po_number' => (string)$row['po_number'],
