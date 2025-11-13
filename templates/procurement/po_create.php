@@ -143,9 +143,9 @@
                         <?php if (!empty($po_items ?? [])): ?>
                             <?php foreach ($po_items as $pi): ?>
                                 <tr>
-                                    <td><input name="item_desc[]" value="<?= htmlspecialchars((string)($pi['description'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" /></td>
-                                    <td><input name="item_unit[]" value="<?= htmlspecialchars((string)($pi['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" /></td>
-                                    <td><input name="item_qty[]" type="number" min="1" value="<?= (int)($pi['qty'] ?? 1) ?>" oninput="recalc(this)" /></td>
+                                    <td><input name="item_desc[]" value="<?= htmlspecialchars((string)($pi['description'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" readonly style="background:#f1f5f9;" /></td>
+                                    <td><input name="item_unit[]" value="<?= htmlspecialchars((string)($pi['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" readonly style="background:#f1f5f9;" /></td>
+                                    <td><input name="item_qty[]" type="number" min="1" value="<?= (int)($pi['qty'] ?? 1) ?>" readonly style="background:#f1f5f9;" /></td>
                                     <td><input name="item_price[]" type="number" step="0.01" min="0" value="<?= number_format((float)($pi['unit_price'] ?? 0),2,'.','') ?>" readonly style="background:#f1f5f9;" /></td>
                                     <td class="line-total">₱ 0.00</td>
                                     <td></td>

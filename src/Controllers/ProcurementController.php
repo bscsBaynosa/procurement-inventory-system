@@ -282,23 +282,49 @@ class ProcurementController extends BaseController
             $_SESSION['flash_error'] = 'Required fields missing (Center, Terms, Finance Officer, Admin Name).';
             header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Required+fields+missing'); return;
         }
-        // Items arrays
-        $descs = $_POST['item_desc'] ?? [];
-        $units = $_POST['item_unit'] ?? [];
-        $qtys = $_POST['item_qty'] ?? [];
-        $prices = $_POST['item_price'] ?? [];
+        // Prefer authoritative items from PR-Canvass awards for the selected supplier; fall back to posted arrays if no awards are found
         $items = [];
         $total = 0.0;
-        $n = min(count($descs), count($units), count($qtys), count($prices));
-        for ($i=0; $i<$n; $i++) {
-            $desc = trim((string)$descs[$i]); if ($desc === '') continue;
-            $unit = trim((string)$units[$i]);
-            $qty = (int)$qtys[$i];
-            $price = (float)$prices[$i];
-            $line = $qty * $price; $total += $line;
-            $items[] = [ 'description' => $desc, 'unit' => $unit, 'qty' => $qty, 'unit_price' => $price, 'total' => $line ];
+        $pdo = \App\Database\Connection::resolve();
+        $rowsPr = $this->requests()->getGroupDetails($pr) ?: [];
+        $awardPricesByItemId = [];
+        try {
+            $stA = $pdo->prepare('SELECT item_id, awarded_price FROM pr_canvassing_items WHERE pr_number = :pr AND awarded_supplier_id = :sid');
+            $stA->execute(['pr' => $pr, 'sid' => $supplierId]);
+            foreach ($stA->fetchAll() as $a) {
+                $iid = (int)($a['item_id'] ?? 0);
+                if ($iid > 0) { $awardPricesByItemId[$iid] = (float)($a['awarded_price'] ?? 0); }
+            }
+        } catch (\Throwable $e) { /* ignore and fall back to posted data */ }
+        if (!empty($awardPricesByItemId)) {
+            foreach ($rowsPr as $r) {
+                $iid = (int)($r['item_id'] ?? 0);
+                if ($iid <= 0 || !isset($awardPricesByItemId[$iid])) { continue; }
+                $desc = (string)($r['item_name'] ?? 'Item');
+                $unit = (string)($r['unit'] ?? '');
+                $qty = (int)($r['quantity'] ?? 0);
+                $price = (float)$awardPricesByItemId[$iid];
+                $line = $qty * $price; $total += $line;
+                $items[] = [ 'description' => $desc, 'unit' => $unit, 'qty' => $qty, 'unit_price' => $price, 'total' => $line ];
+            }
         }
-    if (empty($items)) { $_SESSION['flash_error'] = 'Add at least one item.'; header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Add+at+least+one+item'); return; }
+        // Fallback to posted arrays when no awards are found for the chosen supplier
+        if (empty($items)) {
+            $descs = $_POST['item_desc'] ?? [];
+            $units = $_POST['item_unit'] ?? [];
+            $qtys = $_POST['item_qty'] ?? [];
+            $prices = $_POST['item_price'] ?? [];
+            $n = min(count($descs), count($units), count($qtys), count($prices));
+            for ($i=0; $i<$n; $i++) {
+                $desc = trim((string)$descs[$i]); if ($desc === '') continue;
+                $unit = trim((string)$units[$i]);
+                $qty = (int)$qtys[$i];
+                $price = (float)$prices[$i];
+                $line = $qty * $price; $total += $line;
+                $items[] = [ 'description' => $desc, 'unit' => $unit, 'qty' => $qty, 'unit_price' => $price, 'total' => $line ];
+            }
+        }
+        if (empty($items)) { $_SESSION['flash_error'] = 'No awarded items found for this supplier.'; header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=No+awarded+items+for+selected+supplier'); return; }
         $pdo = \App\Database\Connection::resolve();
         // Resolve pr_id for linkage
         $prId = null;
