@@ -38,6 +38,24 @@
                 <?= htmlspecialchars((string)$flashError, ENT_QUOTES, 'UTF-8') ?>
             </div>
         <?php endif; ?>
+        <?php
+        $awardedSuppliers = $awarded_suppliers ?? [];
+        $prefSupplier = $prefill['supplier_id'] ?? null;
+        $lockSupplier = !empty($prefill['lock_supplier']);
+        if (!empty($awardedSuppliers)):
+        ?>
+            <div class="card" style="margin-top:8px;">
+                <div style="font-weight:600; margin-bottom:6px;">Canvass awards detected</div>
+                <div style="font-size:13px; color:var(--muted);">Items were awarded to the following supplier(s) for this PR. You can prepare a PO per supplier using the links below. The form will auto-fill unit prices and lock the supplier.</div>
+                <div style="margin-top:8px; display:flex; gap:8px; flex-wrap:wrap;">
+                    <?php foreach ($awardedSuppliers as $sid => $sname): $sid = (int)$sid; $isCurrent = ($prefSupplier && (int)$prefSupplier === $sid); ?>
+                        <a class="btn <?= $isCurrent ? '' : 'muted' ?>" href="/procurement/po/create?pr=<?= urlencode((string)$pr) ?>&supplier=<?= $sid ?>" title="Prepare PO for <?= htmlspecialchars((string)$sname, ENT_QUOTES, 'UTF-8') ?>">
+                            <?= $isCurrent ? 'Preparing: ' : '' ?><?= htmlspecialchars((string)$sname, ENT_QUOTES, 'UTF-8') ?>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+        <?php endif; ?>
     <form method="POST" action="/procurement/po/create" class="card" onsubmit="return validateItems();">
             <input type="hidden" name="pr_number" value="<?= htmlspecialchars($pr, ENT_QUOTES, 'UTF-8') ?>" />
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px;">
@@ -49,12 +67,24 @@
                 </div>
                 <div>
                     <label>Supplier (Vendor) <span style="color:#dc2626;">*</span></label>
-                    <select name="supplier_id" required>
+                    <?php
+                        // Build options: prefer awarded suppliers if available, else all suppliers
+                        $options = [];
+                        if (!empty($awardedSuppliers)) {
+                            foreach ($awardedSuppliers as $sid => $sname) { $options[] = ['id'=>(int)$sid, 'name'=>(string)$sname]; }
+                        } else {
+                            foreach ($suppliers as $s) { $options[] = ['id'=>(int)$s['user_id'], 'name'=>(string)$s['full_name']]; }
+                        }
+                    ?>
+                    <select name="supplier_id" <?= $lockSupplier ? 'disabled' : 'required' ?> >
                         <option value="">-- choose supplier --</option>
-                        <?php $prefSupplier = $prefill['supplier_id'] ?? null; foreach ($suppliers as $s): $sid=(int)$s['user_id']; ?>
-                            <option value="<?= $sid ?>" <?= ($prefSupplier && $prefSupplier === $sid) ? 'selected' : '' ?>><?= htmlspecialchars((string)$s['full_name'], ENT_QUOTES, 'UTF-8') ?></option>
+                        <?php foreach ($options as $opt): $sid=(int)$opt['id']; ?>
+                            <option value="<?= $sid ?>" <?= ($prefSupplier && (int)$prefSupplier === $sid) ? 'selected' : '' ?>><?= htmlspecialchars((string)$opt['name'], ENT_QUOTES, 'UTF-8') ?></option>
                         <?php endforeach; ?>
                     </select>
+                    <?php if ($lockSupplier && $prefSupplier): ?>
+                        <input type="hidden" name="supplier_id" value="<?= (int)$prefSupplier ?>" />
+                    <?php endif; ?>
                 </div>
                 <div>
                     <label>Vendor Name (override)</label>
@@ -110,23 +140,38 @@
                 <table>
                     <thead><tr><th>Description</th><th style="width:12%;">Unit</th><th style="width:12%;">Qty</th><th style="width:16%;">Unit Price</th><th style="width:16%;">Line Total</th><th style="width:8%;"></th></tr></thead>
                     <tbody id="poItems">
-                        <?php foreach ($rows as $r): ?>
-                            <tr>
-                                <td><input name="item_desc[]" value="<?= htmlspecialchars((string)($r['item_name'] ?? $r['description'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" /></td>
-                                <td><input name="item_unit[]" value="<?= htmlspecialchars((string)($r['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" /></td>
-                                <td><input name="item_qty[]" type="number" min="1" value="<?= (int)($r['quantity'] ?? $r['qty'] ?? 1) ?>" oninput="recalc(this)" /></td>
-                                <td><input name="item_price[]" type="number" step="0.01" min="0" value="<?= isset($r['prefill_price']) ? number_format((float)$r['prefill_price'],2,'.','') : (isset($r['unit_price']) ? number_format((float)$r['unit_price'],2,'.','') : '0.00') ?>" oninput="recalc(this)" /></td>
-                                <td class="line-total">₱ 0.00</td>
-                                <td><button class="btn muted" type="button" onclick="removeRow(this)">Remove</button></td>
-                            </tr>
-                        <?php endforeach; ?>
+                        <?php if (!empty($po_items ?? [])): ?>
+                            <?php foreach ($po_items as $pi): ?>
+                                <tr>
+                                    <td><input name="item_desc[]" value="<?= htmlspecialchars((string)($pi['description'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" /></td>
+                                    <td><input name="item_unit[]" value="<?= htmlspecialchars((string)($pi['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" /></td>
+                                    <td><input name="item_qty[]" type="number" min="1" value="<?= (int)($pi['qty'] ?? 1) ?>" oninput="recalc(this)" /></td>
+                                    <td><input name="item_price[]" type="number" step="0.01" min="0" value="<?= number_format((float)($pi['unit_price'] ?? 0),2,'.','') ?>" readonly style="background:#f1f5f9;" /></td>
+                                    <td class="line-total">₱ 0.00</td>
+                                    <td></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php else: ?>
+                            <?php foreach ($rows as $r): ?>
+                                <tr>
+                                    <td><input name="item_desc[]" value="<?= htmlspecialchars((string)($r['item_name'] ?? $r['description'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" /></td>
+                                    <td><input name="item_unit[]" value="<?= htmlspecialchars((string)($r['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" /></td>
+                                    <td><input name="item_qty[]" type="number" min="1" value="<?= (int)($r['quantity'] ?? $r['qty'] ?? 1) ?>" oninput="recalc(this)" /></td>
+                                    <td><input name="item_price[]" type="number" step="0.01" min="0" value="<?= isset($r['prefill_price']) ? number_format((float)$r['prefill_price'],2,'.','') : (isset($r['unit_price']) ? number_format((float)$r['unit_price'],2,'.','') : '0.00') ?>" oninput="recalc(this)" /></td>
+                                    <td class="line-total">₱ 0.00</td>
+                                    <td><button class="btn muted" type="button" onclick="removeRow(this)">Remove</button></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
                     </tbody>
                     <tfoot>
                         <tr><td colspan="4" style="text-align:right;">Discount:</td><td id="discountCell">₱ 0.00</td><td></td></tr>
                         <tr><td colspan="4" style="text-align:right;font-weight:700;">Total:</td><td id="grandTotal" style="font-weight:700;">₱ 0.00</td><td></td></tr>
                     </tfoot>
                 </table>
-                <div style="margin-top:10px;"><button class="btn muted" type="button" onclick="addRow()">Add Item</button></div>
+                <?php if (empty($po_items ?? []) && !$lockSupplier): ?>
+                    <div style="margin-top:10px;"><button class="btn muted" type="button" onclick="addRow()">Add Item</button></div>
+                <?php endif; ?>
             </div>
             <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
                 <button class="btn" type="submit">Save &amp; Send for Admin Approval</button>
@@ -164,7 +209,10 @@ function recalcAll(){
     document.querySelectorAll('#poItems tr').forEach(tr => {
         const qty = parseFloat(tr.querySelector('input[name="item_qty[]"]').value || '0');
         const price = parseFloat(tr.querySelector('input[name="item_price[]"]').value || '0');
-        sum += qty * price;
+        const total = qty * price;
+        const cell = tr.querySelector('.line-total');
+        if (cell) cell.textContent = '₱ ' + total.toFixed(2);
+        sum += total;
     });
     const discInput = document.querySelector('input[name="discount"]');
     const discount = discInput ? parseFloat(discInput.value || '0') : 0;

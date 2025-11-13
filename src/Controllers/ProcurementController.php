@@ -123,6 +123,59 @@ class ProcurementController extends BaseController
         // Load suppliers list (optional: narrow to previously selected suppliers)
         $pdo = \App\Database\Connection::resolve();
         $suppliers = $pdo->query("SELECT user_id, full_name FROM users WHERE is_active=TRUE AND role='supplier' ORDER BY full_name ASC")->fetchAll();
+        // Prefill from PR‑Canvass awards: group items by awarded supplier, then filter items for the selected supplier
+        $awardedBySupplier = [];
+        $awardedSupplierIds = [];
+        try {
+            $stCan = $pdo->prepare('SELECT item_id, item_name, awarded_supplier_id, awarded_price FROM pr_canvassing_items WHERE pr_number = :pr AND awarded_supplier_id IS NOT NULL');
+            $stCan->execute(['pr' => $pr]);
+            $awards = $stCan->fetchAll();
+            if ($awards) {
+                foreach ($awards as $a) {
+                    $sid = (int)($a['awarded_supplier_id'] ?? 0); if ($sid <= 0) continue;
+                    $awardedSupplierIds[$sid] = true;
+                    if (!isset($awardedBySupplier[$sid])) { $awardedBySupplier[$sid] = []; }
+                    $awardedBySupplier[$sid][(int)($a['item_id'] ?? 0)] = [
+                        'name' => (string)($a['item_name'] ?? ''),
+                        'unit_price' => (float)($a['awarded_price'] ?? 0),
+                    ];
+                }
+            }
+        } catch (\Throwable $e) { /* no awards yet; allow manual PO */ }
+        $awardedSupplierIds = array_keys($awardedSupplierIds);
+        // Resolve supplier names for awarded suppliers
+        $awardedSupplierNames = [];
+        if ($awardedSupplierIds) {
+            $in = implode(',', array_fill(0, count($awardedSupplierIds), '?'));
+            try {
+                $stSn = $pdo->prepare('SELECT user_id, full_name FROM users WHERE user_id IN (' . $in . ')');
+                $stSn->execute(array_map('intval', $awardedSupplierIds));
+                foreach ($stSn->fetchAll() as $row) { $awardedSupplierNames[(int)$row['user_id']] = (string)$row['full_name']; }
+            } catch (\Throwable $e) { /* ignore */ }
+        }
+        // Choose which supplier this PO form is for (query param takes priority)
+        $selectedSupplierId = null;
+        if ($awardedSupplierIds) {
+            $qsSupplier = isset($_GET['supplier']) ? (int)$_GET['supplier'] : 0;
+            if ($qsSupplier > 0 && in_array($qsSupplier, $awardedSupplierIds, true)) { $selectedSupplierId = $qsSupplier; }
+            else { $selectedSupplierId = $awardedSupplierIds[0]; }
+        }
+        // Build PO item rows filtered to the selected supplier with unit prices from canvass
+        $poItems = [];
+        if ($selectedSupplierId !== null && isset($awardedBySupplier[$selectedSupplierId])) {
+            $awardItems = $awardedBySupplier[$selectedSupplierId]; // keyed by item_id
+            foreach ($rows as $r) {
+                $iid = (int)($r['item_id'] ?? 0);
+                if ($iid > 0 && isset($awardItems[$iid])) {
+                    $poItems[] = [
+                        'description' => (string)($r['item_name'] ?? ''),
+                        'unit' => (string)($r['unit'] ?? ''),
+                        'qty' => (int)($r['quantity'] ?? 0),
+                        'unit_price' => (float)$awardItems[$iid]['unit_price'],
+                    ];
+                }
+            }
+        }
         // Prefill logic from PR + any previous PO attempt for this PR
         $poNext = '';
         try { $poNext = $this->requests()->getNextPoNumberPreview(); } catch (\Throwable $ignored) { $poNext = ''; }
@@ -144,8 +197,13 @@ class ProcurementController extends BaseController
                 if (!empty($prev['terms'])) { $prefillTerms = (string)$prev['terms']; }
             }
         } catch (\Throwable $e) { /* ignore */ }
-        // If no previous PO, optionally pre-select first supplier (if exactly one supplier active) and use its name as vendor_name
-        if ($prefillSupplierId === null && count($suppliers) === 1) {
+        // If awards exist, force supplier to current selected awarded supplier, else fallback
+        $lockSupplier = false;
+        if ($selectedSupplierId !== null) {
+            $prefillSupplierId = $selectedSupplierId;
+            $prefillVendorName = $awardedSupplierNames[$selectedSupplierId] ?? $prefillVendorName;
+            $lockSupplier = true;
+        } elseif ($prefillSupplierId === null && count($suppliers) === 1) {
             $prefillSupplierId = (int)$suppliers[0]['user_id'];
             $prefillVendorName = (string)$suppliers[0]['full_name'];
         }
@@ -169,7 +227,10 @@ class ProcurementController extends BaseController
         }
         $this->render('procurement/po_create.php', [
             'pr' => $pr,
+            // If we have filtered PO items for a selected supplier, pass that; else pass original PR rows
             'rows' => $rows,
+            'po_items' => $poItems,
+            'awarded_suppliers' => $awardedSupplierNames,
             'suppliers' => $suppliers,
             'po_next' => $poNext,
             'prefill' => [
@@ -178,6 +239,7 @@ class ProcurementController extends BaseController
                 'center' => $prefillCenter,
                 'terms' => $prefillTerms,
                 'admin_name' => $prefillAdminName,
+                'lock_supplier' => $lockSupplier,
             ],
         ]);
     }
