@@ -381,6 +381,32 @@ if ($method === 'POST' && $path === '/procurement/po/create') {
 	exit;
 }
 
+// Procurement: Official PO PDF preview (server-rendered) — supports POST and GET
+if ($method === 'POST' && $path === '/procurement/po/preview') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$safeRun(static function() use ($manager){ $manager->poPreview(); });
+	exit;
+}
+if ($method === 'GET' && $path === '/procurement/po/preview') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$safeRun(static function() use ($manager){ $manager->poPreview(); });
+	exit;
+}
+
+// Procurement: Direct download of official PO PDF by id or number
+if ($method === 'GET' && $path === '/procurement/po/download') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$safeRun(static function() use ($manager){ $manager->poDownload(); });
+	exit;
+}
+
+// Procurement: Send PO to Supplier (attaches official PDF)
+if ($method === 'POST' && $path === '/procurement/po/send') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$safeRun(static function() use ($manager){ $manager->poSendToSupplier(); });
+	exit;
+}
+
 // Procurement: Purchase Orders list (new consolidated view)
 if ($method === 'GET' && $path === '/procurement/pos') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
