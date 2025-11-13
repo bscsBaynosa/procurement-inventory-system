@@ -81,7 +81,7 @@
                         <td class="nowrap">₱ <?= number_format((float)($p['total'] ?? 0), 2) ?></td>
                         <td>
                             <?php if (!empty($p['pdf_path'])): ?>
-                                <a class="btn" href="/po/download?id=<?= (int)$p['id'] ?>">Download</a>
+                                <a class="btn" href="/procurement/po/download?id=<?= (int)$p['id'] ?>">Download</a>
                             <?php else: ?>
                                 <span class="muted">—</span>
                             <?php endif; ?>

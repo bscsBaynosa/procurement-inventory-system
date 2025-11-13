@@ -37,7 +37,7 @@
             <div style="display:flex; gap:8px;">
                 <a class="btn" href="/procurement/pos">Back to list</a>
                 <?php if (!empty($po['pdf_path'])): ?>
-                    <a class="btn primary" href="/po/download?id=<?= (int)$po['id'] ?>">Download PDF</a>
+                    <a class="btn primary" href="/procurement/po/download?id=<?= (int)$po['id'] ?>">Download PDF</a>
                 <?php endif; ?>
                 <a class="btn" href="/procurement/po/export?id=<?= (int)$po['id'] ?>" title="Regenerate & Export fresh PDF" target="_blank" rel="noopener">Export PDF</a>
                 <a class="btn" href="/procurement/rfp/create?po=<?= (int)$po['id'] ?>">Generate RFP</a>
