@@ -16,25 +16,38 @@
         html[data-theme="dark"] .sidebar{ background:#0f172a; }
         .content{ padding:18px 20px; }
         .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:16px; margin-bottom:12px; }
+        #po-section{ max-width:780px; margin:0 auto; }
         input, textarea, select{ width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:10px; background:#fff; color:#111; }
         table{ width:100%; border-collapse:collapse; }
         th, td{ padding:10px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
         th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
         .btn{ background:var(--accent); color:#fff; border:0; padding:10px 12px; border-radius:10px; font-weight:700; text-decoration:none; display:inline-block; cursor:pointer; }
         .btn.muted{ background:transparent; color:var(--muted); border:1px solid var(--border); }
+        .no-print{ }
+        @page { size:A4 portrait; margin:12mm; }
+        @media print {
+            body, html { background:#fff !important; }
+            .sidebar, .layout > .sidebar, .layout > .content > :not(#po-section) { display:none !important; }
+            #po-section { display:block !important; margin:0 !important; max-width:100% !important; }
+            .no-print, .btn, select, input[type=button] { display:none !important; }
+            input, textarea, select { border:0 !important; box-shadow:none !important; }
+        }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 </head>
 <body>
 <div class="layout">
     <?php require __DIR__ . '/../layouts/_sidebar.php'; ?>
     <main class="content">
-        <h2 style="margin:0 0 12px 0;">Create Purchase Order • PR <?= htmlspecialchars($pr, ENT_QUOTES, 'UTF-8') ?></h2>
+        <h2 class="no-print" style="margin:0 0 12px 0;">Create Purchase Order • PR <?= htmlspecialchars($pr, ENT_QUOTES, 'UTF-8') ?></h2>
+        <div id="po-section">
         <?php
         if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
         $flashError = $_SESSION['flash_error'] ?? null; unset($_SESSION['flash_error']);
         if (!$flashError && isset($_GET['error']) && $_GET['error'] !== '') { $flashError = (string)$_GET['error']; }
         if (!empty($flashError)): ?>
-            <div style="margin:4px 0 12px; padding:10px 12px; border:1px solid #ef444466; background:color-mix(in oklab, #ef4444 10%, transparent); border-radius:10px;">
+            <div class="no-print" style="margin:4px 0 12px; padding:10px 12px; border:1px solid #ef444466; background:color-mix(in oklab, #ef4444 10%, transparent); border-radius:10px;">
                 <?= htmlspecialchars((string)$flashError, ENT_QUOTES, 'UTF-8') ?>
             </div>
         <?php endif; ?>
@@ -173,12 +186,14 @@
                     <div style="margin-top:10px;"><button class="btn muted" type="button" onclick="addRow()">Add Item</button></div>
                 <?php endif; ?>
             </div>
-            <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
+            <div class="no-print" style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
                 <button class="btn" type="submit">Save &amp; Send for Admin Approval</button>
                 <button class="btn muted" type="button" onclick="window.print()">Print Draft</button>
+                <button class="btn muted" type="button" onclick="downloadPdf()">Download PDF</button>
                 <a class="btn muted" href="/manager/requests">Cancel</a>
             </div>
         </form>
+        </div><!-- /#po-section -->
     </main>
 </div>
 </body>
@@ -232,5 +247,40 @@ function validateItems(){
     return true;
 }
 recalcAll();
+
+// Download PDF using html2canvas + jsPDF; fallback to window.print if unsupported
+function downloadPdf(){
+    const section = document.getElementById('po-section');
+    if (!section || typeof html2canvas === 'undefined' || !window.jspdf || !jspdf.jsPDF){ window.print(); return; }
+    const scale = 2;
+    html2canvas(section,{scale:scale, useCORS:true, background:'#ffffff'}).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        const pdf = new jspdf.jsPDF('p','pt','a4');
+        const pageW = pdf.internal.pageSize.getWidth();
+        const pageH = pdf.internal.pageSize.getHeight();
+        const margin = 28; // ~10mm
+        const usableW = pageW - margin*2;
+        const ratio = usableW / canvas.width;
+        const imgH = canvas.height * ratio;
+        if (imgH <= pageH - margin*2){
+            pdf.addImage(imgData,'PNG',margin,margin,usableW,imgH);
+        } else {
+            // Multi-page slicing
+            let yOffset = 0;
+            const slicePixelHeight = Math.floor((pageH - margin*2) / ratio); // height in canvas pixels per page
+            while (yOffset < canvas.height){
+                const sliceCanvas = document.createElement('canvas');
+                sliceCanvas.width = canvas.width;
+                sliceCanvas.height = Math.min(slicePixelHeight, canvas.height - yOffset);
+                sliceCanvas.getContext('2d').drawImage(canvas,0,yOffset,canvas.width,sliceCanvas.height,0,0,canvas.width,sliceCanvas.height);
+                const sliceData = sliceCanvas.toDataURL('image/png');
+                pdf.addImage(sliceData,'PNG',margin,margin,usableW,sliceCanvas.height * ratio);
+                yOffset += sliceCanvas.height;
+                if (yOffset < canvas.height) pdf.addPage();
+            }
+        }
+        pdf.save('Purchase_Order.pdf');
+    }).catch(()=>window.print());
+}
 </script>
 </html>
