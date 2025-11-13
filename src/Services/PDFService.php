@@ -598,10 +598,11 @@ class PDFService
 		$leftBox = function(string $label, string $name, string $role, bool $isLast = false): string {
 			$nm = ($name !== '') ? $name : '&nbsp;';
 			$borderBottom = $isLast ? '' : 'border-bottom:1px solid #000;';
+			// Use a non-breaking space inside the height div so mPDF does not collapse it.
 			return '<tr>'
-				. '<td style="vertical-align:top;padding:8px 8px 6px 8px;' . $borderBottom . '">'
-					. '<div style="font-size:10px;">' . $label . '</div>'
-					. '<div style="height:72px;"></div>'
+				. '<td style="vertical-align:top;padding:8px 8px 8px 8px;' . $borderBottom . '">'
+					. '<div style="font-size:10px;font-weight:700;letter-spacing:.5px;">' . $label . '</div>'
+					. '<div style="height:80px;">&nbsp;</div>'
 					. '<div style="border-top:1px solid #000;padding-top:6px;text-align:center;font-size:10px;font-weight:600;">' . $nm . '<br><span style="font-weight:400;">' . $role . '</span></div>'
 				. '</td>'
 			. '</tr>';
@@ -613,19 +614,19 @@ class PDFService
 			. '</table>';
 
 		$rightCol = '<table width="100%" border="0" cellspacing="0" cellpadding="0" style="table-layout:fixed;">'
-			. '<tr><td style="vertical-align:top;padding:6px; border-bottom:1px solid #000;">' . $conditionsText . '</td></tr>'
-			. '<tr><td style="vertical-align:top;padding:6px;">'
+			. '<tr><td style="vertical-align:top;padding:8px 8px 6px 8px; border-bottom:1px solid #000;">' . $conditionsText . '</td></tr>'
+			. '<tr><td style="vertical-align:top;padding:8px;">'
 				. '<table width="100%" border="0" cellspacing="0" cellpadding="4" style="font-size:10px;">'
 					. '<tr>'
-						. '<td style="width:70%;vertical-align:bottom;">'
-							. '<div style="font-size:10px;">PURCHASE ORDER RECEIVED BY:</div>'
-							. '<div style="height:72px;"></div>'
-							. '<div style="border-top:1px solid #000;text-align:center;padding-top:6px;font-size:10px;font-weight:600;">SUPPLIER / SUPPLIERS REPRESENTATIVE</div>'
+						. '<td style="width:68%;vertical-align:bottom;padding-right:6px;">'
+							. '<div style="font-size:10px;font-weight:700;letter-spacing:.5px;">PURCHASE ORDER RECEIVED BY:</div>'
+							. '<div style="height:80px;">&nbsp;</div>'
+							. '<div style="border-top:1px solid #000;padding-top:6px;text-align:center;font-size:10px;font-weight:600;">SUPPLIER / SUPPLIERS REPRESENTATIVE</div>'
 							. '<div style="text-align:center;font-size:10px;">SIGNATURE OVER PRINTED NAME</div>'
 						. '</td>'
 						. '<td style="vertical-align:bottom;text-align:center;">'
-							. '<div style="font-size:10px;">DATE</div>'
-							. '<div style="height:72px;"></div>'
+							. '<div style="font-size:10px;font-weight:700;letter-spacing:.5px;">DATE</div>'
+							. '<div style="height:80px;">&nbsp;</div>'
 							. '<div style="border-top:1px solid #000;padding-top:6px;font-size:10px;">&nbsp;</div>'
 						. '</td>'
 					. '</tr>'
