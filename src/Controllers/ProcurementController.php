@@ -3636,6 +3636,11 @@ class ProcurementController extends BaseController
                         }
                     } catch (\Throwable $e) {}
                 }
+                // Ensure names are present even for legacy rows
+                $preparedName = (string)($row['prepared_by'] ?? '');
+                if ($preparedName === '') { $preparedName = (string)($_SESSION['full_name'] ?? ''); }
+                $lookForName = (string)($row['look_for'] ?? '');
+                if ($lookForName === '') { $lookForName = $preparedName; }
                 $this->pdf()->downloadPurchaseOrderPDF([
                     'po_number' => (string)$row['po_number'],
                     'pr_number' => (string)($row['pr_number'] ?? ''),
@@ -3649,8 +3654,8 @@ class ProcurementController extends BaseController
                     'notes' => (string)($row['notes'] ?? ''),
                     'discount' => isset($row['discount']) ? (float)$row['discount'] : 0.0,
                     'deliver_to' => (string)($row['deliver_to'] ?? ''),
-                    'look_for' => (string)($row['look_for'] ?? ''),
-                    'prepared_by' => (string)($row['prepared_by'] ?? ''),
+                    'look_for' => $lookForName,
+                    'prepared_by' => $preparedName,
                     'reviewed_by' => (string)($row['finance_officer'] ?? ''),
                     'approved_by' => (string)($row['admin_name'] ?? ''),
                     'items' => $items,
@@ -3696,6 +3701,8 @@ class ProcurementController extends BaseController
         $adminName = trim((string)($_POST['admin_name'] ?? ''));
 
         // Produce official PDF inline/attachment
+        // Default missing LOOK FOR to current user for preview
+        if ($lookFor === '') { $lookFor = $prepared; }
         $this->pdf()->downloadPurchaseOrderPDF([
             'po_number' => $poNumber !== '' ? $poNumber : 'PREVIEW',
             'pr_number' => $prNumber,
@@ -3767,6 +3774,11 @@ class ProcurementController extends BaseController
                 }
             } catch (\Throwable $e) {}
         }
+        // Ensure names are present even for legacy rows
+        $preparedName = (string)($row['prepared_by'] ?? '');
+        if ($preparedName === '') { $preparedName = (string)($_SESSION['full_name'] ?? ''); }
+        $lookForName = (string)($row['look_for'] ?? '');
+        if ($lookForName === '') { $lookForName = $preparedName; }
         $this->pdf()->downloadPurchaseOrderPDF([
             'po_number' => (string)$row['po_number'],
             'pr_number' => (string)($row['pr_number'] ?? ''),
@@ -3780,8 +3792,8 @@ class ProcurementController extends BaseController
             'notes' => (string)($row['notes'] ?? ''),
             'discount' => isset($row['discount']) ? (float)$row['discount'] : 0.0,
             'deliver_to' => (string)($row['deliver_to'] ?? ''),
-            'look_for' => (string)($row['look_for'] ?? ''),
-            'prepared_by' => (string)($row['prepared_by'] ?? ''),
+            'look_for' => $lookForName,
+            'prepared_by' => $preparedName,
             'reviewed_by' => (string)($row['finance_officer'] ?? ''),
             'approved_by' => (string)($row['admin_name'] ?? ''),
             'items' => $items,

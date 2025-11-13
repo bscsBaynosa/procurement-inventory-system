@@ -606,14 +606,14 @@ class PDFService
 			. '<div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($adminName ?: '&nbsp;') . '<br><small>ADMINISTRATOR</small></div>';
 
 		$rightCol = $conditionsText
-			. '<div style="margin-top:12px;height:40px;"></div>'
-			. '<div style="border-top:1px solid #000;text-align:center;padding-top:4px;font-size:10px;font-weight:600;">SUPPLIER / SUPPLIER’S REPRESENTATIVE<br>SIGNATURE OVER PRINTED NAME</div>'
 			. '<table width="100%" border="0" cellspacing="0" cellpadding="4" style="margin-top:10px;font-size:10px;">'
 			. '<tr>'
 			. '<td style="width:60%;">PREPARED BY:</td>'
 			. '<td style="text-align:right;">DATE</td>'
 			. '</tr>'
-			. '</table>';
+			. '</table>'
+			. '<div style="margin-top:12px;height:40px;"></div>'
+			. '<div style="border-top:1px solid #000;text-align:center;padding-top:4px;font-size:10px;font-weight:600;">SUPPLIER / SUPPLIERS REPRESENTATIVE<br>SIGNATURE OVER PRINTED NAME</div>';
 
 		$signaturesTable = '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="margin-top:8px;font-size:10px; table-layout:fixed;">'
 			. '<tr>'
