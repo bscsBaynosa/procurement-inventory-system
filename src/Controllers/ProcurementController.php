@@ -3583,6 +3583,75 @@ class ProcurementController extends BaseController
         header('Location: /dashboard');
     }
 
+    /**
+     * POST: Server-side official PO PDF preview (inline or download) from Create PO form inputs.
+     * Does NOT persist anything; purely renders based on posted fields.
+     */
+    public function poPreview(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
+        // Accept both inline/attachment via query (?disposition=inline|attachment) or POST override
+        $disp = isset($_GET['disposition']) ? strtolower((string)$_GET['disposition']) : '';
+        if ($disp !== 'inline' && $disp !== 'attachment') { $disp = isset($_POST['disposition']) ? strtolower((string)$_POST['disposition']) : 'inline'; }
+        if ($disp !== 'inline' && $disp !== 'attachment') { $disp = 'inline'; }
+
+        // Gather fields from POST (mirror create form names)
+        $poNumber = trim((string)($_POST['po_number'] ?? ($_POST['po_number_display'] ?? '')));
+        $vendorName = trim((string)($_POST['vendor_name'] ?? ''));
+        $vendorAddress = trim((string)($_POST['vendor_address'] ?? ''));
+        $vendorTin = trim((string)($_POST['vendor_tin'] ?? ''));
+        $center = trim((string)($_POST['center'] ?? ''));
+        $reference = trim((string)($_POST['reference'] ?? ''));
+        $terms = trim((string)($_POST['terms'] ?? ''));
+        $notes = trim((string)($_POST['notes'] ?? ''));
+        $discount = isset($_POST['discount']) ? (float)$_POST['discount'] : 0.0;
+        $deliverTo = trim((string)($_POST['deliver_to'] ?? ''));
+        $lookFor = trim((string)($_POST['look_for'] ?? ''));
+        $prNumber = trim((string)($_POST['pr_number'] ?? ''));
+
+        // Items arrays
+        $descs = $_POST['item_desc'] ?? [];
+        $units = $_POST['item_unit'] ?? [];
+        $qtys = $_POST['item_qty'] ?? [];
+        $prices = $_POST['item_price'] ?? [];
+        $n = min(count($descs), count($units), count($qtys), count($prices));
+        $items = [];
+        for ($i=0; $i<$n; $i++) {
+            $d = trim((string)$descs[$i]); if ($d === '') continue;
+            $u = trim((string)$units[$i]);
+            $q = (int)$qtys[$i];
+            $p = (float)$prices[$i];
+            $items[] = [ 'description' => $d, 'unit' => $u, 'qty' => $q, 'unit_price' => $p, 'total' => $q * $p ];
+        }
+        if (empty($items)) { $items = []; }
+
+        // Prepared/Reviewed/Approved display from session when available (non-blocking)
+        $prepared = (string)($_SESSION['full_name'] ?? '');
+        $financeOfficer = trim((string)($_POST['finance_officer'] ?? ''));
+        $adminName = trim((string)($_POST['admin_name'] ?? ''));
+
+        // Produce official PDF inline/attachment
+        $this->pdf()->downloadPurchaseOrderPDF([
+            'po_number' => $poNumber !== '' ? $poNumber : 'PREVIEW',
+            'pr_number' => $prNumber,
+            'date' => date('Y-m-d'),
+            'vendor_name' => $vendorName,
+            'vendor_address' => $vendorAddress,
+            'vendor_tin' => $vendorTin,
+            'reference' => $reference,
+            'terms' => $terms,
+            'center' => $center,
+            'notes' => $notes,
+            'discount' => $discount,
+            'deliver_to' => $deliverTo,
+            'look_for' => $lookFor,
+            'prepared_by' => $prepared,
+            'reviewed_by' => $financeOfficer,
+            'approved_by' => $adminName,
+            'items' => $items,
+        ], $disp);
+    }
+
     /** GET: Download official Purchase Order PDF by PO number or id. */
     public function poDownload(): void
     {
@@ -3651,7 +3720,7 @@ class ProcurementController extends BaseController
             'reviewed_by' => (string)($row['finance_officer'] ?? ''),
             'approved_by' => (string)($row['admin_name'] ?? ''),
             'items' => $items,
-        ]);
+        ], 'attachment');
     }
 }
  

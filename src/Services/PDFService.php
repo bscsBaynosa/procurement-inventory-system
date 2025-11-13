@@ -621,14 +621,19 @@ class PDFService
 		$mpdf->Output($filePath, 'F');
 	}
 
-	/** Stream/download the official PO PDF directly to the browser. */
-	public function downloadPurchaseOrderPDF(array $po): void
+	/**
+	 * Stream the official PO PDF directly to the browser.
+	 * @param array $po  Purchase Order data
+	 * @param string $disposition  'attachment' (download) or 'inline' (preview)
+	 */
+	public function downloadPurchaseOrderPDF(array $po, string $disposition = 'attachment'): void
 	{
 		$tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'PO_' . preg_replace('/[^A-Za-z0-9_-]/','_', (string)($po['po_number'] ?? 'PO')) . '_' . substr(sha1(uniqid('', true)),0,8) . '.pdf';
 		$this->generatePurchaseOrderPDFToFile($po, $tmp);
 		if (@is_file($tmp)) {
 			header('Content-Type: application/pdf');
-			header('Content-Disposition: attachment; filename="PO_' . rawurlencode((string)($po['po_number'] ?? 'PO')) . '.pdf"');
+			$disp = strtolower($disposition) === 'inline' ? 'inline' : 'attachment';
+			header('Content-Disposition: ' . $disp . '; filename="PO_' . rawurlencode((string)($po['po_number'] ?? 'PO')) . '.pdf"');
 			$size = @filesize($tmp); if ($size) { header('Content-Length: ' . (string)$size); }
 			@readfile($tmp);
 			@unlink($tmp);

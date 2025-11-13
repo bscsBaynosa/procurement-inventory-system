@@ -192,8 +192,8 @@
             </div>
             <div class="no-print" style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
                 <button class="btn" type="submit">Save &amp; Send for Admin Approval</button>
-                <button class="btn muted" type="button" onclick="window.print()">Print Draft (screen)</button>
-                <button class="btn muted" type="button" onclick="downloadPdf()">Download Draft (screen)</button>
+                <button class="btn muted" type="button" onclick="serverPreview('inline')" title="Open official PO preview in a new tab">Print Draft (official)</button>
+                <button class="btn muted" type="button" onclick="serverPreview('attachment')" title="Download official PO PDF without saving">Download Draft (official)</button>
                 <a class="btn muted" href="/manager/requests">Cancel</a>
             </div>
         </form>
@@ -252,39 +252,42 @@ function validateItems(){
 }
 recalcAll();
 
-// Download PDF using html2canvas + jsPDF; fallback to window.print if unsupported
-function downloadPdf(){
-    const section = document.getElementById('po-section');
-    if (!section || typeof html2canvas === 'undefined' || !window.jspdf || !jspdf.jsPDF){ window.print(); return; }
-    const scale = 2;
-    html2canvas(section,{scale:scale, useCORS:true, background:'#ffffff'}).then(canvas => {
-        const imgData = canvas.toDataURL('image/png');
-        const pdf = new jspdf.jsPDF('p','pt','a4');
-        const pageW = pdf.internal.pageSize.getWidth();
-        const pageH = pdf.internal.pageSize.getHeight();
-        const margin = 28; // ~10mm
-        const usableW = pageW - margin*2;
-        const ratio = usableW / canvas.width;
-        const imgH = canvas.height * ratio;
-        if (imgH <= pageH - margin*2){
-            pdf.addImage(imgData,'PNG',margin,margin,usableW,imgH);
-        } else {
-            // Multi-page slicing
-            let yOffset = 0;
-            const slicePixelHeight = Math.floor((pageH - margin*2) / ratio); // height in canvas pixels per page
-            while (yOffset < canvas.height){
-                const sliceCanvas = document.createElement('canvas');
-                sliceCanvas.width = canvas.width;
-                sliceCanvas.height = Math.min(slicePixelHeight, canvas.height - yOffset);
-                sliceCanvas.getContext('2d').drawImage(canvas,0,yOffset,canvas.width,sliceCanvas.height,0,0,canvas.width,sliceCanvas.height);
-                const sliceData = sliceCanvas.toDataURL('image/png');
-                pdf.addImage(sliceData,'PNG',margin,margin,usableW,sliceCanvas.height * ratio);
-                yOffset += sliceCanvas.height;
-                if (yOffset < canvas.height) pdf.addPage();
-            }
-        }
-        pdf.save('Purchase_Order.pdf');
-    }).catch(()=>window.print());
+// Submit current form values to server to render the official PO PDF (inline or attachment)
+function serverPreview(disposition){
+    try {
+        const form = document.querySelector('form[action="/procurement/po/create"]');
+        if (!form) { window.print(); return; }
+        const f = document.createElement('form');
+        f.method = 'POST';
+        f.action = '/procurement/po/preview?disposition=' + encodeURIComponent(disposition || 'inline');
+        f.target = '_blank';
+        // helper to add field
+        const add = (name, value) => { const i = document.createElement('input'); i.type='hidden'; i.name=name; i.value=value==null?'':String(value); f.appendChild(i); };
+        // copy simple inputs
+        const names = ['pr_number','po_number','vendor_name','vendor_address','vendor_tin','center','reference','terms','notes','discount','deliver_to','look_for','finance_officer','admin_name'];
+        for (const n of names){ const el = form.querySelector('[name="'+n+'"]'); if (el) add(n, el.value); }
+        // Supplier may be disabled; include hidden one already present
+        const supHidden = form.querySelector('input[type="hidden"][name="supplier_id"]'); if (supHidden) add('supplier_id', supHidden.value);
+        // items
+        const rows = form.querySelectorAll('#poItems tr');
+        rows.forEach(tr => {
+            const d = tr.querySelector('input[name="item_desc[]"]');
+            const u = tr.querySelector('input[name="item_unit[]"]');
+            const q = tr.querySelector('input[name="item_qty[]"]');
+            const p = tr.querySelector('input[name="item_price[]"]');
+            if (!d) return;
+            add('item_desc[]', d.value);
+            add('item_unit[]', u ? u.value : '');
+            add('item_qty[]', q ? q.value : '0');
+            add('item_price[]', p ? p.value : '0');
+        });
+        document.body.appendChild(f);
+        f.submit();
+        setTimeout(()=>{ try{ document.body.removeChild(f); }catch(e){} }, 1500);
+    } catch (e) {
+        // fallback to screen print if anything goes wrong
+        window.print();
+    }
 }
 </script>
 </html>
