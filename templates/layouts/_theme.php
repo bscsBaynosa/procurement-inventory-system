@@ -1,6 +1,17 @@
 <?php
-
+// Tailwind CSS (safe, prefixed) via CDN for rapid UI without breaking existing styles
+// - prefix: tw- so utilities won’t collide with current classes
+// - preflight disabled so no global resets are applied
 ?>
+<script>
+  // Configure before loading the CDN script
+  window.tailwind = window.tailwind || {};
+  window.tailwind.config = {
+    prefix: 'tw-',
+    corePlugins: { preflight: false }
+  };
+</script>
+<script src="https://cdn.tailwindcss.com"></script>
 <style>
 
 .switch { --h: 26px; --w: 48px; position: relative; display:inline-block; width: var(--w); height: var(--h); }
