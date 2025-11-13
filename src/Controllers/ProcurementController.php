@@ -240,6 +240,74 @@ class ProcurementController extends BaseController
                 }
             }
         }
+        // Secondary fallback: derive awards using suppliers list and recomputed prices if still empty
+        if (empty($awardedBySupplier)) {
+            try {
+                $stDet2 = $pdo->prepare('SELECT suppliers FROM pr_canvassing_details WHERE pr_number = :pr ORDER BY created_at DESC LIMIT 1');
+                $stDet2->execute(['pr'=>$pr]);
+                if ($det2 = $stDet2->fetch()) {
+                    $supJson = (string)($det2['suppliers'] ?? '');
+                    $supIds = $supJson !== '' ? json_decode($supJson, true) : [];
+                    $supplierIds = array_values(array_filter(array_map('intval', (array)$supIds), static fn($v)=>$v>0));
+                    if ($supplierIds) {
+                        // Build lower-name map and total qty per item
+                        $lowerById = []; $qtyById = []; $nameById = []; $unitById=[];
+                        foreach ($rows as $r) {
+                            $iid=(int)($r['item_id']??0); if($iid<=0) continue;
+                            $nm=(string)($r['item_name']??''); $lower=strtolower(trim($nm));
+                            $lowerById[$iid]=$lower; $nameById[$iid]=$nm; $unitById[$iid]=(string)($r['unit']??'');
+                            $qtyById[$iid]=($qtyById[$iid]??0)+(int)($r['quantity']??0);
+                        }
+                        if ($lowerById) {
+                            // Fetch exact name matches across suppliers
+                            $inSup = implode(',', array_fill(0, count($supplierIds), '?'));
+                            $names = array_values(array_unique(array_values($lowerById)));
+                            $inNames = implode(',', array_fill(0, count($names), '?'));
+                            $params = []; foreach($supplierIds as $sid){ $params[]=(int)$sid; } foreach($names as $nm){ $params[]=$nm; }
+                            $sql = 'SELECT id, supplier_id, LOWER(name) AS lname, price, pieces_per_package FROM supplier_items WHERE supplier_id IN (' . $inSup . ') AND LOWER(name) IN (' . $inNames . ')';
+                            $st = $pdo->prepare($sql); $st->execute($params);
+                            $byName = [];
+                            foreach ($st->fetchAll() as $it) { $byName[(string)$it['lname']][] = $it; }
+                            // Compute per-item per-supplier price
+                            $pp = []; // iid => sid => price
+                            foreach ($lowerById as $iid=>$lname) {
+                                $needQty = (int)($qtyById[$iid] ?? 0);
+                                if (isset($byName[$lname])) {
+                                    foreach ($byName[$lname] as $it) {
+                                        $sid = (int)$it['supplier_id']; if(!in_array($sid,$supplierIds,true)) continue;
+                                        $base=(float)($it['price']??0); $ppp=max(1,(int)($it['pieces_per_package']??1));
+                                        $needPk = $ppp>0 ? (int)ceil($needQty/$ppp) : 0; $best=$base;
+                                        if ($needPk>0) {
+                                            try { $tq=$pdo->prepare('SELECT min_packages,max_packages,price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC'); $tq->execute(['id'=>(int)$it['id']]); foreach($tq->fetchAll() as $t){ $min=(int)$t['min_packages']; $max=$t['max_packages']!==null?(int)$t['max_packages']:null; if($needPk>=$min && ($max===null || $needPk<=$max)){ $best=min($best,(float)$t['price_per_package']); } } } catch(\Throwable $e) {}
+                                        }
+                                        if(!isset($pp[$iid])){ $pp[$iid]=[]; }
+                                        if(!isset($pp[$iid][$sid]) || $best < $pp[$iid][$sid]){ $pp[$iid][$sid]=$best; }
+                                    }
+                                }
+                                // Bondpaper size-aware fallback
+                                if (empty($pp[$iid]) && preg_match('/^(a4|long|short|f4)\s+bond\s*paper?$/i', $nameById[$iid] ?? '')) {
+                                    $size=strtolower(preg_replace('/\s+bond\s*paper?/i','', strtolower($nameById[$iid] ?? '')));
+                                    $syns=[]; if($size==='a4'){ $syns=['a4','210x297','210 x 297','8.27x11.69','8.3x11.7']; } elseif($size==='long'){ $syns=['long','legal','8.5x13','8.5 x 13']; } elseif($size==='short'){ $syns=['short','letter','8.5x11','8.5 x 11']; } elseif($size==='f4'){ $syns=['f4','8.5x13','8.5 x 13']; }
+                                    if ($syns) {
+                                        $conds=[]; $params2=[]; $conds[]='supplier_id IN (' . $inSup . ')'; foreach($supplierIds as $sid){ $params2[]=(int)$sid; }
+                                        $conds[]="LOWER(name)='bondpaper'";
+                                        foreach($syns as $s){ $conds[]='LOWER(description)=?'; $params2[]=strtolower($s);} foreach($syns as $s){ $conds[]='LOWER(description) ILIKE ?'; $params2[]='%'.strtolower($s).'%'; }
+                                        $sql2='SELECT id,supplier_id,price,pieces_per_package FROM supplier_items WHERE ' . implode(' AND ', $conds);
+                                        $st2=$pdo->prepare($sql2); $st2->execute($params2);
+                                        foreach($st2->fetchAll() as $it){ $sid=(int)$it['supplier_id']; $base=(float)($it['price']??0); $ppp=max(1,(int)($it['pieces_per_package']??1)); $needPk=$ppp>0?(int)ceil(($qtyById[$iid]??0)/$ppp):0; $best=$base; if($needPk>0){ try{ $tq=$pdo->prepare('SELECT min_packages,max_packages,price_per_package FROM supplier_item_price_tiers WHERE supplier_item_id = :id ORDER BY min_packages ASC'); $tq->execute(['id'=>(int)$it['id']]); foreach($tq->fetchAll() as $t){ $min=(int)$t['min_packages']; $max=$t['max_packages']!==null?(int)$t['max_packages']:null; if($needPk>=$min && ($max===null || $needPk<=$max)){ $best=min($best,(float)$t['price_per_package']); } } } catch(\Throwable $e){} }
+                                            if(!isset($pp[$iid])){ $pp[$iid]=[]; }
+                                            if(!isset($pp[$iid][$sid]) || $best < $pp[$iid][$sid]){ $pp[$iid][$sid]=$best; }
+                                        }
+                                    }
+                                }
+                            }
+                            // Choose cheapest and build awardedBySupplier
+                            foreach ($lowerById as $iid=>$lname){ if(empty($pp[$iid])) continue; asort($pp[$iid]); $awardSid=(int)array_key_first($pp[$iid]); $price=(float)$pp[$iid][$awardSid]; if(!isset($awardedBySupplier[$awardSid])){ $awardedBySupplier[$awardSid]=[]; } $awardedBySupplier[$awardSid][$iid]=['name'=>$nameById[$iid]??'Item','unit_price'=>$price]; }
+                        }
+                    }
+                }
+            } catch (\Throwable $e) {}
+        }
         // Awarded supplier ids and names
         $awardedSupplierIds = array_keys($awardedBySupplier);
         $awardedSupplierNames = [];
