@@ -456,9 +456,16 @@ class PDFService
 	 */
 	public function generatePurchaseOrderPDFToFile(array $po, string $filePath): void
 	{
-		$mpdf = new Mpdf(['format' => 'A4', 'orientation' => 'P', 'margin_left' => 10, 'margin_right' => 10, 'margin_top' => 10, 'margin_bottom' => 10]);
+		// Configure mPDF with tighter margins to mimic official form
+		$mpdf = new Mpdf([
+			'format' => 'A4',
+			'orientation' => 'P',
+			'margin_left' => 8,
+			'margin_right' => 8,
+			'margin_top' => 8,
+			'margin_bottom' => 8,
+		]);
 
-		// Sanitize inputs
 		$poNum = htmlspecialchars((string)($po['po_number'] ?? ''));
 		$date = htmlspecialchars((string)($po['date'] ?? date('Y-m-d')));
 		$vendor = htmlspecialchars((string)($po['vendor_name'] ?? ''));
@@ -467,159 +474,162 @@ class PDFService
 		$ref = htmlspecialchars((string)($po['reference'] ?? ''));
 		$terms = htmlspecialchars((string)($po['terms'] ?? ''));
 		$center = htmlspecialchars((string)($po['center'] ?? ''));
-		$notes = nl2br(htmlspecialchars((string)($po['notes'] ?? ''), ENT_QUOTES, 'UTF-8'));
+		$notesRaw = (string)($po['notes'] ?? '');
+		$notes = nl2br(htmlspecialchars($notesRaw, ENT_QUOTES, 'UTF-8'));
 		$deliverTo = nl2br(htmlspecialchars((string)($po['deliver_to'] ?? ''), ENT_QUOTES, 'UTF-8'));
 		$lookFor = htmlspecialchars((string)($po['look_for'] ?? ''), ENT_QUOTES, 'UTF-8');
 		$prepared = htmlspecialchars((string)($po['prepared_by'] ?? ''), ENT_QUOTES, 'UTF-8');
-		$reviewed = htmlspecialchars((string)($po['reviewed_by'] ?? ''), ENT_QUOTES, 'UTF-8');
-		$approved = htmlspecialchars((string)($po['approved_by'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$financeOfficer = htmlspecialchars((string)($po['reviewed_by'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$adminName = htmlspecialchars((string)($po['approved_by'] ?? ''), ENT_QUOTES, 'UTF-8');
 		$discount = isset($po['discount']) ? (float)$po['discount'] : 0.0;
 
-		// Header with logo (try to embed pocc-logo.svg if available)
+		// Try to embed logo
 		$root = @realpath(__DIR__ . '/../../');
 		$public = $root ? ($root . DIRECTORY_SEPARATOR . 'public') : null;
-		$cand = [];
-		if ($root) { $cand[] = $root . DIRECTORY_SEPARATOR . 'logo.png'; }
+		$candidates = [];
+		if ($root) { $candidates[] = $root . DIRECTORY_SEPARATOR . 'logo.png'; }
 		if ($public) {
-			$cand[] = $public . DIRECTORY_SEPARATOR . 'logo.png';
-			$cand[] = $public . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'logo.png';
+			$candidates[] = $public . DIRECTORY_SEPARATOR . 'logo.png';
+			$candidates[] = $public . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'logo.png';
 		}
-		$cand[] = ($public ? $public : (__DIR__ . '/../../public')) . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'pocc-logo.svg';
+		$candidates[] = ($public ?: (__DIR__ . '/../../public')) . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'pocc-logo.svg';
 		$logoHtml = '';
-		foreach ($cand as $p) {
+		foreach ($candidates as $p) {
 			if (@is_file($p)) {
 				$data = @file_get_contents($p);
 				if ($data !== false) {
 					$mime = (strtolower(substr($p, -4)) === '.svg') ? 'image/svg+xml' : 'image/png';
 					$src = 'data:' . $mime . ';base64,' . base64_encode($data);
-					$logoHtml = '<div style="text-align:center;margin-bottom:4px;"><img src="' . $src . '" width="52" height="52" /></div>';
+					$logoHtml = '<div style="text-align:center;margin-bottom:4px;"><img src="' . $src . '" width="56" height="56" /></div>';
 					break;
 				}
 			}
 		}
 
-		$header = '<div style="text-align:center;font-weight:800;font-size:14px;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
-				. '<div style="height:1px;background:#000;margin:6px 0 6px 0;"></div>';
+		$headerTitle = '<div style="text-align:center;font-weight:800;font-size:16px;letter-spacing:.5px;">Philippine Oncology Center Corporation</div>'
+			. '<div style="text-align:center;font-size:10px;margin:2px 0 8px 0;">Address: Basement, Marian Medical Arts Bldg., Dahlia Street, West Fairview, Quezon City</div>';
 
-		// Top section: Vendor vs PO Meta
-		$top = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-bottom:6px; font-size:11px;">'
-			 . '<tr>'
-			 . '  <td style="width:55%;vertical-align:top;">'
-			 . '    <table width="100%" border="0" cellspacing="0" cellpadding="4">'
-			 . '      <tr><td style="width:26%;">VENDOR:</td><td style="border:1px solid #999;height:22px;">' . $vendor . '</td></tr>'
-			 . '      <tr><td>ADDRESS:</td><td style="border:1px solid #999;height:36px;">' . $addr . '</td></tr>'
-			 . '      <tr><td>VAT/TIN:</td><td style="border:1px solid #999;height:22px;">' . $tin . '</td></tr>'
-			 . '    </table>'
-			 . '  </td>'
-			 . '  <td style="vertical-align:top;">'
-			 . '    <table width="100%" border="0" cellspacing="0" cellpadding="4" style="font-size:11px;">'
-			 . '      <tr><td style="width:45%;">PURCHASE ORDER NO.</td><td style="border:1px solid #999; text-align:right; height:20px;">' . $poNum . '</td></tr>'
-			 . '      <tr><td>CENTER</td><td style="border:1px solid #999; height:20px;">' . $center . '</td></tr>'
-			 . '      <tr><td>DATE</td><td style="border:1px solid #999; height:20px; text-align:right;">' . $date . '</td></tr>'
-			 . '      <tr><td>REFERENCE:</td><td style="border:1px solid #999; height:20px;">' . $ref . '</td></tr>'
-			 . '      <tr><td>TERMS OF PAYMENT</td><td style="border:1px solid #999; height:20px;">' . $terms . '</td></tr>'
-			 . '    </table>'
-			 . '  </td>'
-			 . '</tr>'
-			 . '</table>';
+		// Vendor vs PO meta boxes
+		$vendorMeta = '<table width="100%" border="1" cellspacing="0" cellpadding="5" style="font-size:10px;">'
+			. '<tr>'
+			. '<td style="width:58%;vertical-align:top;">'
+			. '  <table width="100%" cellspacing="0" cellpadding="3" style="font-size:10px;">'
+			. '    <tr><td style="width:24%;">VENDOR:</td><td style="border:1px solid #000;height:22px;font-weight:600;">' . $vendor . '</td></tr>'
+			. '    <tr><td>ADDRESS:</td><td style="border:1px solid #000;height:46px;">' . ($addr !== '' ? $addr : '&nbsp;') . '</td></tr>'
+			. '    <tr><td>VAT/TIN:</td><td style="border:1px solid #000;height:22px;">' . ($tin !== '' ? $tin : '&nbsp;') . '</td></tr>'
+			. '  </table>'
+			. '</td>'
+			. '<td style="vertical-align:top;">'
+			. '  <table width="100%" cellspacing="0" cellpadding="3" style="font-size:10px;">'
+			. '    <tr><td style="width:50%;">PURCHASE ORDER NO.</td><td style="border:1px solid #000;text-align:right;height:20px;font-weight:600;">' . $poNum . '</td></tr>'
+			. '    <tr><td>CENTER</td><td style="border:1px solid #000;height:20px;">' . ($center !== '' ? $center : '&nbsp;') . '</td></tr>'
+			. '    <tr><td>DATE</td><td style="border:1px solid #000;text-align:right;height:20px;">' . $date . '</td></tr>'
+			. '    <tr><td>REFERENCE:</td><td style="border:1px solid #000;height:20px;">' . ($ref !== '' ? $ref : '&nbsp;') . '</td></tr>'
+			. '    <tr><td>TERMS OF PAYMENT</td><td style="border:1px solid #000;height:20px;">' . ($terms !== '' ? $terms : '&nbsp;') . '</td></tr>'
+			. '  </table>'
+			. '</td>'
+			. '</tr>'
+			. '</table>';
 
 		// Items table
-		$itemsRows = '';
-		$total = 0.0;
+		$total = 0.0; $rowsHtml = '';
 		foreach ((array)($po['items'] ?? []) as $it) {
 			$desc = htmlspecialchars((string)($it['description'] ?? ''), ENT_QUOTES, 'UTF-8');
 			$unit = htmlspecialchars((string)($it['unit'] ?? ''), ENT_QUOTES, 'UTF-8');
 			$qty = (int)($it['qty'] ?? 0);
 			$price = (float)($it['unit_price'] ?? 0);
-			$line = (float)($it['total'] ?? ($qty * $price));
+			$line = (float)($it['total'] ?? ($qty * max(0,$price)));
 			$total += $line;
-			$itemsRows .= '<tr>'
-				. '<td>' . $desc . '</td>'
-				. '<td style="text-align:center; width:10%;">' . $unit . '</td>'
-				. '<td style="text-align:center; width:10%;">' . $qty . '</td>'
-				. '<td style="text-align:right; width:15%;">' . number_format($price, 2) . '</td>'
-				. '<td style="text-align:right; width:15%;">' . number_format($line, 2) . '</td>'
+			$rowsHtml .= '<tr>'
+				. '<td style="padding:6px 6px;">' . $desc . '</td>'
+				. '<td style="text-align:center;width:60px;">' . $unit . '</td>'
+				. '<td style="text-align:center;width:60px;">' . $qty . '</td>'
+				. '<td style="text-align:right;width:90px;">' . number_format($price,2) . '</td>'
+				. '<td style="text-align:right;width:100px;">' . number_format($line,2) . '</td>'
 				. '</tr>';
 		}
-		// Maintain minimum visible rows to preserve form look
-		$minRows = 8;
-		$currentRows = substr_count($itemsRows, '<tr>');
-		for ($i = $currentRows; $i < $minRows; $i++) {
-			$itemsRows .= '<tr>'
-						. '<td>&nbsp;</td>'
-						. '<td>&nbsp;</td>'
-						. '<td>&nbsp;</td>'
-						. '<td>&nbsp;</td>'
-						. '<td>&nbsp;</td>'
-						. '</tr>';
+		$minRows = 9; $current = substr_count($rowsHtml, '<tr>');
+		for ($i=$current; $i<$minRows; $i++) {
+			$rowsHtml .= '<tr><td style="padding:6px 6px;">&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>';
 		}
-		$grand = max(0.0, $total - $discount);
-		$discountFmt = $discount > 0 ? ('₱ ' . number_format($discount, 2)) : '&nbsp;';
-		$itemsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="font-size:11px;">'
-					. '<thead><tr>'
-					. '<th>ITEM DESCRIPTION</th>'
-					. '<th>U/M</th>'
-					. '<th>QTY</th>'
-					. '<th>UNIT PRICE</th>'
-					. '<th>TOTAL</th>'
-					. '</tr></thead>'
-					. '<tbody>' . $itemsRows . '</tbody>'
-					. '<tfoot>'
-					. '<tr><td colspan="4" style="text-align:right; font-weight:700;">DISCOUNTED</td><td style="text-align:right;">' . $discountFmt . '</td></tr>'
-					. '<tr><td colspan="4" style="text-align:right; font-weight:800;">TOTAL:</td><td style="text-align:right; font-weight:800;">₱ ' . number_format($grand, 2) . '</td></tr>'
-					. '</tfoot>'
-					. '</table>';
+		$grand = max(0,$total - $discount);
+		$itemsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="4" style="font-size:10px;margin-top:6px;">'
+			. '<thead>'
+			. '<tr style="background:#fafafa;font-weight:600;">'
+			. '<th style="text-align:left;">ITEM DESCRIPTION</th>'
+			. '<th style="text-align:center;width:60px;">U/M</th>'
+			. '<th style="text-align:center;width:60px;">QTY</th>'
+			. '<th style="text-align:right;width:90px;">UNIT PRICE</th>'
+			. '<th style="text-align:right;width:100px;">TOTAL</th>'
+			. '</tr>'
+			. '</thead>'
+			. '<tbody>' . $rowsHtml . '</tbody>'
+			. '<tfoot>'
+			. '<tr><td colspan="4" style="text-align:right;font-weight:600;">DISCOUNTED</td><td style="text-align:right;">' . ($discount>0?('₱ '.number_format($discount,2)):'&nbsp;') . '</td></tr>'
+			. '<tr><td colspan="4" style="text-align:right;font-weight:800;">TOTAL:</td><td style="text-align:right;font-weight:800;">₱ ' . number_format($grand,2) . '</td></tr>'
+			. '</tfoot>'
+			. '</table>';
 
-		// Notes & Instructions + Deliver To
-		$notesBlock = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px; font-size:10px;">'
-					. '<tr><td style="width:22%;font-weight:700;">NOTES & INSTRUCTIONS:</td><td>' . ($notes !== '' ? $notes : '&nbsp;') . '</td></tr>'
-					. '<tr><td style="font-weight:700;">PLEASE DELIVER TO:</td><td>'
-					. 'PHILIPPINE ONCOLOGY CENTER CORPORATION<br>' . $deliverTo . '<br>LOOK FOR: <span style="font-weight:700;">' . $lookFor . '</span>'
-					. '</td></tr>'
-					. '</table>';
-
-		// Conditions and signatures
-		$conditionsText = '<div style="text-align:center;font-weight:700;margin-bottom:4px;">CONDITIONS</div>'
-			. '<div style="font-size:9px; line-height:1.3;">'
-			. 'The PO number & date must be shown on the invoice and/or statement of account. At least two (2) copies of delivery receipts or invoice must accompany the delivery. '
-			. 'Goods or merchandises must be supplied risk-free. Acceptance of the PO constitutes a contract between Vendor and Vendee. '
-			. 'The Philippine Oncology Center Corporation reserves the right to cancel this PO without notice for failure of the vendor to comply with the above terms and conditions '
-			. 'and other supplementary agreements e.g. Purchasing Guidelines.'
+		// Notes & Instructions block
+		$userNameLine = $prepared !== '' ? '[' . $prepared . ']' : '[USER\'S NAME]';
+		$procurementNameLine = $prepared !== '' ? '[' . $prepared . ']' : '[PROCUREMENT NAME]';
+		$notesBlock = '<div style="border:1px solid #000;background:#f1f5f9;margin-top:8px;padding:6px;font-size:9px;">'
+			. '<div style="text-align:center;font-weight:700;">NOTES & INSTRUCTIONS:</div>'
+			. '<div style="text-align:center;margin-top:4px;font-weight:600;">' . $userNameLine . '</div>'
+			. '<div style="text-align:center;margin-top:6px;font-size:10px;">PLEASE DELIVER TO:</div>'
+			. '<div style="text-align:center;font-size:10px;font-weight:700;color:#b91c1c;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
+			. '<div style="text-align:center;font-size:9px;">' . $deliverTo . '</div>'
+			. '<div style="text-align:center;font-size:9px;margin-top:2px;">LOOK FOR: ' . $lookFor . '</div>'
+			. '<div style="text-align:center;font-size:9px;margin-top:4px;font-weight:600;">' . $procurementNameLine . '</div>'
 			. '</div>';
 
-		$sigCell = function(string $label, string $name, string $subtitle): string {
-			$n = $name !== '' ? htmlspecialchars($name, ENT_QUOTES, 'UTF-8') : '&nbsp;';
-			$sub = $subtitle !== '' ? htmlspecialchars($subtitle, ENT_QUOTES, 'UTF-8') : '&nbsp;';
-			return '<div style="margin-bottom:10px;">'
-				 . '  <div style="font-size:10px;">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</div>'
-				 . '  <div style="height:38px;"></div>'
-				 . '  <div style="border-top:1px solid #999; text-align:center; padding-top:6px; font-size:10px;">' . $n . '<br><small>' . $sub . '</small></div>'
-				 . '</div>';
-		};
+		$conditionsText = '<div style="text-align:center;font-weight:700;margin-bottom:4px;">CONDITIONS</div>'
+			. '<div style="font-size:9px; line-height:1.3;text-align:justify;">'
+			. 'The PO number & date must be shown on the invoice and / or statement of account. At least two (2) copies of delivery receipt & / or invoice must accompany the delivery. Goods or merchandises travel at supplier’s risk. '
+			. 'Acceptance of this PO constitutes a contract between Vendor and Vendee. The Philippine Oncology Center Corporation reserves the right to cancel this PO without notice for failure of the vendor to comply with the above terms and conditions and other supplementary agreement, e.g. Purchasing Guidelines.'
+			. '</div>';
 
-		$leftSigs = $sigCell('PREPARED BY:', $prepared, 'PROCUREMENT & GEN. SERVICES')
-				  . $sigCell('CHECKED BY:', $reviewed, 'FINANCE OFFICER')
-				  . $sigCell('REVIEWED BY:', '', '')
-				  . $sigCell('APPROVED BY:', $approved, 'ADMINISTRATOR');
+		// Signatures
+		$sigColLeft = '<table width="100%" cellspacing="0" cellpadding="4" style="font-size:10px;">'
+			. '<tr><td style="width:50%;vertical-align:top;">'
+			. '  <div style="font-size:10px;">PREPARED BY:</div><div style="height:40px;"></div><div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($prepared ?: '&nbsp;') . '<br><small>PROCUREMENT & GEN. SERVICES</small></div>'
+			. '  <div style="margin-top:16px;font-size:10px;">PREPARED BY:</div><div style="height:40px;"></div><div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($financeOfficer ?: '&nbsp;') . '<br><small>FINANCE OFFICER</small></div>'
+			. '  <div style="margin-top:16px;font-size:10px;">PREPARED BY:</div><div style="height:40px;"></div><div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($adminName ?: '&nbsp;') . '<br><small>ADMINISTRATOR</small></div>'
+			. '</td>'
+			. '<td style="vertical-align:top;">'
+			. $conditionsText
+			. '<div style="margin-top:12px;height:40px;"></div>'
+			. '<div style="border-top:1px solid #000;text-align:center;padding-top:4px;font-size:10px;font-weight:600;">SUPPLIER / SUPPLIER’S REPRESENTATIVE<br>SIGNATURE OVER PRINTED NAME</div>'
+			. '<div style="margin-top:10px;font-size:10px;display:flex;justify-content:space-between;">'
+			. '<div>PREPARED BY:</div><div>DATE</div>'
+			. '</div>'
+			. '</td>'
+			. '</tr>'
+			. '</table>';
 
-		$supplierSig = '<div style="margin-top:12px;">'
-					 . '  <div style="height:38px;"></div>'
-					 . '  <div style="border-top:1px solid #999; text-align:center; padding-top:6px; font-size:10px;">SUPPLIER / SUPPLIER’S REPRESENTATIVE<br>SIGNATURE OVER PRINTED NAME</div>'
-					 . '</div>'
-					 . '<div style="margin-top:12px; font-size:10px; display:flex; justify-content:space-between;">'
-					 . '  <div>PREPARED BY:</div><div>DATE</div>'
-					 . '</div>';
+		$signaturesTable = '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="margin-top:8px;">'
+			. '<tr><td>' . $sigColLeft . '</td></tr>'
+			. '</table>';
 
-		$sigConditions = '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="margin-top:6px;">'
-						. '  <tr>'
-						. '    <td style="width:60%; vertical-align:top;">' . $leftSigs . '</td>'
-						. '    <td style="vertical-align:top;">' . $conditionsText . $supplierSig . '</td>'
-						. '  </tr>'
-						. '</table>';
-
-		$html = $logoHtml . $header . $top . $itemsTable . $notesBlock . $sigConditions;
+		$html = $logoHtml . $headerTitle . $vendorMeta . $itemsTable . $notesBlock . $signaturesTable;
 		$mpdf->WriteHTML($html);
 		$mpdf->Output($filePath, 'F');
+	}
+
+	/** Stream/download the official PO PDF directly to the browser. */
+	public function downloadPurchaseOrderPDF(array $po): void
+	{
+		$tmp = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'PO_' . preg_replace('/[^A-Za-z0-9_-]/','_', (string)($po['po_number'] ?? 'PO')) . '_' . substr(sha1(uniqid('', true)),0,8) . '.pdf';
+		$this->generatePurchaseOrderPDFToFile($po, $tmp);
+		if (@is_file($tmp)) {
+			header('Content-Type: application/pdf');
+			header('Content-Disposition: attachment; filename="PO_' . rawurlencode((string)($po['po_number'] ?? 'PO')) . '.pdf"');
+			$size = @filesize($tmp); if ($size) { header('Content-Length: ' . (string)$size); }
+			@readfile($tmp);
+			@unlink($tmp);
+			return;
+		}
+		header('HTTP/1.1 500 Internal Server Error'); echo 'PDF generation failed.';
 	}
 
 	public function generateConsumptionReportPDF(array $meta, array $rows, string $output = 'D', ?string $fileName = null): void

@@ -32,3 +32,6 @@ Route::middleware(['auth', 'isManager'])->group(function () {
     Route::post('/manager/request/update/{id}', [ProcurementController::class, 'updateRequest']);
     Route::post('/manager/request/followup/{id}', [ProcurementController::class, 'followUpRequest']);
 });
+
+// Purchase Order PDF download (server-rendered official layout)
+Route::get('/procurement/po/download', [ProcurementController::class, 'poDownload'])->middleware('auth');

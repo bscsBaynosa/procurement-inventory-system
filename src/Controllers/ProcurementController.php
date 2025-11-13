@@ -3507,5 +3507,74 @@ class ProcurementController extends BaseController
         header('Location: /dashboard');
     }
 
+    /** GET: Download official Purchase Order PDF by PO number or id. */
+    public function poDownload(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
+        $poNumber = isset($_GET['po']) ? trim((string)$_GET['po']) : '';
+        $poId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+        if ($poNumber === '' && $poId <= 0) { header('Location: /manager/requests?error=' . rawurlencode('Missing PO identifier')); return; }
+        $pdo = \App\Database\Connection::resolve();
+        $row = null;
+        try {
+            if ($poNumber !== '') {
+                $st = $pdo->prepare('SELECT * FROM purchase_orders WHERE po_number = :po LIMIT 1');
+                $st->execute(['po' => $poNumber]);
+                $row = $st->fetch();
+            } elseif ($poId > 0) {
+                $st = $pdo->prepare('SELECT * FROM purchase_orders WHERE id = :id LIMIT 1');
+                $st->execute(['id' => $poId]);
+                $row = $st->fetch();
+            }
+        } catch (\Throwable $e) { $row = null; }
+        if (!$row) { header('Location: /manager/requests?error=' . rawurlencode('PO not found')); return; }
+        $pid = (int)($row['id'] ?? 0);
+        $items = [];
+        try {
+            $stI = $pdo->prepare('SELECT description, unit, qty, unit_price, line_total FROM purchase_order_items WHERE po_id = :id ORDER BY id ASC');
+            $stI->execute(['id' => $pid]);
+            foreach ($stI->fetchAll() as $r) {
+                $items[] = [
+                    'description' => (string)$r['description'],
+                    'unit' => (string)$r['unit'],
+                    'qty' => (int)$r['qty'],
+                    'unit_price' => (float)$r['unit_price'],
+                    'total' => (float)$r['line_total'],
+                ];
+            }
+        } catch (\Throwable $e) {}
+        $vendorName = (string)($row['vendor_name'] ?? '');
+        $vendorAddr = (string)($row['vendor_address'] ?? '');
+        $vendorTin = (string)($row['vendor_tin'] ?? '');
+        if (($vendorAddr === '' || $vendorTin === '' || $vendorName === '') && isset($row['supplier_id'])) {
+            try {
+                $stU = $pdo->prepare('SELECT full_name, address, tin FROM users WHERE user_id = :id');
+                $stU->execute(['id' => (int)$row['supplier_id']]);
+                if ($u = $stU->fetch()) {
+                    if ($vendorName === '' && !empty($u['full_name'])) { $vendorName = (string)$u['full_name']; }
+                    if ($vendorAddr === '' && !empty($u['address'])) { $vendorAddr = (string)$u['address']; }
+                    if ($vendorTin === '' && !empty($u['tin'])) { $vendorTin = (string)$u['tin']; }
+                }
+            } catch (\Throwable $e) {}
+        }
+        $this->pdf()->downloadPurchaseOrderPDF([
+            'po_number' => (string)$row['po_number'],
+            'date' => date('Y-m-d', strtotime((string)($row['created_at'] ?? date('Y-m-d')))),
+            'vendor_name' => $vendorName,
+            'vendor_address' => $vendorAddr,
+            'vendor_tin' => $vendorTin,
+            'reference' => (string)($row['reference'] ?? ''),
+            'terms' => (string)($row['terms'] ?? ''),
+            'center' => (string)($row['center'] ?? ''),
+            'notes' => (string)($row['notes'] ?? ''),
+            'discount' => isset($row['discount']) ? (float)$row['discount'] : 0.0,
+            'deliver_to' => (string)($row['deliver_to'] ?? ''),
+            'look_for' => (string)($row['look_for'] ?? ''),
+            'prepared_by' => (string)($row['prepared_by'] ?? ''),
+            'reviewed_by' => (string)($row['finance_officer'] ?? ''),
+            'approved_by' => (string)($row['admin_name'] ?? ''),
+            'items' => $items,
+        ]);
+    }
 }
  
