@@ -21,7 +21,7 @@ class AuthService
 	 */
 	public function attempt(string $username, string $password, string $ip = '', string $userAgent = ''): bool
 	{
-		$stmt = $this->pdo->prepare('SELECT user_id, username, password_hash, role, branch_id, is_active FROM users WHERE username = :u LIMIT 1');
+		$stmt = $this->pdo->prepare('SELECT user_id, username, full_name, password_hash, role, branch_id, is_active FROM users WHERE username = :u LIMIT 1');
 		$stmt->execute(['u' => $username]);
 		$user = $stmt->fetch();
 
@@ -51,6 +51,10 @@ class AuthService
 		}
 		$_SESSION['user_id'] = (int)$user['user_id'];
 		$_SESSION['username'] = (string)$user['username'];
+		// Provide a friendly display name for downstream PDFs and templates
+		$_SESSION['full_name'] = isset($user['full_name']) && trim((string)$user['full_name']) !== ''
+			? (string)$user['full_name']
+			: (string)$user['username'];
 		$_SESSION['role'] = (string)$user['role'];
 		$_SESSION['branch_id'] = $user['branch_id'] !== null ? (int)$user['branch_id'] : null;
 
@@ -62,7 +66,7 @@ class AuthService
 	 */
 	public function loginById(int $userId, string $ip = '', string $userAgent = '', string $reason = 'login'): bool
 	{
-		$stmt = $this->pdo->prepare('SELECT user_id, username, role, branch_id, is_active FROM users WHERE user_id = :id LIMIT 1');
+		$stmt = $this->pdo->prepare('SELECT user_id, username, full_name, role, branch_id, is_active FROM users WHERE user_id = :id LIMIT 1');
 		$stmt->execute(['id' => $userId]);
 		$user = $stmt->fetch();
 		if (!$user) {
@@ -89,6 +93,9 @@ class AuthService
 		}
 		$_SESSION['user_id'] = (int)$user['user_id'];
 		$_SESSION['username'] = (string)$user['username'];
+		$_SESSION['full_name'] = isset($user['full_name']) && trim((string)$user['full_name']) !== ''
+			? (string)$user['full_name']
+			: (string)$user['username'];
 		$_SESSION['role'] = (string)$user['role'];
 		$_SESSION['branch_id'] = $user['branch_id'] !== null ? (int)$user['branch_id'] : null;
 
