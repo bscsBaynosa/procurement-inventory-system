@@ -61,6 +61,22 @@ class ProcurementController extends BaseController
         try {
             $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_purchase_orders_po_number_unique ON purchase_orders (po_number)");
         } catch (\Throwable $ignored) {}
+        // Ensure pr_number exists on legacy schemas and backfill when possible
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS pr_number VARCHAR(64)"); } catch (\Throwable $e) {}
+        try {
+            // Backfill pr_number from pr_id -> purchase_requests.pr_number
+            $pdo->exec("UPDATE purchase_orders po
+                        SET pr_number = pr.pr_number
+                        FROM purchase_requests pr
+                        WHERE po.pr_number IS NULL AND po.pr_id = pr.request_id");
+        } catch (\Throwable $e) {}
+        try {
+            // If all rows now have pr_number, enforce NOT NULL as intended
+            $hasNull = $pdo->query("SELECT EXISTS (SELECT 1 FROM purchase_orders WHERE pr_number IS NULL) AS has_null")->fetchColumn();
+            if (!$hasNull) { $pdo->exec("ALTER TABLE purchase_orders ALTER COLUMN pr_number SET NOT NULL"); }
+        } catch (\Throwable $e) {}
+        // Optional index to speed up lookups by PR number
+        try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_pr_number ON purchase_orders (pr_number)"); } catch (\Throwable $e) {}
         // Determine the correct reference column for purchase_orders (legacy installs may use po_id instead of id)
         $poRefCol = 'id';
         try {
