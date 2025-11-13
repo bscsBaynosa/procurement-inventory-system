@@ -41,6 +41,10 @@
     <?php require __DIR__ . '/../layouts/_sidebar.php'; ?>
     <main class="content">
         <h2 class="no-print" style="margin:0 0 12px 0;">Create Purchase Order • PR <?= htmlspecialchars($pr, ENT_QUOTES, 'UTF-8') ?></h2>
+        <div class="no-print card" style="max-width:780px;margin:0 auto 10px;">
+            <div style="font-weight:600;">Heads up</div>
+            <div style="font-size:13px;color:var(--muted);">The on-screen form print/download is only a draft preview. For the official POCC-styled PDF, save the PO first, then open it and click <strong>Download PDF</strong> (server generated).</div>
+        </div>
         <div id="po-section">
         <?php
         if (session_status() !== PHP_SESSION_ACTIVE) { @session_start(); }
@@ -188,8 +192,8 @@
             </div>
             <div class="no-print" style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap;">
                 <button class="btn" type="submit">Save &amp; Send for Admin Approval</button>
-                <button class="btn muted" type="button" onclick="window.print()">Print Draft</button>
-                <button class="btn muted" type="button" onclick="downloadPdf()">Download PDF</button>
+                <button class="btn muted" type="button" onclick="window.print()">Print Draft (screen)</button>
+                <button class="btn muted" type="button" onclick="downloadPdf()">Download Draft (screen)</button>
                 <a class="btn muted" href="/manager/requests">Cancel</a>
             </div>
         </form>

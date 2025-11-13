@@ -3635,6 +3635,7 @@ class ProcurementController extends BaseController
         }
         $this->pdf()->downloadPurchaseOrderPDF([
             'po_number' => (string)$row['po_number'],
+            'pr_number' => (string)($row['pr_number'] ?? ''),
             'date' => date('Y-m-d', strtotime((string)($row['created_at'] ?? date('Y-m-d')))),
             'vendor_name' => $vendorName,
             'vendor_address' => $vendorAddr,

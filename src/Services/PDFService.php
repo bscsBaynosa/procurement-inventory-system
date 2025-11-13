@@ -545,8 +545,8 @@ class PDFService
 				. '<td style="padding:6px 6px;">' . $desc . '</td>'
 				. '<td style="text-align:center;width:60px;">' . $unit . '</td>'
 				. '<td style="text-align:center;width:60px;">' . $qty . '</td>'
-				. '<td style="text-align:right;width:90px;">' . number_format($price,2) . '</td>'
-				. '<td style="text-align:right;width:100px;">' . number_format($line,2) . '</td>'
+			. '<td style="text-align:right;width:90px;">P ' . number_format($price,2) . '</td>'
+			. '<td style="text-align:right;width:100px;">P ' . number_format($line,2) . '</td>'
 				. '</tr>';
 		}
 		$minRows = 9; $current = substr_count($rowsHtml, '<tr>');
@@ -554,7 +554,11 @@ class PDFService
 			$rowsHtml .= '<tr><td style="padding:6px 6px;">&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>';
 		}
 		$grand = max(0,$total - $discount);
-		$itemsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="4" style="font-size:10px;margin-top:6px;">'
+		$itemsCaption = '';
+		if (!empty($po['pr_number'])) {
+			$itemsCaption = '<div style="font-size:10px;font-weight:700;margin-top:8px;">Items (Generated from PR ' . htmlspecialchars((string)$po['pr_number'], ENT_QUOTES, 'UTF-8') . ')</div>';
+		}
+		$itemsTable = $itemsCaption . '<table width="100%" border="1" cellspacing="0" cellpadding="4" style="font-size:10px;margin-top:6px;">'
 			. '<thead>'
 			. '<tr style="background:#fafafa;font-weight:600;">'
 			. '<th style="text-align:left;">ITEM DESCRIPTION</th>'
@@ -566,8 +570,8 @@ class PDFService
 			. '</thead>'
 			. '<tbody>' . $rowsHtml . '</tbody>'
 			. '<tfoot>'
-			. '<tr><td colspan="4" style="text-align:right;font-weight:600;">DISCOUNT</td><td style="text-align:right;">' . ($discount>0?('₱ '.number_format($discount,2)):'&nbsp;') . '</td></tr>'
-			. '<tr><td colspan="4" style="text-align:right;font-weight:800;">TOTAL:</td><td style="text-align:right;font-weight:800;">₱ ' . number_format($grand,2) . '</td></tr>'
+			. '<tr><td colspan="4" style="text-align:right;font-weight:600;">DISCOUNT</td><td style="text-align:right;">' . ($discount>0?('P '.number_format($discount,2)):'&nbsp;') . '</td></tr>'
+			. '<tr><td colspan="4" style="text-align:right;font-weight:800;">TOTAL:</td><td style="text-align:right;font-weight:800;">P ' . number_format($grand,2) . '</td></tr>'
 			. '</tfoot>'
 			. '</table>';
 
