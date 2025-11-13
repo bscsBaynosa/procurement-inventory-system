@@ -13,6 +13,7 @@ class AuthController extends BaseController
     private int $otpResendCooldown = 45;
     private int $otpMaxAttempts = 5;
     private int $otpMaxResends = 5;
+    private bool $otpShowCode = false;
 
     public function __construct(?AuthService $auth = null)
     {
@@ -20,6 +21,13 @@ class AuthController extends BaseController
         $this->auth = $auth; // may be null
         if (session_status() !== PHP_SESSION_ACTIVE) {
             @session_start();
+        }
+        $flag = getenv('OTP_SHOW_CODE');
+        if ($flag !== false) {
+            $this->otpShowCode = in_array(strtolower((string)$flag), ['1','true','yes','on'], true);
+        } else {
+            $env = strtolower((string)(getenv('APP_ENV') ?: ''));
+            $this->otpShowCode = $env !== 'production' && $env !== 'prod';
         }
     }
 
@@ -418,6 +426,7 @@ class AuthController extends BaseController
             'expires_at_ts' => $session['expires_at_ts'] ?? null,
             'resend_wait' => 0,
             'resend_disabled' => false,
+            'code_plain' => $session['code_plain'] ?? null,
         ];
         $base['sent'] = array_key_exists('sent', $overrides) ? (bool)$overrides['sent'] : true;
         if (!empty($session['last_sent_at'])) {
@@ -485,17 +494,23 @@ class AuthController extends BaseController
             'expires_at' => $expiresIso,
             'last_sent_at' => time(),
             'resend_count' => $resendCount,
+            'code_plain' => $this->otpShowCode ? $code : null,
         ];
         if (!$sent) {
             $_SESSION['login_otp']['last_sent_at'] = time() - $this->otpResendCooldown;
         }
 
-        $context = $this->otpViewContext($_SESSION['login_otp'], [
+        $contextExtras = [
             'sent' => $sent,
             'message' => $sent
                 ? 'We sent a one-time code to your email.'
                 : 'We could not send the email. Please contact the administrator.',
-        ]);
+        ];
+        if (!$sent && $this->otpShowCode) {
+            $contextExtras['code_plain'] = $code;
+            $contextExtras['message'] = 'Email delivery failed, but you can use the code shown below.';
+        }
+        $context = $this->otpViewContext($_SESSION['login_otp'], $contextExtras);
         $context['otp_id'] = $otpId;
 
         return $context;
