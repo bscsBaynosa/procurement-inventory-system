@@ -618,7 +618,7 @@ class PDFService
 			. '<td style="text-align:right;">DATE</td>'
 			. '</tr>'
 			. '</table>'
-			. '<div style="margin-top:10px;height:42px;"></div>'
+			. '<div style="margin-top:12px;height:60px;"></div>'
 			. '<div style="border-top:1px solid #000;text-align:center;padding-top:4px;font-size:10px;font-weight:600;">SUPPLIER / SUPPLIERS REPRESENTATIVE<br>SIGNATURE OVER PRINTED NAME</div>';
 
 		$signaturesTable = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:8px;font-size:10px; table-layout:fixed;">'
