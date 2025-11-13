@@ -594,31 +594,37 @@ class PDFService
 			. 'Acceptance of this PO constitutes a contract between Vendor and Vendee. The Philippine Oncology Center Corporation reserves the right to cancel this PO without notice for failure of the vendor to comply with the above terms and conditions and other supplementary agreement, e.g. Purchasing Guidelines.'
 			. '</div>';
 
-		// Signatories block: two columns with clear borders and spacing like the reference
-		$leftCol = '<div style="font-size:10px;">PREPARED BY:</div>'
-			. '<div style="height:40px;"></div>'
-			. '<div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($prepared ?: '&nbsp;') . '<br><small>PROCUREMENT &amp; GEN. SERVICES</small></div>'
-			. '<div style="margin-top:16px;font-size:10px;">PREPARED BY:</div>'
-			. '<div style="height:40px;"></div>'
-			. '<div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($financeOfficer ?: '&nbsp;') . '<br><small>FINANCE OFFICER</small></div>'
-			. '<div style="margin-top:16px;font-size:10px;">PREPARED BY:</div>'
-			. '<div style="height:40px;"></div>'
-			. '<div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . ($adminName ?: '&nbsp;') . '<br><small>ADMINISTRATOR</small></div>';
+		// Signatories block: match reference spacing and equal column widths
+		$leftBlocks = function(string $name, string $role): string {
+			$nm = ($name !== '') ? $name : '&nbsp;';
+			return '<tr>'
+				. '<td style="vertical-align:top;padding:6px 6px 2px 6px;">'
+					. '<div style="font-size:10px;">PREPARED BY:</div>'
+					. '<div style="height:36px;"></div>'
+					. '<div style="border-top:1px solid #000;padding-top:4px;text-align:center;font-size:10px;font-weight:600;">' . $nm . '<br><span style="font-weight:400;">' . $role . '</span></div>'
+				. '</td>'
+			. '</tr>';
+		};
+		$leftCol = '<table width="100%" border="0" cellspacing="0" cellpadding="0" style="table-layout:fixed;">'
+			. $leftBlocks($prepared, 'PROCUREMENT &amp; GEN. SERVICES')
+			. $leftBlocks($financeOfficer, 'FINANCE OFFICER')
+			. $leftBlocks($adminName, 'ADMINISTRATOR')
+			. '</table>';
 
-		$rightCol = $conditionsText
-			. '<table width="100%" border="0" cellspacing="0" cellpadding="4" style="margin-top:10px;font-size:10px;">'
+		$rightCol = '<div>' . $conditionsText . '</div>'
+			. '<table width="100%" border="0" cellspacing="0" cellpadding="4" style="margin-top:8px;font-size:10px;">'
 			. '<tr>'
-			. '<td style="width:60%;">PREPARED BY:</td>'
+			. '<td style="width:70%;">PREPARED BY:</td>'
 			. '<td style="text-align:right;">DATE</td>'
 			. '</tr>'
 			. '</table>'
-			. '<div style="margin-top:12px;height:40px;"></div>'
+			. '<div style="margin-top:10px;height:42px;"></div>'
 			. '<div style="border-top:1px solid #000;text-align:center;padding-top:4px;font-size:10px;font-weight:600;">SUPPLIER / SUPPLIERS REPRESENTATIVE<br>SIGNATURE OVER PRINTED NAME</div>';
 
-		$signaturesTable = '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="margin-top:8px;font-size:10px; table-layout:fixed;">'
+		$signaturesTable = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:8px;font-size:10px; table-layout:fixed;">'
 			. '<tr>'
-			. '<td style="width:60%;vertical-align:top;">' . $leftCol . '</td>'
-			. '<td style="width:40%;vertical-align:top;">' . $rightCol . '</td>'
+			. '<td style="width:50%;vertical-align:top;">' . $leftCol . '</td>'
+			. '<td style="width:50%;vertical-align:top;">' . $rightCol . '</td>'
 			. '</tr>'
 			. '</table>';
 
