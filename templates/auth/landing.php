@@ -112,6 +112,24 @@
     .contact { display:grid; grid-template-columns: 1fr 1fr; gap:16px; padding:22px; }
     @media (max-width: 800px){ .contact { grid-template-columns: 1fr; } }
 
+    .form-alert{ padding:10px; border-radius:10px; font-weight:600; margin-bottom:10px; font-size:13px; }
+    .form-alert.error{ background:#fee2e2; border:1px solid #fecaca; color:#991b1b; }
+    .form-alert.success{ background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; }
+    body.modal-open{ overflow:hidden; }
+    .otp-overlay{ position:fixed; inset:0; background:rgba(15,23,42,.78); display:none; align-items:center; justify-content:center; padding:18px; z-index:60; }
+    .otp-overlay.open{ display:flex; }
+    .otp-dialog{ background:linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.85)); border-radius:14px; box-shadow:0 25px 70px rgba(0,0,0,.35); padding:22px; width:100%; max-width:420px; border:1px solid rgba(15,23,42,.08); position:relative; }
+    .otp-dialog h3{ margin:0 0 6px 0; font-size:20px; color:#0f172a; font-weight:800; }
+    .otp-dialog p{ margin:6px 0; color:#334155; font-size:14px; }
+    .otp-close{ position:absolute; top:10px; right:10px; border:0; background:transparent; font-size:20px; color:#475569; cursor:pointer; }
+    .otp-alert{ padding:10px; border-radius:10px; font-size:13px; font-weight:600; margin-bottom:10px; }
+    .otp-alert.error{ background:#fee2e2; border:1px solid #fecaca; color:#991b1b; }
+    .otp-alert.success{ background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; }
+    .otp-input{ width:100%; height:54px; font-size:28px; text-align:center; letter-spacing:8px; border-radius:12px; border:1px solid #cbd5e1; margin:12px 0 16px 0; padding:0 12px; }
+    .otp-actions{ display:flex; flex-direction:column; gap:10px; }
+    .otp-actions .btn{ width:100%; }
+    .otp-hint{ color:#64748b; font-size:12px; text-align:center; margin-top:6px; }
+
     /* Click-highlight animation for sections */
     @keyframes sectionFlash { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.0); } 50% { box-shadow: 0 0 0 6px rgba(34,197,94,.25); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,.0); } }
     .flash { animation: sectionFlash .9s ease-out 1; border-radius: 14px; }
@@ -123,6 +141,23 @@
     </style>
     </head>
 <body>
+    <?php
+    $otpContext = $otp ?? null;
+    $otpError = $otp_error ?? null;
+    $forgotError = $forgot_error ?? null;
+    $forgotSuccess = $forgot_success ?? null;
+    $identifierValue = $identifier ?? '';
+    $otpShow = !empty($otpContext) && !empty($otpContext['show']);
+    $otpExpiresIn = isset($otpContext['expires_in']) ? (int)$otpContext['expires_in'] : 0;
+    $otpResendWait = isset($otpContext['resend_wait']) ? (int)$otpContext['resend_wait'] : 0;
+    $otpEmailText = isset($otpContext['email']) ? (string)$otpContext['email'] : '';
+    $otpCountdownText = '--';
+    if ($otpExpiresIn > 0) {
+        $mins = intdiv($otpExpiresIn, 60);
+        $secs = $otpExpiresIn % 60;
+        $otpCountdownText = $mins > 0 ? ($mins . ':' . str_pad((string)$secs, 2, '0', STR_PAD_LEFT)) : ($secs . 's');
+    }
+    ?>
     <nav class="navbar">
         <div class="brand">
             <div>
@@ -246,12 +281,18 @@ foreach ($cats as $c): ?>
                         
                         <!-- Forgot password form -->
                         <form id="forgotForm" class="hidden" method="POST" action="/auth/forgot">
+<?php if (!empty($forgotError)): ?>
+                            <div class="form-alert error"><?= htmlspecialchars($forgotError, ENT_QUOTES, 'UTF-8') ?></div>
+<?php endif; ?>
+<?php if (!empty($forgotSuccess)): ?>
+                            <div class="form-alert success"><?= htmlspecialchars($forgotSuccess, ENT_QUOTES, 'UTF-8') ?></div>
+<?php endif; ?>
                             <div class="form-group">
                                 <label for="identifier">Username or Email</label>
-                                <input id="identifier" name="identifier" required />
+                                <input id="identifier" name="identifier" value="<?= htmlspecialchars((string)$identifierValue, ENT_QUOTES, 'UTF-8') ?>" required />
                             </div>
                             <div class="signin-actions">
-                                <button type="submit" class="btn btn-primary">Send reset link</button>
+                                <button type="submit" class="btn btn-primary">Send code</button>
                             </div>
                             <div style="text-align:center;margin-top:14px;">
                                 <a href="#" id="switchToSignin2" style="color:#2563eb;text-decoration:none;font-weight:700;">Back to sign in</a>
@@ -333,6 +374,40 @@ foreach ($cats as $c): ?>
         </div>
     </section>
 
+    <div id="otpOverlay" class="otp-overlay<?= $otpShow ? ' open' : '' ?>" data-expires-in="<?= $otpExpiresIn ?>" data-resend-wait="<?= $otpResendWait ?>">
+        <div class="otp-dialog">
+            <button type="button" class="otp-close" id="closeOtp" aria-label="Close OTP dialog">&times;</button>
+            <h3>Enter Verification Code</h3>
+<?php if ($otpEmailText !== ''): ?>
+            <p>We sent a one-time code to <strong><?= htmlspecialchars($otpEmailText, ENT_QUOTES, 'UTF-8') ?></strong>.</p>
+<?php else: ?>
+            <p>Enter the one-time code that was sent to your email.</p>
+<?php endif; ?>
+            <p style="margin-top:2px;">Code expires in <strong><span id="otpCountdown" data-default-text="<?= htmlspecialchars($otpCountdownText, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($otpCountdownText, ENT_QUOTES, 'UTF-8') ?></span></strong>.</p>
+<?php if (!empty($otpError)): ?>
+            <div class="otp-alert error"><?= htmlspecialchars($otpError, ENT_QUOTES, 'UTF-8') ?></div>
+<?php endif; ?>
+<?php if (!empty($otpContext['message'])): ?>
+            <div class="otp-alert <?= !empty($otpContext['sent']) ? 'success' : 'error' ?>"><?= htmlspecialchars((string)$otpContext['message'], ENT_QUOTES, 'UTF-8') ?></div>
+<?php endif; ?>
+            <form action="/auth/forgot/verify" method="POST" class="otp-actions" autocomplete="off">
+                <label for="otpCode" style="font-weight:700;color:#0f172a;">Verification Code</label>
+                <input id="otpCode" name="otp_code" class="otp-input" inputmode="numeric" pattern="\d*" maxlength="6" autocomplete="one-time-code" required />
+                <button type="submit" class="btn btn-primary">Sign in with code</button>
+            </form>
+            <form action="/auth/forgot/resend" method="POST" class="otp-actions" style="margin-top:12px;">
+                <button type="submit" class="btn btn-outline" id="resendBtn"<?= (!empty($otpContext['resend_disabled']) ? ' disabled' : '') ?>>Resend code</button>
+<?php if (!empty($otpContext['resend_limit_reached'])): ?>
+                <div class="otp-hint">Resend limit reached. Please try again later.</div>
+<?php elseif ($otpResendWait > 0): ?>
+                <div class="otp-hint">You can resend in <span id="resendCountdown" data-seconds="<?= $otpResendWait ?>"><?= $otpResendWait ?></span>s</div>
+<?php else: ?>
+                <div class="otp-hint">Need a new code? You can resend after a short delay.</div>
+<?php endif; ?>
+            </form>
+        </div>
+    </div>
+
     <script>
     function toggleMenu(){ document.getElementById('navLinks').classList.toggle('open'); }
     function closeMenu(){ document.getElementById('navLinks').classList.remove('open'); }
@@ -372,7 +447,7 @@ foreach ($cats as $c): ?>
             // keep success visible only on sign-in view to prompt login
             if (signupSuccess) signupSuccess.style.display = isSignup ? 'none' : '';
             title.textContent = isSignup ? 'Create account' : (isForgot ? 'Reset password' : 'Sign in');
-            subtitle.textContent = isSignup ? 'Enter your details to continue.' : (isForgot ? 'Enter your username or email to receive a reset link.' : 'Enter your credentials to continue.');
+            subtitle.textContent = isSignup ? 'Enter your details to continue.' : (isForgot ? 'Enter your username or email to receive a verification code.' : 'Enter your credentials to continue.');
         }
 
         if (toSignup) toSignup.addEventListener('click', function(e){ e.preventDefault(); show('signup'); });
@@ -396,6 +471,74 @@ foreach ($cats as $c): ?>
                     target.classList.add('flash');
                     setTimeout(() => target.classList.remove('flash'), 900);
                 });
+            });
+        }
+
+        const otpOverlay = document.getElementById('otpOverlay');
+        const closeOtpBtn = document.getElementById('closeOtp');
+        const otpInputField = document.getElementById('otpCode');
+
+        function formatCountdown(seconds){
+            if (seconds <= 0) { return 'expired'; }
+            const mins = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return mins > 0 ? mins + ':' + secs.toString().padStart(2, '0') : secs + 's';
+        }
+
+        function startOtpCountdown(totalSeconds){
+            const display = document.getElementById('otpCountdown');
+            if (!display || totalSeconds <= 0) { return; }
+            let remaining = totalSeconds;
+            const tick = () => {
+                display.textContent = formatCountdown(remaining);
+                if (remaining <= 0) { return; }
+                remaining -= 1;
+                setTimeout(tick, 1000);
+            };
+            tick();
+        }
+
+        function startResendCountdown(seconds){
+            const resendDisplay = document.getElementById('resendCountdown');
+            const resendBtn = document.getElementById('resendBtn');
+            if (!resendDisplay || seconds <= 0) { return; }
+            let remaining = seconds;
+            if (resendBtn) { resendBtn.disabled = true; }
+            const tick = () => {
+                resendDisplay.textContent = remaining;
+                if (remaining <= 0) {
+                    resendDisplay.textContent = '0';
+                    if (resendBtn) { resendBtn.disabled = false; }
+                    return;
+                }
+                remaining -= 1;
+                setTimeout(tick, 1000);
+            };
+            tick();
+        }
+
+        if (otpOverlay) {
+            const expiresIn = parseInt(otpOverlay.dataset.expiresIn || '0', 10);
+            const resendWait = parseInt(otpOverlay.dataset.resendWait || '0', 10);
+            if (otpOverlay.classList.contains('open')) {
+                document.body.classList.add('modal-open');
+                if (otpInputField) { otpInputField.focus(); }
+                startOtpCountdown(expiresIn);
+            }
+            startResendCountdown(resendWait);
+        }
+
+        if (otpInputField) {
+            otpInputField.addEventListener('input', function(){
+                this.value = this.value.replace(/[^0-9]/g, '').slice(0, 6);
+            });
+        }
+
+        if (closeOtpBtn && otpOverlay) {
+            closeOtpBtn.addEventListener('click', function(e){
+                e.preventDefault();
+                otpOverlay.classList.remove('open');
+                document.body.classList.remove('modal-open');
             });
         }
 

@@ -146,16 +146,24 @@ if ($method === 'GET' && $path === '/forgot') {
 	$auth->showForgot();
 	exit;
 }
+if ($method === 'POST' && $path === '/auth/forgot/verify') {
+	$auth->verifyOtp();
+	exit;
+}
+if ($method === 'POST' && $path === '/auth/forgot/resend') {
+	$auth->resendOtp();
+	exit;
+}
 if ($method === 'POST' && $path === '/auth/forgot') {
-	$auth->sendReset();
+	$auth->requestOtp();
 	exit;
 }
 if ($method === 'GET' && $path === '/reset-password') {
-	$auth->showResetForm();
+	header('Location: /forgot');
 	exit;
 }
 if ($method === 'POST' && $path === '/auth/reset') {
-	$auth->handleReset();
+	header('Location: /auth/forgot');
 	exit;
 }
 
