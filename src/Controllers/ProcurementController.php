@@ -725,9 +725,26 @@ class ProcurementController extends BaseController
             $stPid->execute(['pr' => $pr]);
             $prId = $stPid->fetchColumn();
         } catch (\Throwable $ignored) {}
-        // Insert PO
+        // Insert PO header; return newly created PO id
+        // Use RETURNING id for modern schemas; fallback handled by ensurePoTables
+        $ins = $pdo->prepare('INSERT INTO purchase_orders (
+                pr_number, pr_id, po_number, supplier_id,
+                vendor_name, vendor_address, vendor_tin,
+                center, reference, terms, notes,
+                deliver_to, look_for,
+                total, discount,
+                created_by, prepared_by, finance_officer, admin_name,
+                reviewed_by, approved_by
+            ) VALUES (
+                :pr, :prid, :po, :sid,
+                :vn, :va, :vt,
+                :ce, :ref, :te, :no,
+                :dt, :lf,
+                :tot, :disc,
+                :uid, :prep, :fo, :an,
+                :rev, :app
+            ) RETURNING id');
         // Guard against duplicate PO numbers race by retrying once if unique violation occurs
-                $sqlH = 'SELECT po.*, ' . $selectPr . ', COALESCE(po.vendor_name, \'Unknown Supplier\') AS supplier_name FROM purchase_orders po' . $joinPrSql . ' WHERE po.' . $idCol . ' = :id';
         try {
             $ins->execute([
                 'pr' => $pr,
