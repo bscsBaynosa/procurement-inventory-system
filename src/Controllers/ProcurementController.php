@@ -831,43 +831,55 @@ class ProcurementController extends BaseController
         // Use RETURNING <pk> depending on detected schema
         $ins = $pdo->prepare('INSERT INTO purchase_orders (' . $colNames . ') VALUES (' . $placeholders . ') RETURNING ' . $poPkCol);
         // Guard against duplicate PO numbers race by retrying once if unique violation occurs
-        try {
-            $paramsIns = [
-                'pr' => $pr,
-                'prid' => $prId ?: null,
-                'reqid' => $prId ?: null,
-                'po' => $poNumber,
-                'sid' => $supplierId,
-                'vn' => $vendorName ?: null,
-                'va' => $vendorAddress ?: null,
-                'vt' => $vendorTin ?: null,
-                'ce' => $center ?: null,
-                'ref' => $reference ?: null,
-                'te' => $terms ?: null,
-                'no' => $notes ?: null,
-                'dt' => $deliverTo ?: null,
-                'lf' => $lookFor ?: null,
-                'tot' => max(0.0, $total - $discount),
-                'disc' => $discount,
-                'uid' => (int)($_SESSION['user_id'] ?? 0),
-                'prep' => (string)($_SESSION['full_name'] ?? ''),
-                'fo' => $financeOfficer,
-                'an' => $adminName,
-                'rev' => $financeOfficer,
-                'app' => $adminName,
-            ];
+        // Robust duplicate-handling loop for po_number
+        $attempts = 0;
+        $paramsBase = [
+            'pr' => $pr,
+            'prid' => $prId ?: null,
+            'reqid' => $prId ?: null,
+            'sid' => $supplierId,
+            'vn' => $vendorName ?: null,
+            'va' => $vendorAddress ?: null,
+            'vt' => $vendorTin ?: null,
+            'ce' => $center ?: null,
+            'ref' => $reference ?: null,
+            'te' => $terms ?: null,
+            'no' => $notes ?: null,
+            'dt' => $deliverTo ?: null,
+            'lf' => $lookFor ?: null,
+            'disc' => $discount,
+            'uid' => (int)($_SESSION['user_id'] ?? 0),
+            'prep' => (string)($_SESSION['full_name'] ?? ''),
+            'fo' => $financeOfficer,
+            'an' => $adminName,
+            'rev' => $financeOfficer,
+            'app' => $adminName,
+        ];
+        do {
+            $attempts++;
+            $paramsIns = $paramsBase;
+            $paramsIns['po'] = $poNumber;
+            $paramsIns['tot'] = max(0.0, $total - $discount);
             if (!$hasRequestIdCol) { unset($paramsIns['reqid']); }
-            $ins->execute($paramsIns);
-        } catch (\Throwable $e) {
-            // If duplicate key on po_number, generate a fresh one and retry once
-            if (stripos((string)$e->getMessage(), 'duplicate') !== false) {
-                try { $poNumber = $this->requests()->generateNewPoNumber(); } catch (\Throwable $ignored) {}
-                $paramsIns['po'] = $poNumber;
-                $paramsIns['tot'] = max(0.0, $total - $discount);
-                if (!$hasRequestIdCol) { unset($paramsIns['reqid']); }
+            try {
                 $ins->execute($paramsIns);
-            } else { throw $e; }
-        }
+                break; // success
+            } catch (\PDOException $e) {
+                $msgErr = (string)$e->getMessage();
+                $isDup = ($e->getCode() === '23505') || stripos($msgErr, 'duplicate') !== false || stripos($msgErr, 'unique') !== false;
+                if ($isDup && $attempts < 5) {
+                    // Try to compute a fresh PO number: prefer service, else year+random
+                    $prev = $poNumber;
+                    try { $poNumber = $this->requests()->generateNewPoNumber(); } catch (\Throwable $ignored) {}
+                    if ($poNumber === '' || $poNumber === $prev || !preg_match('/^\d{7}$/', $poNumber)) {
+                        $year = (int)date('Y');
+                        $poNumber = (string)$year . str_pad((string)rand(100, 999), 3, '0', STR_PAD_LEFT);
+                    }
+                    continue; // retry
+                }
+                throw $e; // different failure
+            }
+        } while ($attempts < 5);
         $poId = (int)$ins->fetchColumn();
         // Fallback: if no id returned (rare), resolve by unique po_number
         if ($poId <= 0) {
@@ -905,18 +917,19 @@ class ProcurementController extends BaseController
         // Ensure messages has attachment columns
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
-        // Send to Admin for approval
-        $subject = 'PO For Approval • PR ' . $pr . ' • PO ' . $poNumber;
-        $body = 'Please review the attached Purchase Order for PR ' . $pr . ' and approve.';
+        // Redirect user to Messages with prefilled Admin recipients, subject and attached PO PDF
         $recipients = $pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('admin')")->fetchAll();
-        if ($recipients) {
-            $insMsg = $pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)');
-            foreach ($recipients as $row) { $insMsg->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$row['user_id'], 'j' => $subject, 'b' => $body, 'an' => basename($file), 'ap' => $file]); }
-        }
-        // Update PR status
+        $to = '';
+        if ($recipients) { $to = implode(',', array_map(static fn($r) => (string)(int)$r['user_id'], $recipients)); }
+        $subject = 'PO Approval • PR ' . $pr;
+        // Update PR status before redirecting to compose
         try { $this->requests()->updateGroupStatus($pr, 'po_submitted', (int)($_SESSION['user_id'] ?? 0), 'PO submitted for admin approval'); } catch (\Throwable $ignored) {}
-        $_SESSION['flash_success'] = 'Purchase Order ' . htmlspecialchars($poNumber, ENT_QUOTES, 'UTF-8') . ' created and sent for Admin approval.';
-        header('Location: /manager/requests?success=po_created');
+        $_SESSION['flash_success'] = 'Purchase Order ' . htmlspecialchars($poNumber, ENT_QUOTES, 'UTF-8') . ' created. Please review the prefilled message and send to Admin.';
+        $qs = '/admin/messages?to=' . rawurlencode($to)
+            . '&subject=' . rawurlencode($subject)
+            . '&attach_name=' . rawurlencode(basename($file))
+            . '&attach_path=' . rawurlencode($file);
+        header('Location: ' . $qs);
     }
 
     public function index(): void
