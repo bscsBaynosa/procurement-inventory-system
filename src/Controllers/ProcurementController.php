@@ -912,8 +912,11 @@ class ProcurementController extends BaseController
             'approved_by' => $adminName,
             'items' => $items,
         ], $file);
-        // Persist pdf path
-        $pdo->prepare('UPDATE purchase_orders SET pdf_path=:p, updated_at=NOW() WHERE id=:id')->execute(['p' => $file, 'id' => $poId]);
+        // Persist pdf path (respect legacy primary key column)
+        try {
+            $stmtUp = $pdo->prepare('UPDATE purchase_orders SET pdf_path=:p, updated_at=NOW() WHERE ' . $poPkCol . ' = :id');
+            $stmtUp->execute(['p' => $file, 'id' => $poId]);
+        } catch (\Throwable $e) { /* best-effort */ }
         // Ensure messages has attachment columns
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
@@ -1238,8 +1241,17 @@ class ProcurementController extends BaseController
         $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
         if ($id <= 0) { $_SESSION['flash_error'] = 'Invalid PO id'; header('Location: /procurement/pos'); return; }
         $pdo = \App\Database\Connection::resolve();
+        // Detect legacy primary key column name
+        $idCol = 'id';
+        try {
+            $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn();
+            if (!$hasId) {
+                $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn();
+                if ($hasPoId) { $idCol = 'po_id'; }
+            }
+        } catch (\Throwable $e) { /* keep default */ }
         // Load PO
-        $st = $pdo->prepare('SELECT id, pr_number, po_number, supplier_id, status, pdf_path FROM purchase_orders WHERE id = :id');
+        $st = $pdo->prepare('SELECT ' . $idCol . ' AS id, pr_number, po_number, supplier_id, status, pdf_path FROM purchase_orders WHERE ' . $idCol . ' = :id');
         $st->execute(['id' => $id]);
         $po = $st->fetch();
         if (!$po) { $_SESSION['flash_error'] = 'PO not found'; header('Location: /procurement/pos'); return; }
@@ -1253,7 +1265,7 @@ class ProcurementController extends BaseController
         if ($pdf === '' || !is_file($pdf)) {
             // Try to regenerate quickly and proceed
             try {
-                $stH = $pdo->prepare('SELECT * FROM purchase_orders WHERE id = :id');
+                $stH = $pdo->prepare('SELECT * FROM purchase_orders WHERE ' . $idCol . ' = :id');
                 $stH->execute(['id' => (int)$po['id']]);
                 $row = $stH->fetch();
                 if ($row) {
@@ -1281,7 +1293,7 @@ class ProcurementController extends BaseController
                         'approved_by' => (string)($row['admin_name'] ?? ''),
                         'items' => $items,
                     ], $pdf);
-                    $pdo->prepare('UPDATE purchase_orders SET pdf_path=:p, updated_at=NOW() WHERE id=:id')->execute(['p' => $pdf, 'id' => (int)$po['id']]);
+                    $pdo->prepare('UPDATE purchase_orders SET pdf_path=:p, updated_at=NOW() WHERE ' . $idCol . ' = :id')->execute(['p' => $pdf, 'id' => (int)$po['id']]);
                 }
             } catch (\Throwable $e) {}
         }
@@ -1300,7 +1312,7 @@ class ProcurementController extends BaseController
             'ap' => $pdf,
         ]);
         // Update PO status to indicate it was sent to supplier
-        try { $pdo->prepare("UPDATE purchase_orders SET status='sent_to_supplier', updated_at=NOW() WHERE id=:id")->execute(['id' => (int)$po['id']]); } catch (\Throwable $e) {}
+        try { $pdo->prepare("UPDATE purchase_orders SET status='sent_to_supplier', updated_at=NOW() WHERE " . $idCol . " = :id")->execute(['id' => (int)$po['id']]); } catch (\Throwable $e) {}
         $_SESSION['flash_success'] = 'PO sent to supplier.';
         header('Location: /procurement/po/view?id=' . (int)$po['id']);
     }
