@@ -37,5 +37,6 @@ Route::middleware(['auth', 'isManager'])->group(function () {
 Route::get('/procurement/po/download', [ProcurementController::class, 'poDownload'])->middleware('auth');
 // Send approved PO to Supplier
 Route::post('/procurement/po/send', [ProcurementController::class, 'poSendToSupplier'])->middleware('auth');
-// Purchase Order server preview (official layout) from Create form
+// Purchase Order server preview (official layout) from Create form (POST) and also allow GET for saved POs testing
 Route::post('/procurement/po/preview', [ProcurementController::class, 'poPreview'])->middleware('auth');
+Route::get('/procurement/po/preview', [ProcurementController::class, 'poPreview'])->middleware('auth');
