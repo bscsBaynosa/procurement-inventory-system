@@ -77,6 +77,21 @@ class ProcurementController extends BaseController
         } catch (\Throwable $e) {}
         // Optional index to speed up lookups by PR number
         try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_pr_number ON purchase_orders (pr_number)"); } catch (\Throwable $e) {}
+        // Ensure supplier_id column exists (legacy schemas may use 'supplier') and backfill
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS supplier_id BIGINT REFERENCES users(user_id) ON DELETE RESTRICT"); } catch (\Throwable $e) {}
+        try {
+            $hasSupplier = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='supplier'")->fetchColumn();
+            $hasSupplierId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='supplier_id'")->fetchColumn();
+            if ($hasSupplier && $hasSupplierId) {
+                // Backfill only rows where supplier_id is null
+                $pdo->exec("UPDATE purchase_orders SET supplier_id = supplier WHERE supplier_id IS NULL");
+            }
+        } catch (\Throwable $e) {}
+        try {
+            // If legacy 'supplier' column exists, keep it but prefer supplier_id going forward.
+            // (Optional) create index for faster joins
+            $pdo->exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier_id ON purchase_orders (supplier_id)");
+        } catch (\Throwable $e) {}
         // Determine the correct reference column for purchase_orders (legacy installs may use po_id instead of id)
         $poRefCol = 'id';
         try {
