@@ -57,6 +57,40 @@ class AuthService
 		return true;
 	}
 
+	/**
+	 * Authenticate a user by ID (for OTP or SSO flows) and start a session.
+	 */
+	public function loginById(int $userId, string $ip = '', string $userAgent = '', string $reason = 'login'): bool
+	{
+		$stmt = $this->pdo->prepare('SELECT user_id, username, role, branch_id, is_active FROM users WHERE user_id = :id LIMIT 1');
+		$stmt->execute(['id' => $userId]);
+		$user = $stmt->fetch();
+		if (!$user) {
+			$this->lastError = 'User not found.';
+			return false;
+		}
+		if (!$user['is_active']) {
+			$this->lastError = 'Account is disabled.';
+			return false;
+		}
+
+		$this->pdo->prepare('UPDATE users SET failed_login_attempts = 0, last_login_at = NOW(), last_login_ip = :ip WHERE user_id = :id')
+			->execute(['ip' => $ip ?: null, 'id' => $user['user_id']]);
+
+		$action = $reason !== '' ? $reason : 'login';
+		$this->recordAuthActivity((int)$user['user_id'], $action, $ip, $userAgent);
+
+		if (session_status() !== PHP_SESSION_ACTIVE) {
+			@session_start();
+		}
+		$_SESSION['user_id'] = (int)$user['user_id'];
+		$_SESSION['username'] = (string)$user['username'];
+		$_SESSION['role'] = (string)$user['role'];
+		$_SESSION['branch_id'] = $user['branch_id'] !== null ? (int)$user['branch_id'] : null;
+
+		return true;
+	}
+
 	/** Provide a friendly failure reason from the last attempt(), if any. */
 	public function lastError(): ?string
 	{

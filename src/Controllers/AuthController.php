@@ -9,6 +9,10 @@ use App\Database\Connection;
 class AuthController extends BaseController
 {
     private ?AuthService $auth = null;
+    private int $otpExpirySeconds = 300;
+    private int $otpResendCooldown = 45;
+    private int $otpMaxAttempts = 5;
+    private int $otpMaxResends = 5;
 
     public function __construct(?AuthService $auth = null)
     {
@@ -27,17 +31,26 @@ class AuthController extends BaseController
         return $this->auth;
     }
 
-    public function showLanding(?string $error = null, ?string $signupError = null, ?string $signupSuccess = null, ?string $mode = null): void
-    {
+    public function showLanding(
+        ?string $error = null,
+        ?string $signupError = null,
+        ?string $signupSuccess = null,
+        ?string $mode = null,
+        array $extras = []
+    ): void {
         // Provide categories for supplier sign-up select
         $categories = require __DIR__ . '/../config/categories.php';
-        $this->render('auth/landing.php', [
+        $payload = [
             'error' => $error,
             'signup_error' => $signupError,
             'signup_success' => $signupSuccess,
             'mode' => $mode,
             'categories' => $categories,
-        ]);
+        ];
+        if (!empty($extras)) {
+            $payload = array_merge($payload, $extras);
+        }
+        $this->render('auth/landing.php', $payload);
     }
 
     public function showLoginForm(?string $error = null): void
@@ -108,108 +121,386 @@ class AuthController extends BaseController
     /** Forgot password (GET): show request form on landing */
     public function showForgot(?string $msg = null, ?string $err = null): void
     {
-        $this->showLanding($err, null, $msg, 'forgot');
+        $extras = [
+            'forgot_success' => $msg,
+            'forgot_error' => $err,
+        ];
+        if (!empty($_SESSION['login_otp'])) {
+            $extras['identifier'] = $_SESSION['login_otp']['identifier'] ?? '';
+            $extras['otp'] = $this->otpViewContext($_SESSION['login_otp']);
+        }
+        $this->showLanding(null, null, null, 'forgot', $extras);
     }
 
-    /** Ensure password_resets support table exists */
-    private function ensurePasswordResetsTable(): void
-    {
-        $pdo = Connection::resolve();
-        $pdo->exec('CREATE TABLE IF NOT EXISTS password_resets (
-            id BIGSERIAL PRIMARY KEY,
-            user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
-            token_hash CHAR(64) NOT NULL,
-            expires_at TIMESTAMPTZ NOT NULL,
-            used_at TIMESTAMPTZ NULL,
-            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )');
-        // Helpful index
-        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token_hash)');
-    }
-
-    /** Forgot password (POST): send reset link via email */
-    public function sendReset(): void
+    /**
+     * Forgot password (POST): issue OTP via email and display verification modal.
+     */
+    public function requestOtp(): void
     {
         $identifier = trim((string)($_POST['identifier'] ?? ''));
-        if ($identifier === '') { $this->showForgot(null, 'Please enter your username or email.'); return; }
+        if ($identifier === '') {
+            $this->showLanding(null, null, null, 'forgot', [
+                'forgot_error' => 'Please enter your username or email.',
+            ]);
+            return;
+        }
+
         try {
-            $this->ensurePasswordResetsTable();
             $pdo = Connection::resolve();
-            $stmt = $pdo->prepare('SELECT user_id, username, email FROM users WHERE LOWER(username)=LOWER(:id) OR LOWER(email)=LOWER(:id) LIMIT 1');
+            $stmt = $pdo->prepare('SELECT user_id, username, email, is_active FROM users WHERE LOWER(username)=LOWER(:id) OR LOWER(email)=LOWER(:id) LIMIT 1');
             $stmt->execute(['id' => $identifier]);
             $user = $stmt->fetch(\PDO::FETCH_ASSOC);
-            // Always behave as if success to prevent user enumeration; only send if we find the user
-            if ($user && !empty($user['email'])) {
-                $token = bin2hex(random_bytes(32));
-                $hash = hash('sha256', $token);
-                $exp  = date('Y-m-d H:i:sP', time() + 3600); // 1 hour
-                $ins = $pdo->prepare('INSERT INTO password_resets (user_id, token_hash, expires_at) VALUES (:u,:h,:e)');
-                $ins->execute(['u' => (int)$user['user_id'], 'h' => $hash, 'e' => $exp]);
 
-                // Compose email
-                $forwarded = $_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '';
-                $scheme = $forwarded !== '' ? explode(',', $forwarded)[0] : ((!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http');
-                $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
-                $link = $scheme . '://' . $host . '/reset-password?token=' . $token;
-                $body = "Hello,\n\nWe received a request to reset your password.\n" .
-                        "If you made this request, click the link below to set a new password.\n\n" .
-                        $link . "\n\nThis link will expire in 1 hour. If you didn't request this, you can ignore this email.";
-                (new MailService())->send((string)$user['email'], 'Reset your password', $body);
+            if (!$user) {
+                $this->showLanding(null, null, null, 'forgot', [
+                    'forgot_error' => 'We could not find an account with that username or email.',
+                    'identifier' => $identifier,
+                ]);
+                return;
             }
-            $this->showForgot('If the account exists, we sent a reset link to its email address. Please check your inbox.', null);
+            if (empty($user['email'])) {
+                $this->showLanding(null, null, null, 'forgot', [
+                    'forgot_error' => 'This account does not have an email address on file. Please contact the administrator.',
+                    'identifier' => $identifier,
+                ]);
+                return;
+            }
+            if (empty($user['is_active'])) {
+                $this->showLanding(null, null, null, 'forgot', [
+                    'forgot_error' => 'This account is disabled. Please contact the administrator.',
+                    'identifier' => $identifier,
+                ]);
+                return;
+            }
+
+            $context = $this->issueOtp($user, $identifier, false);
+            $this->showLanding(null, null, null, 'forgot', [
+                'identifier' => $identifier,
+                'forgot_success' => $context['sent'] ? 'We sent a one-time code to your email.' : null,
+                'otp' => $context,
+                'otp_error' => $context['sent'] ? null : 'We could not send the email. Please contact the administrator.',
+            ]);
         } catch (\Throwable $e) {
-            $this->showForgot(null, 'Could not process request at this time.');
+            error_log('[AuthController@requestOtp] ' . $e->getMessage());
+            $this->showLanding(null, null, null, 'forgot', [
+                'forgot_error' => 'Could not process your request. Please try again.',
+                'identifier' => $identifier,
+            ]);
         }
     }
 
-    /** Reset form (GET) */
-    public function showResetForm(): void
+    /**
+     * Verify the OTP and sign the user in.
+     */
+    public function verifyOtp(): void
     {
-        $token = isset($_GET['token']) ? trim((string)$_GET['token']) : '';
-        $this->render('auth/reset.php', ['token' => $token, 'error' => null]);
-    }
+        $codeRaw = trim((string)($_POST['otp_code'] ?? ''));
+        $code = preg_replace('/\D+/', '', $codeRaw);
+        if ($code === '') {
+            $this->showLanding(null, null, null, 'forgot', [
+                'otp_error' => 'Please enter the code that was sent to your email.',
+                'otp' => isset($_SESSION['login_otp']) ? $this->otpViewContext($_SESSION['login_otp']) : null,
+                'identifier' => $_SESSION['login_otp']['identifier'] ?? null,
+            ]);
+            return;
+        }
 
-    /** Reset handler (POST) */
-    public function handleReset(): void
-    {
-        $token = trim((string)($_POST['token'] ?? ''));
-        $password = (string)($_POST['password'] ?? '');
-        $confirm = (string)($_POST['confirm'] ?? '');
-        if ($token === '' || $password === '' || $confirm === '') {
-            $this->render('auth/reset.php', ['token' => $token, 'error' => 'All fields are required.']); return;
+        $session = $_SESSION['login_otp'] ?? null;
+        if (!$session || empty($session['otp_id']) || empty($session['user_id'])) {
+            $this->showLanding(null, null, null, 'forgot', [
+                'forgot_error' => 'Your verification session has expired. Please request a new code.',
+            ]);
+            return;
         }
-        if ($password !== $confirm) {
-            $this->render('auth/reset.php', ['token' => $token, 'error' => 'Passwords do not match.']); return;
-        }
-        if (strlen($password) < 6) {
-            $this->render('auth/reset.php', ['token' => $token, 'error' => 'Password must be at least 6 characters.']); return;
-        }
+
         try {
-            $this->ensurePasswordResetsTable();
             $pdo = Connection::resolve();
-            $hash = hash('sha256', $token);
-            $sel = $pdo->prepare('SELECT id, user_id, expires_at, used_at FROM password_resets WHERE token_hash=:h ORDER BY id DESC LIMIT 1');
-            $sel->execute(['h' => $hash]);
-            $row = $sel->fetch(\PDO::FETCH_ASSOC);
-            if (!$row) { $this->render('auth/reset.php', ['token' => $token, 'error' => 'Invalid or expired link.']); return; }
-            if (!empty($row['used_at'])) { $this->render('auth/reset.php', ['token' => $token, 'error' => 'This link has already been used.']); return; }
-            if (strtotime((string)$row['expires_at']) < time()) { $this->render('auth/reset.php', ['token' => $token, 'error' => 'This link has expired.']); return; }
+            $this->ensureOtpTable();
 
-            // Update user password
-            $newHash = password_hash($password, PASSWORD_BCRYPT);
-            $upd = $pdo->prepare('UPDATE users SET password_hash=:p WHERE user_id=:u');
-            $upd->execute(['p' => $newHash, 'u' => (int)$row['user_id']]);
+            $stmt = $pdo->prepare('SELECT id, user_id, code_hash, expires_at, attempts, max_attempts, consumed_at FROM login_otps WHERE id = :id AND user_id = :uid LIMIT 1');
+            $stmt->execute(['id' => (int)$session['otp_id'], 'uid' => (int)$session['user_id']]);
+            $otpRow = $stmt->fetch(\PDO::FETCH_ASSOC);
 
-            // Mark token as used
-            $mark = $pdo->prepare('UPDATE password_resets SET used_at=NOW() WHERE id=:id');
-            $mark->execute(['id' => (int)$row['id']]);
+            if (!$otpRow) {
+                unset($_SESSION['login_otp']);
+                $this->showLanding(null, null, null, 'forgot', [
+                    'forgot_error' => 'This code is no longer valid. Please request a new one.',
+                ]);
+                return;
+            }
 
-            // Show success on landing
-            $this->showLanding(null, null, 'Password updated. You can now sign in with your new password.', 'signin');
+            $expiresTs = strtotime((string)$otpRow['expires_at']);
+            if ($expiresTs !== false) {
+                $_SESSION['login_otp']['expires_at_ts'] = $expiresTs;
+                $_SESSION['login_otp']['expires_at'] = date('Y-m-d H:i:sP', $expiresTs);
+            }
+
+            if (!empty($otpRow['consumed_at'])) {
+                unset($_SESSION['login_otp']);
+                $this->showLanding(null, null, null, 'forgot', [
+                    'forgot_error' => 'This code has already been used. Please request a new one.',
+                ]);
+                return;
+            }
+
+            if ($expiresTs !== false && $expiresTs < time()) {
+                $pdo->prepare('UPDATE login_otps SET consumed_at = NOW() WHERE id = :id')
+                    ->execute(['id' => (int)$otpRow['id']]);
+                unset($_SESSION['login_otp']);
+                $this->showLanding(null, null, null, 'forgot', [
+                    'forgot_error' => 'Your code has expired. Please request a new one.',
+                ]);
+                return;
+            }
+
+            $attempts = (int)$otpRow['attempts'];
+            $maxAttempts = (int)$otpRow['max_attempts'] ?: $this->otpMaxAttempts;
+            if ($attempts >= $maxAttempts) {
+                unset($_SESSION['login_otp']);
+                $this->showLanding(null, null, null, 'forgot', [
+                    'forgot_error' => 'Too many incorrect attempts. Please request a new code.',
+                ]);
+                return;
+            }
+
+            $hash = hash('sha256', $code);
+            if (!hash_equals((string)$otpRow['code_hash'], $hash)) {
+                $pdo->prepare('UPDATE login_otps SET attempts = attempts + 1 WHERE id = :id')
+                    ->execute(['id' => (int)$otpRow['id']]);
+                $remaining = max(0, $maxAttempts - ($attempts + 1));
+                $context = $this->otpViewContext($_SESSION['login_otp'], [
+                    'message' => $remaining > 0
+                        ? 'Incorrect code. You have ' . $remaining . ' attempt' . ($remaining === 1 ? '' : 's') . ' left.'
+                        : 'Incorrect code. This code is now locked; request a new one.',
+                ]);
+                if ($remaining <= 0) {
+                    unset($_SESSION['login_otp']);
+                    $context['resend_disabled'] = true;
+                }
+                $this->showLanding(null, null, null, 'forgot', [
+                    'otp_error' => $remaining > 0
+                        ? 'Incorrect code. You have ' . $remaining . ' attempt' . ($remaining === 1 ? '' : 's') . ' left.'
+                        : 'Incorrect code. Please request a new code.',
+                    'otp' => $context,
+                    'identifier' => $session['identifier'] ?? null,
+                ]);
+                return;
+            }
+
+            $pdo->prepare('UPDATE login_otps SET consumed_at = NOW() WHERE id = :id')
+                ->execute(['id' => (int)$otpRow['id']]);
+
+            $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+            $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
+            if ($this->auth()->loginById((int)$otpRow['user_id'], $ip, $ua, 'login_otp')) {
+                unset($_SESSION['login_otp']);
+                header('Location: /dashboard');
+                return;
+            }
+
+            unset($_SESSION['login_otp']);
+            $this->showLanding('Could not sign you in with the provided code. Please try again.', null, null, 'signin');
         } catch (\Throwable $e) {
-            $this->render('auth/reset.php', ['token' => $token, 'error' => 'Could not reset password.']);
+            error_log('[AuthController@verifyOtp] ' . $e->getMessage());
+            $context = $session ? $this->otpViewContext($session) : null;
+            $this->showLanding(null, null, null, 'forgot', [
+                'otp_error' => 'Something went wrong while verifying your code. Please try again.',
+                'otp' => $context,
+                'identifier' => $session['identifier'] ?? null,
+            ]);
         }
     }
+
+    /**
+     * Resend the OTP with cooldowns and attempt limits.
+     */
+    public function resendOtp(): void
+    {
+        $session = $_SESSION['login_otp'] ?? null;
+        if (!$session || empty($session['user_id'])) {
+            $this->showLanding(null, null, null, 'forgot', [
+                'forgot_error' => 'Your verification session has expired. Please enter your username or email again.',
+            ]);
+            return;
+        }
+
+        $now = time();
+        $identifier = (string)($session['identifier'] ?? '');
+
+        if (!empty($session['last_sent_at'])) {
+            $elapsed = $now - (int)$session['last_sent_at'];
+            if ($elapsed < $this->otpResendCooldown) {
+                $wait = $this->otpResendCooldown - $elapsed;
+                $context = $this->otpViewContext($session, [
+                    'resend_wait' => $wait,
+                    'resend_disabled' => true,
+                    'message' => 'Please wait before requesting a new code.',
+                ]);
+                $this->showLanding(null, null, null, 'forgot', [
+                    'otp_error' => 'Please wait ' . $wait . ' second' . ($wait === 1 ? '' : 's') . ' before resending.',
+                    'otp' => $context,
+                    'identifier' => $identifier,
+                ]);
+                return;
+            }
+        }
+
+        if (!empty($session['resend_count']) && (int)$session['resend_count'] >= $this->otpMaxResends) {
+            $context = $this->otpViewContext($session, [
+                'resend_disabled' => true,
+                'resend_limit_reached' => true,
+                'message' => 'You have reached the resend limit. Try again later.',
+            ]);
+            $this->showLanding(null, null, null, 'forgot', [
+                'otp_error' => 'You have reached the maximum number of resend attempts. Please try again later.',
+                'otp' => $context,
+                'identifier' => $identifier,
+            ]);
+            return;
+        }
+
+        try {
+            $pdo = Connection::resolve();
+            $stmt = $pdo->prepare('SELECT user_id, username, email, is_active FROM users WHERE user_id = :id LIMIT 1');
+            $stmt->execute(['id' => (int)$session['user_id']]);
+            $user = $stmt->fetch(\PDO::FETCH_ASSOC);
+            if (!$user || empty($user['is_active'])) {
+                unset($_SESSION['login_otp']);
+                $this->showLanding('This account is not available. Please contact the administrator.', null, null, 'signin');
+                return;
+            }
+
+            $context = $this->issueOtp($user, $identifier, true);
+            $this->showLanding(null, null, null, 'forgot', [
+                'otp' => $context,
+                'identifier' => $identifier,
+                'forgot_success' => $context['sent'] ? 'We sent you a new code.' : null,
+                'otp_error' => $context['sent'] ? null : 'We could not send the email. Please contact the administrator.',
+            ]);
+        } catch (\Throwable $e) {
+            error_log('[AuthController@resendOtp] ' . $e->getMessage());
+            $context = $this->otpViewContext($session, [
+                'message' => 'Could not resend the code. Please try again.',
+            ]);
+            $this->showLanding(null, null, null, 'forgot', [
+                'otp_error' => 'Could not resend the code. Please try again.',
+                'otp' => $context,
+                'identifier' => $identifier,
+            ]);
+        }
+    }
+
+    private function ensureOtpTable(): void
+    {
+        $pdo = Connection::resolve();
+        $pdo->exec('CREATE TABLE IF NOT EXISTS login_otps (
+            id BIGSERIAL PRIMARY KEY,
+            user_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE CASCADE,
+            code_hash CHAR(64) NOT NULL,
+            sent_to VARCHAR(255) NOT NULL,
+            expires_at TIMESTAMPTZ NOT NULL,
+            attempts SMALLINT NOT NULL DEFAULT 0,
+            max_attempts SMALLINT NOT NULL DEFAULT 5,
+            consumed_at TIMESTAMPTZ NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )');
+        $pdo->exec('CREATE INDEX IF NOT EXISTS idx_login_otps_user ON login_otps(user_id)');
+    }
+
+    private function otpViewContext(array $session, array $overrides = []): array
+    {
+        $now = time();
+        $base = [
+            'show' => true,
+            'email' => (string)($session['email'] ?? ''),
+            'identifier' => (string)($session['identifier'] ?? ''),
+            'expires_at' => $session['expires_at'] ?? null,
+            'expires_at_ts' => $session['expires_at_ts'] ?? null,
+            'resend_wait' => 0,
+            'resend_disabled' => false,
+        ];
+        $base['sent'] = array_key_exists('sent', $overrides) ? (bool)$overrides['sent'] : true;
+        if (!empty($session['last_sent_at'])) {
+            $remaining = $this->otpResendCooldown - ($now - (int)$session['last_sent_at']);
+            if ($remaining > 0) {
+                $base['resend_wait'] = $remaining;
+                $base['resend_disabled'] = true;
+            }
+        }
+        if (!empty($session['resend_count']) && (int)$session['resend_count'] >= $this->otpMaxResends) {
+            $base['resend_disabled'] = true;
+            $base['resend_limit_reached'] = true;
+        }
+        if (!empty($session['expires_at_ts'])) {
+            $base['expires_in'] = max(0, (int)$session['expires_at_ts'] - $now);
+            $base['expires_at'] = date('Y-m-d H:i:sP', (int)$session['expires_at_ts']);
+        } else {
+            $base['expires_in'] = $this->otpExpirySeconds;
+        }
+        return array_merge($base, $overrides);
+    }
+
+    private function issueOtp(array $user, string $identifier, bool $resend): array
+    {
+        $email = trim((string)($user['email'] ?? ''));
+        if ($email === '') {
+            throw new \RuntimeException('No email is associated with this user.');
+        }
+
+        $this->ensureOtpTable();
+        $pdo = Connection::resolve();
+
+        $pdo->prepare('UPDATE login_otps SET consumed_at = NOW() WHERE user_id = :u AND consumed_at IS NULL')
+            ->execute(['u' => (int)$user['user_id']]);
+
+        $code = (string)random_int(100000, 999999);
+        $hash = hash('sha256', $code);
+        $expiresTs = time() + $this->otpExpirySeconds;
+        $expiresIso = date('Y-m-d H:i:sP', $expiresTs);
+
+        $insert = $pdo->prepare('INSERT INTO login_otps (user_id, code_hash, sent_to, expires_at, max_attempts) VALUES (:u, :h, :to, :exp, :max)');
+        $insert->execute([
+            'u' => (int)$user['user_id'],
+            'h' => $hash,
+            'to' => $email,
+            'exp' => $expiresIso,
+            'max' => $this->otpMaxAttempts,
+        ]);
+        $otpId = (int)$pdo->lastInsertId();
+
+        $minutes = max(1, (int)ceil($this->otpExpirySeconds / 60));
+        $body = "Hello {$user['username']},\n\nUse this one-time code to sign in:\n\n{$code}\n\nThe code expires in {$minutes} minute" . ($minutes === 1 ? '' : 's') . ".\nIf you did not request this, you can ignore this email.\n";
+        $mail = new MailService();
+        $sent = $mail->send($email, 'Your one-time sign-in code', $body);
+
+        $resendCount = $resend ? (int)(($_SESSION['login_otp']['resend_count'] ?? 0) + 1) : 0;
+
+        $_SESSION['login_otp'] = [
+            'otp_id' => $otpId,
+            'user_id' => (int)$user['user_id'],
+            'username' => (string)$user['username'],
+            'email' => $email,
+            'identifier' => $identifier,
+            'expires_at_ts' => $expiresTs,
+            'expires_at' => $expiresIso,
+            'last_sent_at' => time(),
+            'resend_count' => $resendCount,
+        ];
+        if (!$sent) {
+            $_SESSION['login_otp']['last_sent_at'] = time() - $this->otpResendCooldown;
+        }
+
+        $context = $this->otpViewContext($_SESSION['login_otp'], [
+            'sent' => $sent,
+            'message' => $sent
+                ? 'We sent a one-time code to your email.'
+                : 'We could not send the email. Please contact the administrator.',
+        ]);
+        $context['otp_id'] = $otpId;
+
+        return $context;
+    }
+
 
     /** Supplier Signup (GET) */
     public function showSupplierSignup(?string $error = null, ?string $success = null): void
