@@ -780,29 +780,48 @@ class ProcurementController extends BaseController
                 if ($hasPoId) { $poPkCol = 'po_id'; }
             }
         } catch (\Throwable $e) { /* keep default 'id' */ }
+        // Determine if legacy request_id column exists and include it during INSERT to satisfy NOT NULL constraints
+        $hasRequestIdCol = false;
+        try {
+            $hasRequestIdCol = (bool)$pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='request_id'")->fetchColumn();
+        } catch (\Throwable $e) { $hasRequestIdCol = false; }
+        // Build column list and placeholders dynamically
+        $cols = [
+            'pr_number' => ':pr',
+            'pr_id' => ':prid',
+        ];
+        if ($hasRequestIdCol) { $cols['request_id'] = ':reqid'; }
+        $cols += [
+            'po_number' => ':po',
+            'supplier_id' => ':sid',
+            'vendor_name' => ':vn',
+            'vendor_address' => ':va',
+            'vendor_tin' => ':vt',
+            'center' => ':ce',
+            'reference' => ':ref',
+            'terms' => ':te',
+            'notes' => ':no',
+            'deliver_to' => ':dt',
+            'look_for' => ':lf',
+            'total' => ':tot',
+            'discount' => ':disc',
+            'created_by' => ':uid',
+            'prepared_by' => ':prep',
+            'finance_officer' => ':fo',
+            'admin_name' => ':an',
+            'reviewed_by' => ':rev',
+            'approved_by' => ':app',
+        ];
+        $colNames = implode(', ', array_keys($cols));
+        $placeholders = implode(', ', array_values($cols));
         // Use RETURNING <pk> depending on detected schema
-        $ins = $pdo->prepare('INSERT INTO purchase_orders (
-                pr_number, pr_id, po_number, supplier_id,
-                vendor_name, vendor_address, vendor_tin,
-                center, reference, terms, notes,
-                deliver_to, look_for,
-                total, discount,
-                created_by, prepared_by, finance_officer, admin_name,
-                reviewed_by, approved_by
-            ) VALUES (
-                :pr, :prid, :po, :sid,
-                :vn, :va, :vt,
-                :ce, :ref, :te, :no,
-                :dt, :lf,
-                :tot, :disc,
-                :uid, :prep, :fo, :an,
-                :rev, :app
-            ) RETURNING ' . $poPkCol);
+        $ins = $pdo->prepare('INSERT INTO purchase_orders (' . $colNames . ') VALUES (' . $placeholders . ') RETURNING ' . $poPkCol);
         // Guard against duplicate PO numbers race by retrying once if unique violation occurs
         try {
-            $ins->execute([
+            $paramsIns = [
                 'pr' => $pr,
                 'prid' => $prId ?: null,
+                'reqid' => $prId ?: null,
                 'po' => $poNumber,
                 'sid' => $supplierId,
                 'vn' => $vendorName ?: null,
@@ -822,34 +841,17 @@ class ProcurementController extends BaseController
                 'an' => $adminName,
                 'rev' => $financeOfficer,
                 'app' => $adminName,
-            ]);
+            ];
+            if (!$hasRequestIdCol) { unset($paramsIns['reqid']); }
+            $ins->execute($paramsIns);
         } catch (\Throwable $e) {
             // If duplicate key on po_number, generate a fresh one and retry once
             if (stripos((string)$e->getMessage(), 'duplicate') !== false) {
                 try { $poNumber = $this->requests()->generateNewPoNumber(); } catch (\Throwable $ignored) {}
-                $ins->execute([
-                    'pr' => $pr,
-                    'prid' => $prId ?: null,
-                    'po' => $poNumber,
-                    'sid' => $supplierId,
-                    'vn' => $vendorName ?: null,
-                    'va' => $vendorAddress ?: null,
-                    'vt' => $vendorTin ?: null,
-                    'ce' => $center ?: null,
-                    'ref' => $reference ?: null,
-                    'te' => $terms ?: null,
-                    'no' => $notes ?: null,
-                    'dt' => $deliverTo ?: null,
-                    'lf' => $lookFor ?: null,
-                    'tot' => max(0.0, $total - $discount),
-                    'disc' => $discount,
-                    'uid' => (int)($_SESSION['user_id'] ?? 0),
-                    'prep' => (string)($_SESSION['full_name'] ?? ''),
-                    'fo' => $financeOfficer,
-                    'an' => $adminName,
-                    'rev' => $financeOfficer,
-                    'app' => $adminName,
-                ]);
+                $paramsIns['po'] = $poNumber;
+                $paramsIns['tot'] = max(0.0, $total - $discount);
+                if (!$hasRequestIdCol) { unset($paramsIns['reqid']); }
+                $ins->execute($paramsIns);
             } else { throw $e; }
         }
         $poId = (int)$ins->fetchColumn();
