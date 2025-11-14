@@ -1607,33 +1607,81 @@ class AdminController extends BaseController
         }
     }
 
-    /** Securely preview (inline) a message attachment (PDF) to the current user. */
+    /** Securely preview (inline) a message attachment for the current user. Supports messages.attachment_* or messages_attachments (via optional aid). */
     public function previewMessageAttachment(): void
     {
         if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
         $me = (int)($_SESSION['user_id'] ?? 0);
-        $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+        $id = isset($_GET['id']) ? (int)$_GET['id'] : 0; // message id
+        $aid = isset($_GET['aid']) ? (int)$_GET['aid'] : 0; // specific attachment id (optional)
         if ($me <= 0 || $id <= 0) { http_response_code(403); echo 'Forbidden'; return; }
         try {
-            try {
-                $st = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id AND (recipient_id = :me OR sender_id = :me)');
-                $st->execute(['id' => $id, 'me' => $me]);
-            } catch (\PDOException $e) {
-                if ($e->getCode() === '42703') {
-                    try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $ignored) {}
-                    try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $ignored) {}
+            $name = 'attachment';
+            $path = '';
+
+            // If a specific attachment id is provided, use messages_attachments after verifying access
+            if ($aid > 0) {
+                try {
+                    $this->pdo->exec('CREATE TABLE IF NOT EXISTS messages_attachments (
+                        id BIGSERIAL PRIMARY KEY,
+                        message_id BIGINT REFERENCES messages(id) ON DELETE CASCADE,
+                        file_name VARCHAR(255) NOT NULL,
+                        file_path TEXT NOT NULL,
+                        uploaded_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+                    )');
+                } catch (\Throwable $ignored) {}
+                $stA = $this->pdo->prepare('SELECT a.file_name, a.file_path FROM messages_attachments a JOIN messages m ON m.id = a.message_id WHERE a.id = :aid AND a.message_id = :mid AND (m.recipient_id = :me OR m.sender_id = :me)');
+                $stA->execute(['aid' => $aid, 'mid' => $id, 'me' => $me]);
+                $rowA = $stA->fetch();
+                if ($rowA) {
+                    $name = (string)($rowA['file_name'] ?? $name);
+                    $path = (string)($rowA['file_path'] ?? '');
+                }
+            }
+
+            // If no explicit aid or file not found, prefer attachment on messages table (legacy)
+            if ($path === '' || !is_file($path)) {
+                try {
                     $st = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id AND (recipient_id = :me OR sender_id = :me)');
                     $st->execute(['id' => $id, 'me' => $me]);
-                } else { throw $e; }
+                } catch (\PDOException $e) {
+                    if ($e->getCode() === '42703') {
+                        try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $ignored) {}
+                        try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $ignored) {}
+                        $st = $this->pdo->prepare('SELECT attachment_name, attachment_path FROM messages WHERE id = :id AND (recipient_id = :me OR sender_id = :me)');
+                        $st->execute(['id' => $id, 'me' => $me]);
+                    } else { throw $e; }
+                }
+                $row = $st->fetch();
+                if ($row) {
+                    $name = (string)($row['attachment_name'] ?? $name);
+                    $path = (string)($row['attachment_path'] ?? '');
+                }
             }
-            $row = $st->fetch();
-            $name = (string)($row['attachment_name'] ?? 'attachment.pdf');
-            $path = (string)($row['attachment_path'] ?? '');
+
+            // If still missing, fall back to most recent record in messages_attachments for this message
             if ($path === '' || !is_file($path)) {
-                http_response_code(404); echo 'File not found'; return;
+                try {
+                    $st2 = $this->pdo->prepare('SELECT a.file_name, a.file_path FROM messages_attachments a JOIN messages m ON m.id = a.message_id WHERE a.message_id = :id AND (m.recipient_id = :me OR m.sender_id = :me) ORDER BY a.uploaded_at DESC LIMIT 1');
+                    $st2->execute(['id' => $id, 'me' => $me]);
+                    $r2 = $st2->fetch();
+                    if ($r2) {
+                        $name = (string)($r2['file_name'] ?? $name);
+                        $path = (string)($r2['file_path'] ?? '');
+                    }
+                } catch (\Throwable $ignored) {}
             }
+
+            if ($path === '' || !is_file($path)) { http_response_code(404); echo 'File not found'; return; }
+
+            // Best-effort content type detection (inline). Prefer PDF; allow images to preview inline too.
+            $ctype = 'application/octet-stream';
+            $lname = strtolower($name);
+            if (preg_match('/\.pdf$/i', $lname)) { $ctype = 'application/pdf'; }
+            elseif (preg_match('/\.(png|jpg|jpeg|gif|webp)$/i', $lname)) { $map = ['png'=>'image/png','jpg'=>'image/jpeg','jpeg'=>'image/jpeg','gif'=>'image/gif','webp'=>'image/webp']; $ext = pathinfo($lname, PATHINFO_EXTENSION); $ctype = $map[$ext] ?? 'application/octet-stream'; }
+
             $size = @filesize($path) ?: null;
-            header('Content-Type: application/pdf');
+            header('Content-Type: ' . $ctype);
             header('Content-Disposition: inline; filename="' . rawurlencode($name) . '"');
             if ($size !== null) { header('Content-Length: ' . (string)$size); }
             @readfile($path);
