@@ -46,6 +46,16 @@
                 <?php endif; ?>
             </span>
         </div>
+        <?php if (isset($_GET['archived']) && (string)$_GET['archived'] === '1'): ?>
+            <div style="margin:8px 0 14px;padding:10px 14px;border:1px solid #16a34a;border-radius:10px;background:color-mix(in oklab,#16a34a 12%, transparent);font-size:13px;">
+                PO archived successfully. You can view it under <a href="/procurement/pos?show=archived" style="color:#16a34a;text-decoration:none;font-weight:600;">Archives</a>.
+            </div>
+        <?php endif; ?>
+        <?php if (isset($_GET['restored']) && (string)$_GET['restored'] === '1'): ?>
+            <div style="margin:8px 0 14px;padding:10px 14px;border:1px solid #2563eb;border-radius:10px;background:color-mix(in oklab,#2563eb 14%, transparent);font-size:13px;">
+                PO restored successfully. It now appears back in the Active list.
+            </div>
+        <?php endif; ?>
         <form class="filters" method="GET" action="/procurement/pos">
             <input type="hidden" name="show" value="<?= htmlspecialchars((string)($filters['show'] ?? 'active'), ENT_QUOTES, 'UTF-8') ?>" />
             <label>Status
@@ -135,7 +145,18 @@
                         </td>
                     </tr>
                 <?php endforeach; else: ?>
-                    <tr><td colspan="7" class="muted">No purchase orders found.</td></tr>
+                    <tr>
+                        <td colspan="8" class="muted" style="padding:24px;text-align:center;">
+                            <?php if ($show === 'archived'): ?>
+                                No archived purchase orders yet.
+                                <div style="margin-top:6px;font-size:12px;">Archive a PO from the Active view to see it here.</div>
+                                <div style="margin-top:10px;"><a class="btn" href="/procurement/pos">Go to Active List</a></div>
+                            <?php else: ?>
+                                No purchase orders match your current filters.
+                                <div style="margin-top:6px;font-size:12px;">Try clearing filters or check <a href="/procurement/pos?show=archived" style="color:inherit;text-decoration:underline;">Archives</a>.</div>
+                            <?php endif; ?>
+                        </td>
+                    </tr>
                 <?php endif; ?>
             </tbody>
         </table>
