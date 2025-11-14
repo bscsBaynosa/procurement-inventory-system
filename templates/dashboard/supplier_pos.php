@@ -31,7 +31,7 @@
         <h2 style="margin:0 0 12px 0;">Purchase Orders</h2>
         <div class="card">
             <table>
-                <thead><tr><th>PR</th><th>PO Number</th><th>Status</th><th>PDF</th><th>Respond</th></tr></thead>
+                <thead><tr><th>PR</th><th>PO Number</th><th>Status</th><th>PDF</th><th>Respond / Receipt</th></tr></thead>
                 <tbody>
                     <?php if (!empty($pos)): foreach ($pos as $p): ?>
                         <tr>
@@ -46,8 +46,12 @@
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <form method="POST" action="/supplier/po/respond" style="display:grid; grid-template-columns: 1.2fr 1.2fr 1.6fr auto; gap:8px; align-items:end;">
+                                <form method="POST" action="/supplier/po/respond" style="display:grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap:8px; align-items:end;">
                                     <input type="hidden" name="po_id" value="<?= (int)$p['id'] ?>" />
+                                    <div>
+                                        <label style="font-size:12px;color:var(--muted)">Supplier Terms</label>
+                                        <input name="supplier_terms" placeholder="e.g., 30 days, COD" />
+                                    </div>
                                     <div>
                                         <label style="font-size:12px;color:var(--muted)">Payment Method</label>
                                         <select name="payment_method" required>
@@ -65,11 +69,19 @@
                                         </select>
                                     </div>
                                     <div>
+                                        <label style="font-size:12px;color:var(--muted)">Received By</label>
+                                        <input name="receiver_name" placeholder="Receiver name" />
+                                    </div>
+                                    <div>
+                                        <label style="font-size:12px;color:var(--muted)">Date Received</label>
+                                        <input name="received_date" type="date" />
+                                    </div>
+                                    <div style="grid-column:1/-1;">
                                         <label style="font-size:12px;color:var(--muted)">Message / Deal Details</label>
                                         <input name="message" placeholder="e.g., extra 5% discount if 10+ units" />
                                     </div>
                                     <div>
-                                        <button class="btn" type="submit">Send Response</button>
+                                        <button class="btn" type="submit">Submit</button>
                                     </div>
                                 </form>
                             </td>

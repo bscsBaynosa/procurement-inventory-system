@@ -123,10 +123,8 @@
                     <label>Reference</label>
                     <input name="reference" />
                 </div>
-                <div>
-                    <label>Terms of Payment <span style="color:#dc2626;">*</span></label>
-                    <input name="terms" required placeholder="e.g., 30 days, COD, etc." value="<?= htmlspecialchars((string)($prefill['terms'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
-                </div>
+                <!-- Terms removed: will be supplied by Vendor after PO receipt -->
+                <input type="hidden" name="terms" value="" />
                 <div>
                     <label>Deliver To</label>
                     <input name="deliver_to" value="MHI Bldg., New York St., Brgy. Immaculate Concepcion, Cubao, Quezon City" />

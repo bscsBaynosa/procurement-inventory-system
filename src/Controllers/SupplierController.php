@@ -324,6 +324,9 @@ class SupplierController extends BaseController
         $payment = trim((string)($_POST['payment_method'] ?? ''));
         $delivery = trim((string)($_POST['delivery_option'] ?? ''));
         $message = trim((string)($_POST['message'] ?? ''));
+        $supplierTerms = trim((string)($_POST['supplier_terms'] ?? ''));
+        $receiverName = trim((string)($_POST['receiver_name'] ?? ''));
+        $receivedDate = trim((string)($_POST['received_date'] ?? ''));
         // Optional: attach deal PDF path from a file upload (out of scope here). We allow message only.
         if ($poId <= 0) { header('Location: /supplier/pos?error=Invalid+PO'); return; }
         // Verify ownership
@@ -344,8 +347,18 @@ class SupplierController extends BaseController
             foreach ($recipients as $row) { $ins->execute(['s' => $me, 'r' => (int)$row['user_id'], 'j' => $subject, 'b' => $body]); }
         }
         // Mark PO as responded
-        $this->pdo->prepare("UPDATE purchase_orders SET status='supplier_response_submitted', updated_at=NOW() WHERE $pk = :id")
-            ->execute(['id' => $poId]);
+        // Persist supplier-provided terms and receiver metadata
+        try {
+            $sql = "UPDATE purchase_orders SET status='supplier_response_submitted', supplier_terms=:st, receiver_name=:rn, received_date=(:rd IS NOT NULL AND :rd <> '' ? :rd::date : NULL), updated_at=NOW() WHERE $pk = :id";
+            // Some drivers won't like inline conditional; use PHP logic fallback
+            $rdFinal = ($receivedDate !== '') ? $receivedDate : null;
+            $up = $this->pdo->prepare("UPDATE purchase_orders SET status='supplier_response_submitted', supplier_terms=:st, receiver_name=:rn, received_date=:rd, updated_at=NOW() WHERE $pk = :id");
+            $up->execute(['st' => $supplierTerms !== '' ? $supplierTerms : null, 'rn' => $receiverName !== '' ? $receiverName : null, 'rd' => $rdFinal, 'id' => $poId]);
+        } catch (\Throwable $e) {
+            // Fallback status only if columns missing
+            $this->pdo->prepare("UPDATE purchase_orders SET status='supplier_response_submitted', updated_at=NOW() WHERE $pk = :id")
+                ->execute(['id' => $poId]);
+        }
         // Update PR group status
         try { (new \App\Services\RequestService())->updateGroupStatus((string)$pr, 'supplier_response', $me, 'Supplier responded to PO'); } catch (\Throwable $ignored) {}
         header('Location: /supplier/pos?responded=1');

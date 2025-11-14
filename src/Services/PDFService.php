@@ -511,6 +511,8 @@ class PDFService
 			. '<div style="text-align:center;font-weight:800;letter-spacing:.5px;margin-bottom:6px;">PURCHASE ORDER</div>';
 
 		// Vendor vs PO meta boxes
+		// Use supplier_terms if original terms blank
+		$effectiveTerms = $terms !== '' ? $terms : (string)($po['supplier_terms'] ?? '');
 		$vendorMeta = '<table width="100%" border="1" cellspacing="0" cellpadding="5" style="font-size:10px;">'
 			. '<tr>'
 			. '<td style="width:58%;vertical-align:top;">'
@@ -526,7 +528,7 @@ class PDFService
 			. '    <tr><td>CENTER</td><td style="border:1px solid #000;height:20px;">' . ($center !== '' ? $center : '&nbsp;') . '</td></tr>'
 			. '    <tr><td>DATE</td><td style="border:1px solid #000;text-align:right;height:20px;">' . $date . '</td></tr>'
 			. '    <tr><td>REFERENCE:</td><td style="border:1px solid #000;height:20px;">' . ($ref !== '' ? $ref : '&nbsp;') . '</td></tr>'
-			. '    <tr><td>TERMS OF PAYMENT</td><td style="border:1px solid #000;height:20px;">' . ($terms !== '' ? $terms : '&nbsp;') . '</td></tr>'
+			. '    <tr><td>TERMS OF PAYMENT</td><td style="border:1px solid #000;height:20px;">' . ($effectiveTerms !== '' ? htmlspecialchars($effectiveTerms, ENT_QUOTES, 'UTF-8') : '&nbsp;') . '</td></tr>'
 			. '  </table>'
 			. '</td>'
 			. '</tr>'
