@@ -172,7 +172,8 @@
                                         <button class="btn" type="submit">Update</button>
                                     </form>
                                     <a class="btn" href="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">Open</a>
-                                    <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">Download PDF</a>
+                                    <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">PR PDF</a>
+                                    <a class="btn" href="/manager/requests/download-stored?pr=<?= urlencode((string)$g['pr_number']) ?>&kind=canvass" target="_blank" rel="noopener">Canvass PDF</a>
                                     <form action="/manager/requests/archive" method="POST" onsubmit="return confirm('Archive this Purchase Request?');" style="display:inline;">
                                         <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
                                         <button class="btn" type="submit">Archive</button>

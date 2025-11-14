@@ -2016,6 +2016,21 @@ class ProcurementController extends BaseController
             ];
         }
     $this->pdf()->generatePurchaseRequisitionToFile($metaCan, $itemsCan, $file);
+        // Persist PR-Canvass PDF path (final canvass submission)
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS pr_generated_pdfs (
+                id BIGSERIAL PRIMARY KEY,
+                pr_number VARCHAR(64) NOT NULL,
+                kind VARCHAR(32) NOT NULL,
+                file_path TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(pr_number, kind)
+            )");
+            $stmtStore = $pdo->prepare('INSERT INTO pr_generated_pdfs (pr_number, kind, file_path) VALUES (:pr, :kind, :path)
+                ON CONFLICT (pr_number, kind) DO UPDATE SET file_path = EXCLUDED.file_path, updated_at = NOW()');
+            $stmtStore->execute(['pr' => $pr, 'kind' => 'canvass', 'path' => $file]);
+        } catch (\Throwable $e) { /* non-fatal */ }
         if (!@is_file($file) || ((int)@filesize($file) <= 0)) {
             header('Location: /manager/requests/canvass?pr=' . urlencode($pr) . '&error=' . rawurlencode('Failed to write PR-Canvass PDF'));
             return;
@@ -2169,6 +2184,21 @@ class ProcurementController extends BaseController
             } catch (\Throwable $ignored) {}
         }
         if (!$written || $prPdf === null) { header('Location: /manager/requests?error=' . rawurlencode('PR+PDF+generation+failed')); return; }
+        // Persist final PR PDF path
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS pr_generated_pdfs (
+                id BIGSERIAL PRIMARY KEY,
+                pr_number VARCHAR(64) NOT NULL,
+                kind VARCHAR(32) NOT NULL,
+                file_path TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(pr_number, kind)
+            )");
+            $stmtStore2 = $pdo->prepare('INSERT INTO pr_generated_pdfs (pr_number, kind, file_path) VALUES (:pr, :kind, :path)
+                ON CONFLICT (pr_number, kind) DO UPDATE SET file_path = EXCLUDED.file_path, updated_at = NOW()');
+            $stmtStore2->execute(['pr' => $pr, 'kind' => 'pr', 'path' => $prPdf]);
+        } catch (\Throwable $e) { /* non-fatal */ }
 
         // Mark the PR group as canvassing_submitted (awaiting admin approval)
         try { $this->requests()->updateGroupStatus($pr, 'canvassing_submitted', (int)($_SESSION['user_id'] ?? 0), 'Canvassing submitted for admin approval'); } catch (\Throwable $ignored) {}
@@ -2555,6 +2585,21 @@ class ProcurementController extends BaseController
         // Set session flag to allow final send later
         if (!isset($_SESSION['canvass_previewed']) || !is_array($_SESSION['canvass_previewed'])) { $_SESSION['canvass_previewed'] = []; }
         $_SESSION['canvass_previewed'][$pr] = time();
+        // Persist preview PDF as well (kind=canvass_preview) for historical retrieval
+        try {
+            $pdo->exec("CREATE TABLE IF NOT EXISTS pr_generated_pdfs (
+                id BIGSERIAL PRIMARY KEY,
+                pr_number VARCHAR(64) NOT NULL,
+                kind VARCHAR(32) NOT NULL,
+                file_path TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(pr_number, kind)
+            )");
+            $stmtPrev = $pdo->prepare('INSERT INTO pr_generated_pdfs (pr_number, kind, file_path) VALUES (:pr,:kind,:path)
+                ON CONFLICT (pr_number, kind) DO UPDATE SET file_path = EXCLUDED.file_path, updated_at = NOW()');
+            $stmtPrev->execute(['pr' => $pr, 'kind' => 'canvass_preview', 'path' => $file]);
+        } catch (\Throwable $e) { /* ignore */ }
         $size = @filesize($file) ?: null;
         header('Content-Type: application/pdf');
         header('Content-Disposition: inline; filename="' . rawurlencode('Canvassing-PR-' . $pr . '.pdf') . '"');
@@ -3256,6 +3301,27 @@ class ProcurementController extends BaseController
         $pr = isset($_GET['pr']) ? trim((string)$_GET['pr']) : '';
         if ($pr === '') { header('Location: /manager/requests'); return; }
         $rows = $this->requests()->getGroupDetails($pr);
+        // Attach stored PDF info for UI (optional usage)
+        $storedCanvass = null; $storedPr = null; $storedPreview = null;
+        try {
+            $pdo = \App\Database\Connection::resolve();
+            $pdo->exec("CREATE TABLE IF NOT EXISTS pr_generated_pdfs (
+                id BIGSERIAL PRIMARY KEY,
+                pr_number VARCHAR(64) NOT NULL,
+                kind VARCHAR(32) NOT NULL,
+                file_path TEXT NOT NULL,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                UNIQUE(pr_number, kind)
+            )");
+            $stPdf = $pdo->prepare('SELECT kind, file_path FROM pr_generated_pdfs WHERE pr_number = :pr');
+            $stPdf->execute(['pr' => $pr]);
+            foreach ($stPdf->fetchAll() as $r) {
+                if ($r['kind'] === 'canvass') { $storedCanvass = (string)$r['file_path']; }
+                elseif ($r['kind'] === 'pr') { $storedPr = (string)$r['file_path']; }
+                elseif ($r['kind'] === 'canvass_preview') { $storedPreview = (string)$r['file_path']; }
+            }
+        } catch (\Throwable $e) {}
         if (isset($_GET['partial']) && (string)$_GET['partial'] === '1') {
             header('Content-Type: text/html; charset=utf-8');
             echo '<div class="pr-expansion" style="padding:10px 4px 6px">';
@@ -3287,7 +3353,30 @@ class ProcurementController extends BaseController
             echo '</div>';
             return;
         }
-        $this->render('procurement/request_view.php', ['pr' => $pr, 'rows' => $rows]);
+        $this->render('procurement/request_view.php', ['pr' => $pr, 'rows' => $rows, 'pdfs' => ['canvass' => $storedCanvass, 'pr' => $storedPr, 'canvass_preview' => $storedPreview]]);
+    }
+
+    /** GET: Download stored Canvass / PR PDF (kind defaults to canvass) */
+    public function downloadStoredPdf(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin','manager','admin'], true)) { header('Location: /login'); return; }
+        $pr = isset($_GET['pr']) ? trim((string)$_GET['pr']) : '';
+        $kind = isset($_GET['kind']) ? trim((string)$_GET['kind']) : 'canvass';
+        if ($pr === '' || !preg_match('/^(canvass|pr|canvass_preview)$/', $kind)) { header('Location: /manager/requests?error=Invalid+PDF+request'); return; }
+        try {
+            $pdo = \App\Database\Connection::resolve();
+            $st = $pdo->prepare('SELECT file_path FROM pr_generated_pdfs WHERE pr_number = :pr AND kind = :k');
+            $st->execute(['pr' => $pr, 'k' => $kind]);
+            $path = (string)($st->fetchColumn() ?: '');
+            if ($path === '' || !is_file($path)) { header('Location: /manager/requests/view?pr=' . urlencode($pr) . '&error=PDF+not+found'); return; }
+            $size = @filesize($path) ?: null;
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: inline; filename="' . rawurlencode(basename($path)) . '"');
+            if ($size !== null) { header('Content-Length: ' . (string)$size); }
+            @readfile($path);
+        } catch (\Throwable $e) {
+            header('Location: /manager/requests/view?pr=' . urlencode($pr) . '&error=Failed+to+load+PDF');
+        }
     }
 
     /** GET: Download PR PDF for a group */
