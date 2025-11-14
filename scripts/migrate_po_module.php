@@ -91,7 +91,16 @@ foreach ([
     "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS admin_name VARCHAR(255)" => 'add admin_name',
     "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS reviewed_by VARCHAR(255)" => 'add reviewed_by',
     "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS approved_by VARCHAR(255)" => 'add approved_by',
-    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS discount NUMERIC(12,2) DEFAULT 0" => 'add discount'
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS discount NUMERIC(12,2) DEFAULT 0" => 'add discount',
+    // Terms negotiation + logistics tracking
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS supplier_terms TEXT" => 'add supplier_terms',
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS receiver_name VARCHAR(255)" => 'add receiver_name',
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS received_date DATE" => 'add received_date',
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS terms_status VARCHAR(64)" => 'add terms_status',
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS procurement_terms TEXT" => 'add procurement_terms',
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS logistics_status VARCHAR(64)" => 'add logistics_status',
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS logistics_notes TEXT" => 'add logistics_notes',
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS gate_pass_path TEXT" => 'add gate_pass_path'
 ] as $sql => $label) { $exec($sql, $label); }
 
 // 3. Indexes
@@ -99,6 +108,9 @@ $exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_purchase_orders_po_number_unique ON
 $exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier ON purchase_orders(supplier_id)", 'index supplier_id');
 $exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_status ON purchase_orders(status)", 'index status');
 $exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_branch ON purchase_orders(branch_id)", 'index branch_id');
+// Helpful indexes for new columns
+$exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_terms_status ON purchase_orders(terms_status)", 'index terms_status');
+$exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_logistics_status ON purchase_orders(logistics_status)", 'index logistics_status');
 
 // 4. Messages attachment evolution for PO flow
 foreach ([

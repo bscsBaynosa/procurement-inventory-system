@@ -120,7 +120,7 @@
                         <td>
                             <?php if (!empty($p['pdf_path'])): ?>
                                 <a class="btn" href="/procurement/po/download?id=<?= (int)$p['id'] ?>">Download</a>
-                                <?php if ((string)($p['status'] ?? '') === 'po_admin_approved'): ?>
+                                <?php if ((string)($p['status'] ?? '') === 'po_admin_approved' && isset($_SESSION['role']) && in_array((string)$_SESSION['role'], ['procurement_manager','procurement'], true)): ?>
                                     <form method="POST" action="/procurement/po/send" style="display:inline;margin-left:6px;">
                                         <input type="hidden" name="id" value="<?= (int)$p['id'] ?>" />
                                         <button type="submit" class="btn primary">Send</button>

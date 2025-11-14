@@ -760,9 +760,41 @@ class PDFService
 
 		$check = function(string $key) use ($nature): string { return $nature === $key ? 'X' : '&nbsp;'; };
 
-		$header = '<div style="text-align:center;font-weight:800;font-size:16px;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
-			. '<div style="text-align:center;font-size:10px;margin-bottom:4px;">ACCOUNT (' . $center . ')</div>'
-			. '<div style="text-align:center;font-weight:800;">REQUEST FOR PAYMENT</div>';
+		// PR-like header: logo, corp title + divider, revision row, and form title
+		$root = @realpath(__DIR__ . '/../../');
+		$public = $root ? ($root . DIRECTORY_SEPARATOR . 'public') : null;
+		$cand = [];
+		if ($root) { $cand[] = $root . DIRECTORY_SEPARATOR . 'logo.png'; }
+		if ($public) {
+			$cand[] = $public . DIRECTORY_SEPARATOR . 'logo.png';
+			$cand[] = $public . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'logo.png';
+		}
+		$cand[] = ($public ? $public : (__DIR__ . '/../../public')) . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'pocc-logo.svg';
+		$logoHtml = '';
+		foreach ($cand as $p) {
+			if (@is_file($p)) {
+				$data = @file_get_contents($p);
+				if ($data !== false) {
+					$mime = (strtolower(substr($p, -4)) === '.svg') ? 'image/svg+xml' : 'image/png';
+					$src = 'data:' . $mime . ';base64,' . base64_encode($data);
+					$logoHtml = '<div style="text-align:center;margin-bottom:6px;"><img src="' . $src . '" width="56" height="56" /></div>';
+					break;
+				}
+			}
+		}
+		$topTitle = '<div style="text-align:center;font-size:14px;font-weight:700;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
+			. '<div style="height:1px;background:#000;margin:6px 0 8px 0;"></div>';
+		$revRow = '<table width="100%" border="0" cellspacing="0" cellpadding="2" style="font-size:9px;margin-bottom:6px;">'
+			. '<tr>'
+			. '<td style="width:15%;">Rev. No.</td>'
+			. '<td style="width:25%;border-bottom:1px solid #444;">&nbsp;</td>'
+			. '<td style="width:10%"></td>'
+			. '<td style="width:15%">Effective Date:</td>'
+			. '<td style="width:25%;border-bottom:1px solid #444;">' . $dateReq . '</td>'
+			. '</tr>'
+			. '</table>';
+		$titleRow = '<div style="text-align:center;font-size:11px;font-weight:700;">REQUEST FOR PAYMENT</div>'
+			. ($center !== '' ? '<div style="text-align:center;font-size:10px;margin-top:2px;">ACCOUNT (' . $center . ')</div>' : '');
 		$meta = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
 			. '<tr>'
 			. '<td style="width:65%;vertical-align:top;">'
@@ -808,7 +840,115 @@ class PDFService
 			. '</tr>'
 			. '</table>';
 
-		$html = $header . $meta . $table . $amounts . $sign;
+		$html = $logoHtml . $topTitle . $revRow . $titleRow . $meta . $table . $amounts . $sign;
+		$mpdf->WriteHTML($html);
+		$mpdf->Output($filePath, 'F');
+	}
+
+	/**
+	 * Generate a simple Gate Pass PDF to file for delivered POs.
+	 * @param array $meta keys: po_number, pr_number, vendor_name, center, deliver_to, look_for, prepared_by, prepared_at
+	 * @param string $filePath destination absolute path
+	 */
+	public function generateGatePassToFile(array $meta, string $filePath): void
+	{
+		$mpdf = new Mpdf([
+			'format' => 'A4',
+			'orientation' => 'P',
+			'margin_left' => 10,
+			'margin_right' => 10,
+			'margin_top' => 10,
+			'margin_bottom' => 10,
+		]);
+		$po = htmlspecialchars((string)($meta['po_number'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$pr = htmlspecialchars((string)($meta['pr_number'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$vendor = htmlspecialchars((string)($meta['vendor_name'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$center = htmlspecialchars((string)($meta['center'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$deliverTo = nl2br(htmlspecialchars((string)($meta['deliver_to'] ?? ''), ENT_QUOTES, 'UTF-8'));
+		$lookFor = htmlspecialchars((string)($meta['look_for'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$prepBy = htmlspecialchars((string)($meta['prepared_by'] ?? ''), ENT_QUOTES, 'UTF-8');
+		$prepAt = htmlspecialchars((string)($meta['prepared_at'] ?? date('Y-m-d')), ENT_QUOTES, 'UTF-8');
+
+		// Try to embed the same logo used elsewhere
+		$root = @realpath(__DIR__ . '/../../');
+		$public = $root ? ($root . DIRECTORY_SEPARATOR . 'public') : null;
+		$cand = [];
+		if ($root) { $cand[] = $root . DIRECTORY_SEPARATOR . 'logo.png'; }
+		if ($public) {
+			$cand[] = $public . DIRECTORY_SEPARATOR . 'logo.png';
+			$cand[] = $public . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'logo.png';
+		}
+		$cand[] = ($public ? $public : (__DIR__ . '/../../public')) . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'pocc-logo.svg';
+		$logoHtml = '';
+		foreach ($cand as $p) {
+			if (@is_file($p)) {
+				$data = @file_get_contents($p);
+				if ($data !== false) {
+					$mime = (strtolower(substr($p, -4)) === '.svg') ? 'image/svg+xml' : 'image/png';
+					$src = 'data:' . $mime . ';base64,' . base64_encode($data);
+					$logoHtml = '<div style="text-align:center;margin-bottom:6px;"><img src="' . $src . '" width="56" height="56" /></div>';
+					break;
+				}
+			}
+		}
+
+		// PR-like header for Gate Pass
+		$topTitle = '<div style="text-align:center;font-size:14px;font-weight:700;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
+			. '<div style="height:1px;background:#000;margin:6px 0 8px 0;"></div>';
+		$revRow = '<table width="100%" border="0" cellspacing="0" cellpadding="2" style="font-size:9px;margin-bottom:6px;">'
+			. '<tr>'
+			. '<td style="width:15%;">Rev. No.</td>'
+			. '<td style="width:25%;border-bottom:1px solid #444;">&nbsp;</td>'
+			. '<td style="width:10%"></td>'
+			. '<td style="width:15%">Effective Date:</td>'
+			. '<td style="width:25%;border-bottom:1px solid #444;">' . $prepAt . '</td>'
+			. '</tr>'
+			. '</table>';
+		$titleRow = '<div style="text-align:center;font-size:11px;font-weight:700;">GATE PASS</div>'
+			. '<div style="text-align:center;font-size:10px;margin-top:2px;color:#475569;">For Delivery Receipt / Warehouse Gate</div>';
+
+		$metaBox = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="font-size:10px;margin-top:8px;">'
+			. '<tr>'
+			. '<td style="width:55%;vertical-align:top;">'
+			. '<div><strong>Vendor:</strong> ' . $vendor . '</div>'
+			. '<div style="margin-top:3px;"><strong>Deliver To:</strong><br>' . $deliverTo . '</div>'
+			. '<div style="margin-top:3px;"><strong>Look For:</strong> ' . $lookFor . '</div>'
+			. '</td>'
+			. '<td style="vertical-align:top;">'
+			. '<div><strong>PO Number:</strong> ' . $po . '</div>'
+			. '<div style="margin-top:3px;"><strong>PR Number:</strong> ' . $pr . '</div>'
+			. '<div style="margin-top:3px;"><strong>Center:</strong> ' . $center . '</div>'
+			. '<div style="margin-top:3px;"><strong>Date Prepared:</strong> ' . $prepAt . '</div>'
+			. '</td>'
+			. '</tr>'
+			. '</table>';
+
+		$instructions = '<div style="border:1px solid #000;margin-top:8px;padding:6px;font-size:10px;background:#f8fafc;">'
+			. '<div style="text-align:center;font-weight:700;">INSTRUCTIONS</div>'
+			. '<div style="margin-top:4px;">Please allow the bearer to deliver the goods for the above-mentioned PO. Verify items against delivery receipt and ensure proper logging at the gate.</div>'
+			. '</div>';
+
+		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="10" style="margin-top:8px;font-size:10px;">'
+			. '<tr>'
+			. '<td style="width:33%;vertical-align:bottom;">'
+			. '<div style="font-weight:700;">Prepared By</div>'
+			. '<div style="height:46px;">&nbsp;</div>'
+			. '<div style="border-top:1px solid #000;text-align:center;padding-top:6px;">' . $prepBy . '</div>'
+			. '</td>'
+			. '<td style="width:33%;vertical-align:bottom;">'
+			. '<div style="font-weight:700;">Guard on Duty</div>'
+			. '<div style="height:46px;">&nbsp;</div>'
+			. '<div style="border-top:1px solid #000;text-align:center;padding-top:6px;">SIGNATURE OVER PRINTED NAME</div>'
+			. '</td>'
+			. '<td style="width:34%;vertical-align:bottom;">'
+			. '<div style="font-weight:700;">Received By</div>'
+			. '<div style="height:46px;">&nbsp;</div>'
+			. '<div style="border-top:1px solid #000;text-align:center;padding-top:6px;">SUPPLIER / REPRESENTATIVE</div>'
+			. '</td>'
+			. '</tr>'
+			. '</table>';
+
+		$html = $logoHtml . $topTitle . $revRow . $titleRow . $metaBox . $instructions . $sign;
 		$mpdf->WriteHTML($html);
 		$mpdf->Output($filePath, 'F');
 	}

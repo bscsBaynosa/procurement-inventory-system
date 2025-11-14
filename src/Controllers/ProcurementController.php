@@ -134,6 +134,12 @@ class ProcurementController extends BaseController
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS supplier_terms TEXT"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS receiver_name VARCHAR(255)"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS received_date DATE"); } catch (\Throwable $e) {}
+        // Terms negotiation + logistics tracking + gate pass
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS terms_status VARCHAR(64)"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS procurement_terms TEXT"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS logistics_status VARCHAR(64)"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS logistics_notes TEXT"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS gate_pass_path TEXT"); } catch (\Throwable $e) {}
         // Legacy installs may predate pdf_path; add if missing (SELECT clauses must not break)
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS pdf_path TEXT"); } catch (\Throwable $e) {}
         // Legacy installs may also predate vendor_name; add silently for fallback supplier naming
@@ -1193,7 +1199,7 @@ class ProcurementController extends BaseController
                 echo '</div>';
                 return;
           }
-          $this->render('procurement/po_view.php', ['po' => $h, 'items' => $lines]);
+        $this->render('procurement/po_view.php', ['po' => $h, 'items' => $lines]);
     }
 
     /** GET: Regenerate PO PDF and stream/download (export) */
@@ -1286,6 +1292,111 @@ class ProcurementController extends BaseController
         header('Content-Disposition: inline; filename="' . rawurlencode('PO-' . (string)$po['po_number'] . '.pdf') . '"');
         if ($size !== null) { header('Content-Length: ' . (string)$size); }
         @readfile($file);
+    }
+
+    /** POST: Agree to supplier-submitted terms (Procurement action) */
+    public function poAgreeTerms(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement'], true)) { header('Location: /login'); return; }
+        $id = isset($_POST['po_id']) ? (int)$_POST['po_id'] : 0;
+        if ($id <= 0) { $_SESSION['flash_error'] = 'Invalid PO id'; header('Location: /procurement/pos'); return; }
+        $this->ensurePoTables();
+        $pdo = \App\Database\Connection::resolve();
+        $idCol = 'id';
+        try { $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn(); if (!$hasId) { $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn(); if ($hasPoId) { $idCol = 'po_id'; } } } catch (\Throwable $e) {}
+        // Update status + terms_status
+        $up = $pdo->prepare("UPDATE purchase_orders SET status='terms_agreed', terms_status='agreed', updated_at=NOW() WHERE " . $idCol . " = :id");
+        $up->execute(['id' => $id]);
+        // Notify supplier
+        try {
+            $row = $pdo->prepare('SELECT supplier_id, pr_number, po_number FROM purchase_orders WHERE ' . $idCol . ' = :id');
+            $row->execute(['id' => $id]);
+            if ($r = $row->fetch()) {
+                try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255)"); } catch (\Throwable $e) {}
+                try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT"); } catch (\Throwable $e) {}
+                $ins = $pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
+                $ins->execute([
+                    's' => (int)($_SESSION['user_id'] ?? 0),
+                    'r' => (int)$r['supplier_id'],
+                    'j' => 'PO Terms Agreed • ' . (string)($r['po_number'] ?? ''),
+                    'b' => 'Procurement agreed to your submitted terms. You may proceed with delivery arrangements.'
+                ]);
+            }
+        } catch (\Throwable $e) {}
+        $_SESSION['flash_success'] = 'Supplier terms agreed.';
+        header('Location: /procurement/po/view?id=' . $id);
+    }
+
+    /** POST: Propose changes to supplier terms (Procurement action) */
+    public function poProposeTerms(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement'], true)) { header('Location: /login'); return; }
+        $id = isset($_POST['po_id']) ? (int)$_POST['po_id'] : 0;
+        $proposal = isset($_POST['proposal']) ? trim((string)$_POST['proposal']) : '';
+        if ($id <= 0) { $_SESSION['flash_error'] = 'Invalid PO id'; header('Location: /procurement/pos'); return; }
+        $this->ensurePoTables();
+        $pdo = \App\Database\Connection::resolve();
+        $idCol = 'id';
+        try { $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn(); if (!$hasId) { $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn(); if ($hasPoId) { $idCol = 'po_id'; } } } catch (\Throwable $e) {}
+        $up = $pdo->prepare("UPDATE purchase_orders SET status='terms_counter_proposed', terms_status='counter_proposed', procurement_terms=:pt, updated_at=NOW() WHERE " . $idCol . " = :id");
+        $up->execute(['pt' => $proposal !== '' ? $proposal : null, 'id' => $id]);
+        // Notify supplier
+        try {
+            $row = $pdo->prepare('SELECT supplier_id, pr_number, po_number FROM purchase_orders WHERE ' . $idCol . ' = :id');
+            $row->execute(['id' => $id]);
+            if ($r = $row->fetch()) {
+                try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255)"); } catch (\Throwable $e) {}
+                try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT"); } catch (\Throwable $e) {}
+                $ins = $pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
+                $body = 'Procurement proposed changes to terms' . ($proposal!==''? (":\n" . $proposal):'.');
+                $ins->execute([
+                    's' => (int)($_SESSION['user_id'] ?? 0),
+                    'r' => (int)$r['supplier_id'],
+                    'j' => 'PO Terms Counter Proposal • ' . (string)($r['po_number'] ?? ''),
+                    'b' => $body
+                ]);
+            }
+        } catch (\Throwable $e) {}
+        $_SESSION['flash_success'] = 'Counter proposal sent to supplier.';
+        header('Location: /procurement/po/view?id=' . $id);
+    }
+
+    /** POST: Generate Gate Pass PDF (after delivery confirmed) */
+    public function poGenerateGatePass(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement'], true)) { header('Location: /login'); return; }
+        $id = isset($_POST['po_id']) ? (int)$_POST['po_id'] : 0;
+        if ($id <= 0) { $_SESSION['flash_error'] = 'Invalid PO id'; header('Location: /procurement/pos'); return; }
+        $this->ensurePoTables();
+        $pdo = \App\Database\Connection::resolve();
+        $idCol = 'id';
+        try { $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn(); if (!$hasId) { $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn(); if ($hasPoId) { $idCol = 'po_id'; } } } catch (\Throwable $e) {}
+        $st = $pdo->prepare('SELECT po_number, pr_number, vendor_name, logistics_status, gate_pass_path, center, deliver_to, look_for FROM purchase_orders WHERE ' . $idCol . ' = :id');
+        $st->execute(['id' => $id]);
+        $po = $st->fetch();
+        if (!$po) { $_SESSION['flash_error'] = 'PO not found'; header('Location: /procurement/pos'); return; }
+        if (strtolower((string)($po['logistics_status'] ?? '')) !== 'delivered') { $_SESSION['flash_error'] = 'Gate Pass allowed after delivery only.'; header('Location: /procurement/po/view?id=' . $id); return; }
+        // Generate Gate Pass
+        $dir = $this->resolveWritablePdfDir();
+        $file = $dir . DIRECTORY_SEPARATOR . 'GatePass-PO-' . preg_replace('/[^A-Za-z0-9_-]/','_', (string)$po['po_number']) . '.pdf';
+        try {
+            $this->pdf()->generateGatePassToFile([
+                'po_number' => (string)($po['po_number'] ?? ''),
+                'pr_number' => (string)($po['pr_number'] ?? ''),
+                'vendor_name' => (string)($po['vendor_name'] ?? ''),
+                'center' => (string)($po['center'] ?? ''),
+                'deliver_to' => (string)($po['deliver_to'] ?? ''),
+                'look_for' => (string)($po['look_for'] ?? ''),
+                'prepared_by' => (string)($_SESSION['full_name'] ?? ''),
+                'prepared_at' => date('Y-m-d'),
+            ], $file);
+            $pdo->prepare('UPDATE purchase_orders SET gate_pass_path = :p, updated_at = NOW() WHERE ' . $idCol . ' = :id')
+                ->execute(['p' => $file, 'id' => $id]);
+            $_SESSION['flash_success'] = 'Gate Pass generated.';
+        } catch (\Throwable $e) {
+            $_SESSION['flash_error'] = 'Failed to generate Gate Pass.';
+        }
+        header('Location: /procurement/po/view?id=' . $id);
     }
 
 

@@ -31,7 +31,7 @@
         <h2 style="margin:0 0 12px 0;">Purchase Orders</h2>
         <div class="card">
             <table>
-                <thead><tr><th>PR</th><th>PO Number</th><th>Status</th><th>PDF</th><th>Respond / Receipt</th></tr></thead>
+                <thead><tr><th>PR</th><th>PO Number</th><th>Status</th><th>PDF</th><th>Respond / Receipt</th><th>Logistics</th></tr></thead>
                 <tbody>
                     <?php if (!empty($pos)): foreach ($pos as $p): ?>
                         <tr>
@@ -85,9 +85,29 @@
                                     </div>
                                 </form>
                             </td>
+                            <td>
+                                <form method="POST" action="/supplier/po/logistics" style="display:grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap:8px; align-items:end;">
+                                    <input type="hidden" name="po_id" value="<?= (int)$p['id'] ?>" />
+                                    <div>
+                                        <label style="font-size:12px;color:var(--muted)">Status</label>
+                                        <select name="logistics_status" required>
+                                            <option value="waiting_for_courier">Waiting for Courier</option>
+                                            <option value="in_transit">In Transit</option>
+                                            <option value="delivered">Delivered</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="font-size:12px;color:var(--muted)">Notes</label>
+                                        <input name="logistics_notes" placeholder="Optional notes" />
+                                    </div>
+                                    <div>
+                                        <button class="btn" type="submit">Update</button>
+                                    </div>
+                                </form>
+                            </td>
                         </tr>
                     <?php endforeach; else: ?>
-                        <tr><td colspan="5" class="muted">No POs received yet.</td></tr>
+                        <tr><td colspan="6" class="muted">No POs received yet.</td></tr>
                     <?php endif; ?>
                 </tbody>
             </table>

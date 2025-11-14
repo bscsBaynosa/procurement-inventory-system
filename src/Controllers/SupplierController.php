@@ -364,6 +364,43 @@ class SupplierController extends BaseController
         header('Location: /supplier/pos?responded=1');
     }
 
+    /** Supplier: Update logistics status for a PO (e.g., waiting, in_transit, delivered) */
+    public function updateLogistics(): void
+    {
+        if (($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); return; }
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        $poId = (int)($_POST['po_id'] ?? 0);
+        $status = trim((string)($_POST['logistics_status'] ?? ''));
+        $notes = trim((string)($_POST['logistics_notes'] ?? ''));
+        if ($poId <= 0 || $status === '') { header('Location: /supplier/pos?error=Invalid+request'); return; }
+        // Verify ownership and update
+        $pk = \App\Database\SchemaHelper::getPoPrimaryKey($this->pdo);
+        $st = $this->pdo->prepare('SELECT supplier_id, pr_number, po_number FROM purchase_orders WHERE ' . $pk . ' = :id');
+        $st->execute(['id' => $poId]);
+        $row = $st->fetch();
+        if (!$row || (int)$row['supplier_id'] !== $me) { header('Location: /supplier/pos?error=Not+found'); return; }
+        try { $this->pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS logistics_status VARCHAR(64)"); } catch (\Throwable $e) {}
+        try { $this->pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS logistics_notes TEXT"); } catch (\Throwable $e) {}
+        $up = $this->pdo->prepare('UPDATE purchase_orders SET logistics_status = :s, logistics_notes = :n, updated_at = NOW() WHERE ' . $pk . ' = :id');
+        $up->execute(['s' => $status, 'n' => ($notes !== '' ? $notes : null), 'id' => $poId]);
+        // Notify procurement roles
+        try {
+            $recipients = $this->pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('procurement_manager','procurement')")->fetchAll();
+            if ($recipients) {
+                $ins = $this->pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body) VALUES (:s,:r,:j,:b)');
+                foreach ($recipients as $r) {
+                    $ins->execute([
+                        's' => $me,
+                        'r' => (int)$r['user_id'],
+                        'j' => 'Logistics Update • ' . (string)($row['po_number'] ?? ''),
+                        'b' => 'Supplier marked logistics as: ' . $status . ($notes!==''? ("\n".$notes):'')
+                    ]);
+                }
+            }
+        } catch (\Throwable $e) {}
+        header('Location: /supplier/pos?logistics=1');
+    }
+
     public function downloadPO(): void
     {
         if (!isset($_SESSION['user_id'])) { header('Location: /login'); return; }

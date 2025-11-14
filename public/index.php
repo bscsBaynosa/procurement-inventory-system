@@ -371,24 +371,24 @@ if ($method === 'POST' && $path === '/manager/requests/send-for-approval') {
 
 // Procurement: Purchase Order creation
 if ($method === 'GET' && $path === '/procurement/po/create') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement'], true)) { header('Location: /login'); exit; }
 	$safeRun(static function() use ($manager){ $manager->poCreate(); });
 	exit;
 }
 if ($method === 'POST' && $path === '/procurement/po/create') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement'], true)) { header('Location: /login'); exit; }
 	$safeRun(static function() use ($manager){ $manager->poSubmit(); });
 	exit;
 }
 
 // Procurement: Official PO PDF preview (server-rendered) — supports POST and GET
 if ($method === 'POST' && $path === '/procurement/po/preview') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement'], true)) { header('Location: /login'); exit; }
 	$safeRun(static function() use ($manager){ $manager->poPreview(); });
 	exit;
 }
 if ($method === 'GET' && $path === '/procurement/po/preview') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement'], true)) { header('Location: /login'); exit; }
 	$safeRun(static function() use ($manager){ $manager->poPreview(); });
 	exit;
 }
@@ -402,8 +402,27 @@ if ($method === 'GET' && $path === '/procurement/po/download') {
 
 // Procurement: Send PO to Supplier (attaches official PDF)
 if ($method === 'POST' && $path === '/procurement/po/send') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement'], true)) { header('Location: /login'); exit; }
 	$safeRun(static function() use ($manager){ $manager->poSendToSupplier(); });
+	exit;
+}
+
+// Procurement: Terms negotiation actions
+if ($method === 'POST' && $path === '/procurement/po/terms/agree') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement'], true)) { header('Location: /login'); exit; }
+	$safeRun(static function() use ($manager){ $manager->poAgreeTerms(); });
+	exit;
+}
+if ($method === 'POST' && $path === '/procurement/po/terms/propose') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement'], true)) { header('Location: /login'); exit; }
+	$safeRun(static function() use ($manager){ $manager->poProposeTerms(); });
+	exit;
+}
+
+// Procurement: Gate Pass generation
+if ($method === 'POST' && $path === '/procurement/po/gatepass') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement'], true)) { header('Location: /login'); exit; }
+	$safeRun(static function() use ($manager){ $manager->poGenerateGatePass(); });
 	exit;
 }
 
@@ -437,12 +456,12 @@ if ($method === 'GET' && $path === '/procurement/po/export') {
 
 // Procurement: RFP (Request For Payment)
 if ($method === 'GET' && $path === '/procurement/rfp/create') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement'], true)) { header('Location: /login'); exit; }
 	$manager->rfpCreate();
 	exit;
 }
 if ($method === 'POST' && $path === '/procurement/rfp/create') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement'], true)) { header('Location: /login'); exit; }
 	$manager->rfpSubmit();
 	exit;
 }
@@ -491,6 +510,11 @@ if ($method === 'GET' && $path === '/supplier/pos') {
 if ($method === 'POST' && $path === '/supplier/po/respond') {
 	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
 	$supplier->poRespond();
+	exit;
+}
+if ($method === 'POST' && $path === '/supplier/po/logistics') {
+	if (!isset($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'supplier') { header('Location: /login'); exit; }
+	$supplier->updateLogistics();
 	exit;
 }
 // Legacy generate PO route removed in favor of unified PR-group → PO flow

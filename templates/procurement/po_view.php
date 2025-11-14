@@ -32,7 +32,7 @@
 <div class="layout">
     <?php require __DIR__ . '/../layouts/_sidebar.php'; ?>
     <main class="content">
-        <div class="h1">
+            <div class="h1">
             <span>PO <?= htmlspecialchars((string)$po['po_number'], ENT_QUOTES, 'UTF-8') ?></span>
             <div style="display:flex; gap:8px;">
                 <a class="btn" href="/procurement/pos">Back to list</a>
@@ -40,7 +40,12 @@
                     <a class="btn primary" href="/procurement/po/download?id=<?= (int)$po['id'] ?>">Download PDF</a>
                 <?php endif; ?>
                 <a class="btn" href="/procurement/po/export?id=<?= (int)$po['id'] ?>" title="Regenerate & Export fresh PDF" target="_blank" rel="noopener">Export PDF</a>
-                <a class="btn" href="/procurement/rfp/create?po=<?= (int)$po['id'] ?>">Generate RFP</a>
+                <?php $termsStatus = (string)($po['terms_status'] ?? ''); ?>
+                <?php if ($termsStatus === 'agreed'): ?>
+                    <a class="btn" href="/procurement/rfp/create?po=<?= (int)$po['id'] ?>">Generate RFP</a>
+                <?php else: ?>
+                    <span class="btn" style="opacity:.6;cursor:not-allowed;" title="Available after terms are agreed">Generate RFP</span>
+                <?php endif; ?>
                     <?php if ((string)($po['status'] ?? '') === 'po_admin_approved'): ?>
                         <form method="POST" action="/procurement/po/send" style="display:inline;">
                             <input type="hidden" name="id" value="<?= (int)$po['id'] ?>" />
@@ -117,6 +122,63 @@
                 <div style="grid-column: 1 / -1;"><strong>Terms:</strong> <?= nl2br(htmlspecialchars((string)($po['terms'] ?? ''), ENT_QUOTES, 'UTF-8')) ?></div>
                 <div style="grid-column: 1 / -1;"><strong>Notes:</strong> <?= nl2br(htmlspecialchars((string)($po['notes'] ?? ''), ENT_QUOTES, 'UTF-8')) ?></div>
             </div>
+        </div>
+
+        <div class="card" style="margin-bottom:12px;">
+            <div class="muted">Terms & Logistics</div>
+            <div style="display:grid; grid-template-columns: repeat(2, minmax(240px,1fr)); gap:10px; margin-top:6px;">
+                <div>
+                    <strong>Supplier Terms</strong>
+                    <div class="muted" style="margin-top:4px; white-space:pre-line;">
+                        <?= htmlspecialchars((string)($po['supplier_terms'] ?? ''), ENT_QUOTES, 'UTF-8') !== '' ? nl2br(htmlspecialchars((string)$po['supplier_terms'], ENT_QUOTES, 'UTF-8')) : '<span class="muted">—</span>' ?>
+                    </div>
+                </div>
+                <div>
+                    <strong>Procurement Proposal</strong>
+                    <div class="muted" style="margin-top:4px; white-space:pre-line;">
+                        <?= htmlspecialchars((string)($po['procurement_terms'] ?? ''), ENT_QUOTES, 'UTF-8') !== '' ? nl2br(htmlspecialchars((string)$po['procurement_terms'], ENT_QUOTES, 'UTF-8')) : '<span class="muted">—</span>' ?>
+                    </div>
+                </div>
+                <div>
+                    <strong>Terms Status:</strong>
+                    <span class="badge" style="margin-left:6px;"><?= htmlspecialchars(ucwords(str_replace('_',' ', (string)($po['terms_status'] ?? '—'))), ENT_QUOTES, 'UTF-8') ?></span>
+                </div>
+                <div>
+                    <strong>Logistics Status:</strong>
+                    <span class="badge" style="margin-left:6px;"><?= htmlspecialchars(ucwords(str_replace('_',' ', (string)($po['logistics_status'] ?? '—'))), ENT_QUOTES, 'UTF-8') ?></span>
+                    <?php if (!empty($po['logistics_notes'])): ?>
+                        <div class="muted" style="margin-top:4px;">Notes: <?= nl2br(htmlspecialchars((string)$po['logistics_notes'], ENT_QUOTES, 'UTF-8')) ?></div>
+                    <?php endif; ?>
+                </div>
+            </div>
+
+            <?php $role = $_SESSION['role'] ?? ''; $status = (string)($po['status'] ?? ''); ?>
+            <?php if (in_array($role, ['procurement','procurement_manager'], true) && in_array($status, ['supplier_response_submitted','terms_counter_proposed'], true)): ?>
+                <div style="display:flex; gap:10px; align-items:flex-start; margin-top:10px;">
+                    <form method="POST" action="/procurement/po/terms/agree">
+                        <input type="hidden" name="po_id" value="<?= (int)$po['id'] ?>" />
+                        <button class="btn primary" type="submit">Agree to Supplier Terms</button>
+                    </form>
+                    <form method="POST" action="/procurement/po/terms/propose" style="display:grid; grid-template-columns: 1fr auto; gap:8px; min-width:420px;">
+                        <input type="hidden" name="po_id" value="<?= (int)$po['id'] ?>" />
+                        <textarea name="proposal" placeholder="Propose changes (payment terms, delivery, etc.)" style="grid-column:1/-1; min-height:60px;"></textarea>
+                        <button class="btn" type="submit">Send Counter Proposal</button>
+                    </form>
+                </div>
+            <?php endif; ?>
+
+            <?php if (in_array($role, ['procurement','procurement_manager'], true) && strtolower((string)($po['logistics_status'] ?? '')) === 'delivered'): ?>
+                <div style="margin-top:10px;">
+                    <?php if (!empty($po['gate_pass_path']) && is_file((string)$po['gate_pass_path'])): ?>
+                        <span class="badge">Gate Pass generated</span>
+                    <?php else: ?>
+                        <form method="POST" action="/procurement/po/gatepass" onsubmit="return confirm('Generate Gate Pass now?');" style="display:inline;">
+                            <input type="hidden" name="po_id" value="<?= (int)$po['id'] ?>" />
+                            <button class="btn primary" type="submit">Generate Gate Pass</button>
+                        </form>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
         </div>
 
         <div class="card">
