@@ -55,6 +55,20 @@
                     <?php endforeach; ?>
                 </select>
             </label>
+            <label>Branch
+                <select name="branch">
+                    <option value="">All</option>
+                    <?php foreach (($branches ?? []) as $b): $sel=((int)($filters['branch'] ?? 0)===(int)$b['branch_id']); ?>
+                        <option value="<?= (int)$b['branch_id'] ?>" <?= $sel?'selected':'' ?>><?= htmlspecialchars((string)$b['name'], ENT_QUOTES, 'UTF-8') ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </label>
+            <label>From
+                <input type="date" name="from" value="<?= htmlspecialchars((string)($filters['from'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
+            </label>
+            <label>To
+                <input type="date" name="to" value="<?= htmlspecialchars((string)($filters['to'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" />
+            </label>
             <button class="btn" type="submit">Apply</button>
         </form>
 
@@ -66,6 +80,7 @@
                     <th class="nowrap">PO Number</th>
                     <th>Supplier</th>
                     <th class="nowrap">Status</th>
+                    <th class="nowrap">Branch</th>
                     <th class="nowrap">Total</th>
                     <th>PDF</th>
                 </tr>
@@ -78,6 +93,7 @@
                         <td class="mono"><?= htmlspecialchars((string)$p['po_number'], ENT_QUOTES, 'UTF-8') ?></td>
                         <td><?= htmlspecialchars((string)$p['supplier_name'], ENT_QUOTES, 'UTF-8') ?></td>
                         <td><span class="badge"><?= htmlspecialchars(ucwords(str_replace('_',' ', (string)$p['status'])), ENT_QUOTES, 'UTF-8') ?></span></td>
+                        <td class="nowrap"><?= htmlspecialchars((string)($p['branch_name'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></td>
                         <td class="nowrap">₱ <?= number_format((float)($p['total'] ?? 0), 2) ?></td>
                         <td>
                             <?php if (!empty($p['pdf_path'])): ?>

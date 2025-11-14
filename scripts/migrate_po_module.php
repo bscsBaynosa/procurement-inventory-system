@@ -47,6 +47,7 @@ $exec("CREATE TABLE IF NOT EXISTS purchase_orders (
     pr_number VARCHAR(64) NOT NULL,
     po_number VARCHAR(64) NOT NULL,
     supplier_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
+    branch_id BIGINT REFERENCES branches(branch_id) ON DELETE SET NULL,
     vendor_name VARCHAR(255),
     vendor_address TEXT,
     vendor_tin VARCHAR(64),
@@ -84,6 +85,7 @@ $exec("CREATE TABLE IF NOT EXISTS purchase_order_items (
 // 2. Add missing columns / evolve existing installs
 foreach ([
     "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS pr_id BIGINT REFERENCES purchase_requests(request_id) ON DELETE SET NULL" => 'add pr_id',
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS branch_id BIGINT REFERENCES branches(branch_id) ON DELETE SET NULL" => 'add branch_id',
     "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS prepared_by VARCHAR(255)" => 'add prepared_by',
     "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS finance_officer VARCHAR(255)" => 'add finance_officer',
     "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS admin_name VARCHAR(255)" => 'add admin_name',
@@ -96,6 +98,7 @@ foreach ([
 $exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_purchase_orders_po_number_unique ON purchase_orders(po_number)", 'index po_number unique');
 $exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier ON purchase_orders(supplier_id)", 'index supplier_id');
 $exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_status ON purchase_orders(status)", 'index status');
+$exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_branch ON purchase_orders(branch_id)", 'index branch_id');
 
 // 4. Messages attachment evolution for PO flow
 foreach ([
@@ -104,6 +107,14 @@ foreach ([
 ] as $sql => $label) { $exec($sql, $label); }
 
 // 5. Output log
+$exec("UPDATE purchase_orders po
+             SET branch_id = pr.branch_id
+             FROM purchase_requests pr
+             WHERE po.branch_id IS NULL
+                 AND (
+                     (po.pr_id IS NOT NULL AND pr.request_id = po.pr_id)
+                     OR (po.pr_number IS NOT NULL AND pr.pr_number = po.pr_number)
+                 )", 'backfill branch_id from purchase_requests');
 fwrite(STDOUT, "Purchase Order module migration complete.\n" . implode("\n", $log) . "\n");
 
 // Optional: exit code 0 success

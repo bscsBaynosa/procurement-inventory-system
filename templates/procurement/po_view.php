@@ -47,6 +47,19 @@
                             <button type="submit" class="btn primary" title="Send approved PO to supplier">Send to Supplier</button>
                         </form>
                     <?php endif; ?>
+                    <?php if (($_SESSION['role'] ?? null) === 'admin' && !in_array((string)($po['status'] ?? ''), ['po_admin_approved','po_rejected'], true)): ?>
+                        <form method="POST" action="/admin/po/approve" style="display:inline;" onsubmit="return confirm('Approve this PO?');">
+                            <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$po['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
+                            <input type="hidden" name="po_id" value="<?= (int)$po['id'] ?>" />
+                            <button type="submit" class="btn">Approve</button>
+                        </form>
+                        <form method="POST" action="/admin/po/reject" style="display:inline;" onsubmit="return confirm('Reject this PO?');">
+                            <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$po['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
+                            <input type="hidden" name="po_id" value="<?= (int)$po['id'] ?>" />
+                            <input type="hidden" name="reason" value="Rejected from PO view" />
+                            <button type="submit" class="btn">Reject</button>
+                        </form>
+                    <?php endif; ?>
             </div>
         </div>
 

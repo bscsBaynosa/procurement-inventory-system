@@ -83,18 +83,10 @@
                 <form method="POST" action="/admin/messages" style="display:grid; gap:10px;" enctype="multipart/form-data">
                     <div>
                         <label>To</label>
-                        <select name="to[]" multiple required size="6" title="Hold Ctrl or Cmd to select multiple">
-                            <?php
-                                $pf = isset($prefill_to) ? (int)$prefill_to : 0;
-                                $pfl = isset($prefill_to_list) && is_array($prefill_to_list) ? array_map('intval', $prefill_to_list) : array();
-                                foreach ($users as $u):
-                                    $uid = (int)$u['user_id'];
-                                    $sel = ($pf === $uid) || in_array($uid, $pfl, true);
-                            ?>
-                                <option value="<?= $uid ?>" <?= $sel ? 'selected' : '' ?>><?= htmlspecialchars($u['full_name'] . ' (' . $u['role'] . ')', ENT_QUOTES, 'UTF-8') ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <div class="muted" style="font-size:12px;margin-top:6px;">Tip: Select one or more recipients (Ctrl/Cmd + Click).</div>
+                        <div id="chips-to" class="chips" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:6px;border:1px solid var(--border);border-radius:10px;min-height:44px;background:var(--card)">
+                            <!-- chips + input will render here -->
+                        </div>
+                        <div class="muted" style="font-size:12px;margin-top:6px;">Type a name and press Enter to add. Click a chip’s × to remove.</div>
                     </div>
                     <div>
                         <label>Subject</label>
@@ -132,7 +124,7 @@
                         <label>Attachment (optional)</label>
                         <input type="file" name="attachment" />
                     </div>
-                    <div style="display:flex; justify-content:flex-end; gap:10px;">
+                                        <div style="display:flex; justify-content:flex-end; gap:10px;">
                         <button class="btn" type="submit">Send</button>
                     </div>
                 </form>
@@ -140,5 +132,140 @@
         </div>
     </main>
 </div>
+<script>
+(function(){
+    const users = <?php
+        $list = [];
+        foreach ($users as $u) {
+                $list[] = [
+                        'id' => (int)$u['user_id'],
+                        'name' => (string)$u['full_name'],
+                        'role' => (string)$u['role'],
+                ];
+        }
+        echo json_encode($list);
+    ?>;
+    const prefillSingle = <?= isset($prefill_to) && (int)$prefill_to > 0 ? (int)$prefill_to : 'null' ?>;
+    const prefillList = <?php echo json_encode(isset($prefill_to_list) && is_array($prefill_to_list) ? array_values(array_map('intval', $prefill_to_list)) : []); ?>;
+
+    const el = document.getElementById('chips-to');
+    if (!el) return;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Add recipient...';
+    input.style.flex = '1';
+    input.style.minWidth = '160px';
+    input.style.border = '0';
+    input.style.outline = 'none';
+    input.style.background = 'transparent';
+    const menu = document.createElement('div');
+    menu.style.position = 'absolute';
+    menu.style.background = 'var(--card)';
+    menu.style.border = '1px solid var(--border)';
+    menu.style.borderRadius = '8px';
+    menu.style.marginTop = '2px';
+    menu.style.minWidth = '260px';
+    menu.style.maxHeight = '180px';
+    menu.style.overflowY = 'auto';
+    menu.style.display = 'none';
+    let selected = new Map(); // id -> {id,name}
+
+    function addChip(user){
+        if (selected.has(user.id)) return;
+        selected.set(user.id, user);
+        const chip = document.createElement('span');
+        chip.textContent = user.name + ' (' + user.role + ')';
+        chip.style.display = 'inline-flex';
+        chip.style.alignItems = 'center';
+        chip.style.gap = '6px';
+        chip.style.padding = '6px 8px';
+        chip.style.border = '1px solid var(--border)';
+        chip.style.borderRadius = '999px';
+        chip.style.background = 'color-mix(in oklab, var(--accent) 10%, transparent)';
+        const x = document.createElement('button');
+        x.type = 'button';
+        x.textContent = '×';
+        x.style.background = 'transparent';
+        x.style.border = '0';
+        x.style.cursor = 'pointer';
+        x.onclick = () => {
+            selected.delete(user.id);
+            chip.remove();
+            // Remove corresponding hidden input
+            const hid = el.querySelector('input[type=hidden][data-recipient="'+user.id+'"]');
+            if (hid) hid.remove();
+        };
+        chip.appendChild(x);
+        // Hidden input
+        const hid = document.createElement('input');
+        hid.type = 'hidden';
+        hid.name = 'to[]';
+        hid.value = String(user.id);
+        hid.setAttribute('data-recipient', String(user.id));
+        el.insertBefore(chip, input);
+        el.appendChild(hid);
+    }
+
+    function filterUsers(q){
+        const t = q.trim().toLowerCase();
+        if (!t) return users.slice(0, 10);
+        return users.filter(u => u.name.toLowerCase().includes(t) || String(u.id).includes(t) || (u.role||'').toLowerCase().includes(t)).slice(0, 10);
+    }
+
+    function openMenu(items){
+        menu.innerHTML = '';
+        items.forEach(u => {
+            if (selected.has(u.id)) return;
+            const row = document.createElement('div');
+            row.textContent = u.name + ' (' + u.role + ')';
+            row.style.padding = '8px 10px';
+            row.style.cursor = 'pointer';
+            row.onmouseenter = () => { row.style.background = 'color-mix(in oklab, var(--accent) 8%, transparent)'; };
+            row.onmouseleave = () => { row.style.background = 'transparent'; };
+            row.onclick = () => { addChip(u); menu.style.display='none'; input.value=''; };
+            menu.appendChild(row);
+        });
+        if (menu.childElementCount > 0) {
+            const rect = input.getBoundingClientRect();
+            menu.style.left = '0px';
+            el.appendChild(menu);
+            menu.style.display = 'block';
+        } else {
+            menu.style.display = 'none';
+        }
+    }
+
+    input.addEventListener('input', () => openMenu(filterUsers(input.value)) );
+    input.addEventListener('focus', () => openMenu(filterUsers(input.value)) );
+    input.addEventListener('blur', () => { setTimeout(()=> menu.style.display='none', 150); });
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && input.value.trim() !== '') {
+            e.preventDefault();
+            const first = filterUsers(input.value)[0];
+            if (first) { addChip(first); input.value=''; menu.style.display='none'; }
+        } else if (e.key === 'Backspace' && input.value === '') {
+            // Remove last chip quickly
+            const chips = el.querySelectorAll('span');
+            if (chips.length > 0) {
+                const last = chips[chips.length - 1];
+                const hid = el.querySelector('input[type=hidden][data-recipient]:last-of-type');
+                if (hid) { selected.delete(parseInt(hid.getAttribute('data-recipient')||'0',10)); hid.remove(); }
+                last.remove();
+            }
+        }
+    });
+
+    el.style.position = 'relative';
+    el.appendChild(input);
+
+    // Prefill selections
+    const want = new Set();
+    if (prefillSingle) want.add(prefillSingle);
+    (prefillList||[]).forEach(id => want.add(id));
+    if (want.size > 0) {
+        users.forEach(u => { if (want.has(u.id)) addChip(u); });
+    }
+})();
+</script>
 </body>
 </html>

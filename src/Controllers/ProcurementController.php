@@ -47,6 +47,7 @@ class ProcurementController extends BaseController
             pr_number VARCHAR(64) NOT NULL,
             po_number VARCHAR(64) NOT NULL,
             supplier_id BIGINT NOT NULL REFERENCES users(user_id) ON DELETE RESTRICT,
+            branch_id BIGINT REFERENCES branches(branch_id) ON DELETE SET NULL,
             vendor_name VARCHAR(255),
             vendor_address TEXT,
             vendor_tin VARCHAR(64),
@@ -85,6 +86,8 @@ class ProcurementController extends BaseController
         try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_pr_number ON purchase_orders (pr_number)"); } catch (\Throwable $e) {}
         // Ensure supplier_id column exists (legacy schemas may use 'supplier') and backfill
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS supplier_id BIGINT REFERENCES users(user_id) ON DELETE RESTRICT"); } catch (\Throwable $e) {}
+        // Ensure branch_id exists and is indexed
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS branch_id BIGINT REFERENCES branches(branch_id) ON DELETE SET NULL"); } catch (\Throwable $e) {}
         try {
             $hasSupplier = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='supplier'")->fetchColumn();
             $hasSupplierId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='supplier_id'")->fetchColumn();
@@ -98,6 +101,7 @@ class ProcurementController extends BaseController
             // (Optional) create index for faster joins
             $pdo->exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier_id ON purchase_orders (supplier_id)");
         } catch (\Throwable $e) {}
+        try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_branch_id ON purchase_orders (branch_id)"); } catch (\Throwable $e) {}
         // Determine the correct reference column for purchase_orders (legacy installs may use po_id instead of id)
         $poRefCol = 'id';
         try {
@@ -800,6 +804,7 @@ class ProcurementController extends BaseController
         $cols += [
             'po_number' => ':po',
             'supplier_id' => ':sid',
+            'branch_id' => ':bid',
             'vendor_name' => ':vn',
             'vendor_address' => ':va',
             'vendor_tin' => ':vt',
@@ -825,11 +830,24 @@ class ProcurementController extends BaseController
         // Guard against duplicate PO numbers race by retrying once if unique violation occurs
         // Robust duplicate-handling loop for po_number
         $attempts = 0;
+        // Determine branch_id for the PO (prefer PR branch, else current user's branch)
+        $resolvedBranchId = null;
+        foreach ((array)$rowsPr as $r0) { if (isset($r0['branch_id']) && (int)$r0['branch_id'] > 0) { $resolvedBranchId = (int)$r0['branch_id']; break; } }
+        if (!$resolvedBranchId) {
+            try {
+                $stB = $pdo->prepare('SELECT branch_id FROM purchase_requests WHERE pr_number = :pr ORDER BY updated_at DESC LIMIT 1');
+                $stB->execute(['pr' => $pr]);
+                $bid = (int)($stB->fetchColumn() ?: 0);
+                if ($bid > 0) { $resolvedBranchId = $bid; }
+            } catch (\Throwable $e) {}
+        }
+        if (!$resolvedBranchId && isset($_SESSION['branch_id'])) { $resolvedBranchId = (int)$_SESSION['branch_id']; }
         $paramsBase = [
             'pr' => $pr,
             'prid' => $prId ?: null,
             'reqid' => $prId ?: null,
             'sid' => $supplierId,
+            'bid' => $resolvedBranchId ?: null,
             'vn' => $vendorName ?: null,
             'va' => $vendorAddress ?: null,
             'vt' => $vendorTin ?: null,
@@ -981,10 +999,22 @@ class ProcurementController extends BaseController
         // Optional filters
         $status = isset($_GET['status']) && $_GET['status'] !== '' ? (string)$_GET['status'] : null;
         $supplier = isset($_GET['supplier']) && $_GET['supplier'] !== '' ? (int)$_GET['supplier'] : null;
+        $branchFilter = isset($_GET['branch']) && $_GET['branch'] !== '' ? (int)$_GET['branch'] : null;
+        $fromDate = isset($_GET['from']) && $_GET['from'] !== '' ? (string)$_GET['from'] : null;
+        $toDate = isset($_GET['to']) && $_GET['to'] !== '' ? (string)$_GET['to'] : null;
+        // Validate dates (YYYY-MM-DD)
+        $fromValid = $fromDate && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fromDate) ? $fromDate : null;
+        $toValid = $toDate && preg_match('/^\d{4}-\d{2}-\d{2}$/', $toDate) ? ($toDate . ' 23:59:59') : null;
         $where = [];
         $params = [];
         if ($status !== null) { $where[] = 'po.status = :status'; $params['status'] = $status; }
         if ($supplier !== null) { $where[] = 'po.' . $supplierCol . ' = :sid'; $params['sid'] = $supplier; }
+        // Branch filter only if column exists
+        $hasBranchCol = false;
+        try { $hasBranchCol = (bool)$pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='branch_id'")->fetchColumn(); } catch (\Throwable $e) { $hasBranchCol = false; }
+        if ($hasBranchCol && $branchFilter !== null) { $where[] = 'po.branch_id = :bid'; $params['bid'] = $branchFilter; }
+        if ($fromValid !== null) { $where[] = 'po.created_at >= :from'; $params['from'] = $fromValid; }
+        if ($toValid !== null) { $where[] = 'po.created_at <= :to'; $params['to'] = $toValid; }
         // If legacy schema lacks supplier column entirely, skip join and show placeholder supplier name
         $joinUsers = true;
         try {
@@ -1020,15 +1050,19 @@ class ProcurementController extends BaseController
             if (!$hasPdfPath) { $pdfPathSelect = 'NULL AS pdf_path'; }
         } catch (\Throwable $e) { $pdfPathSelect = 'NULL AS pdf_path'; }
         // Build dynamic SELECT mapping legacy column names to expected aliases
-        $sqlJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, ' . $pdfPathSelect . ', po.created_at, u.full_name AS supplier_name'
+        $branchJoin = ($hasBranchCol ? ' LEFT JOIN branches b ON b.branch_id = po.branch_id' : '');
+        $branchSelect = ($hasBranchCol ? ', b.name AS branch_name' : ', NULL AS branch_name');
+        $sqlJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, ' . $pdfPathSelect . ', po.created_at, u.full_name AS supplier_name' . $branchSelect
             . ' FROM purchase_orders po'
             . ' JOIN users u ON u.user_id = po.' . $supplierCol
-            . ($canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '');
+            . ($canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '')
+            . $branchJoin;
         // For no-join path, avoid touching vendor_name entirely (legacy DBs may not have it). Use a constant placeholder.
         $vendorNameExpr = "'Unknown Supplier'";
-        $sqlNoJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, ' . $pdfPathSelect . ', po.created_at, ' . $vendorNameExpr . ' AS supplier_name'
+        $sqlNoJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, ' . $pdfPathSelect . ', po.created_at, ' . $vendorNameExpr . ' AS supplier_name' . $branchSelect
             . ' FROM purchase_orders po'
-            . ($canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '');
+            . ($canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '')
+            . $branchJoin;
         // Apply filters
         $sqlJ = $sqlJoin; $sqlN = $sqlNoJoin;
         if ($where) { $sqlJ .= ' WHERE ' . implode(' AND ', $where); }
@@ -1052,7 +1086,8 @@ class ProcurementController extends BaseController
         }
         // Load suppliers for filter dropdown
         $suppliers = $pdo->query("SELECT user_id, full_name FROM users WHERE role='supplier' AND is_active=TRUE ORDER BY full_name ASC")->fetchAll();
-        $this->render('procurement/po_list.php', [ 'pos' => $pos, 'filters' => ['status' => $status, 'supplier' => $supplier], 'suppliers' => $suppliers ]);
+        $branches = $pdo->query("SELECT branch_id, name FROM branches WHERE is_active=TRUE ORDER BY name ASC")->fetchAll();
+        $this->render('procurement/po_list.php', [ 'pos' => $pos, 'filters' => ['status' => $status, 'supplier' => $supplier, 'branch' => $branchFilter, 'from' => $fromDate, 'to' => $toDate], 'suppliers' => $suppliers, 'branches' => $branches ]);
     }
 
     /** GET: Single PO detail with lines and meta for Procurement */
