@@ -130,6 +130,20 @@
                                 <span class="muted">—</span>
                             <?php endif; ?>
                             <?php if (isset($_SESSION['role']) && (string)$_SESSION['role'] === 'admin'): ?>
+                                <?php $st = (string)($p['status'] ?? ''); $canAdminAct = ($st !== 'po_admin_approved' && $st !== 'po_rejected'); ?>
+                                <?php if ($canAdminAct && (string)($filters['show'] ?? 'active') !== 'archived'): ?>
+                                    <form method="POST" action="/admin/po/approve" style="display:inline;margin-left:6px;">
+                                        <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$p['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
+                                        <input type="hidden" name="po_id" value="<?= (int)$p['id'] ?>" />
+                                        <button type="submit" class="btn" title="Approve this PO">Approve</button>
+                                    </form>
+                                    <form method="POST" action="/admin/po/reject" class="po-reject-form" style="display:inline;margin-left:6px;">
+                                        <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$p['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
+                                        <input type="hidden" name="po_id" value="<?= (int)$p['id'] ?>" />
+                                        <input type="hidden" name="reason" value="" />
+                                        <button type="submit" class="btn" title="Reject this PO">Reject</button>
+                                    </form>
+                                <?php endif; ?>
                                 <?php if ((string)($filters['show'] ?? 'active') !== 'archived'): ?>
                                     <form method="POST" action="/admin/po/archive" style="display:inline;margin-left:6px;">
                                         <input type="hidden" name="id" value="<?= (int)$p['id'] ?>" />
@@ -164,4 +178,19 @@
     </main>
 </div>
 </body>
+<script>
+// Prompt for reject reason before submitting
+document.addEventListener('click', function (e) {
+    var t = e.target;
+    if (!t.closest) return;
+    var form = t.closest('form.po-reject-form');
+    if (form && t.tagName === 'BUTTON') {
+        e.preventDefault();
+        var msg = prompt('Enter reason for rejection (optional):', '');
+        if (msg === null) return; // cancelled
+        form.querySelector('input[name="reason"]').value = msg || '';
+        form.submit();
+    }
+});
+</script>
 </html>
