@@ -37,8 +37,17 @@
     <main class="content">
         <div class="h1">
             <span>Purchase Orders</span>
+            <span>
+                <?php $show = (string)($filters['show'] ?? 'active'); ?>
+                <?php if ($show === 'archived'): ?>
+                    <a class="btn" href="/procurement/pos">View Active</a>
+                <?php else: ?>
+                    <a class="btn" href="/procurement/pos?show=archived">View Archives</a>
+                <?php endif; ?>
+            </span>
         </div>
         <form class="filters" method="GET" action="/procurement/pos">
+            <input type="hidden" name="show" value="<?= htmlspecialchars((string)($filters['show'] ?? 'active'), ENT_QUOTES, 'UTF-8') ?>" />
             <label>Status
                 <?php $statuses = ['', 'submitted','po_admin_approved','sent_to_supplier','po_rejected','supplier_response_submitted','draft']; ?>
                 <select name="status">
@@ -85,7 +94,7 @@
                     <th class="nowrap">Status</th>
                     <th class="nowrap">Branch</th>
                     <th class="nowrap">Total</th>
-                    <th>PDF</th>
+                    <th>PDF / Actions</th>
                 </tr>
             </thead>
             <tbody>
@@ -109,6 +118,19 @@
                                 <?php endif; ?>
                             <?php else: ?>
                                 <span class="muted">—</span>
+                            <?php endif; ?>
+                            <?php if (isset($_SESSION['role']) && (string)$_SESSION['role'] === 'admin'): ?>
+                                <?php if ((string)($filters['show'] ?? 'active') !== 'archived'): ?>
+                                    <form method="POST" action="/admin/po/archive" style="display:inline;margin-left:6px;">
+                                        <input type="hidden" name="id" value="<?= (int)$p['id'] ?>" />
+                                        <button type="submit" class="btn" title="Archive this PO">Archive</button>
+                                    </form>
+                                <?php else: ?>
+                                    <form method="POST" action="/admin/po/restore" style="display:inline;margin-left:6px;">
+                                        <input type="hidden" name="id" value="<?= (int)$p['id'] ?>" />
+                                        <button type="submit" class="btn" title="Restore this PO">Restore</button>
+                                    </form>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </td>
                     </tr>

@@ -265,6 +265,58 @@ class AdminController extends BaseController
         header('Location: /inbox?po_rejected=1');
     }
 
+    /** Admin: Archive a Purchase Order (soft-delete via is_archived flag). */
+    public function archivePO(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? '') !== 'admin') { header('Location: /login'); return; }
+        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        if ($id <= 0) { header('Location: /admin/pos?error=Invalid+PO'); return; }
+        try {
+            $pdo = $this->pdo;
+            try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE"); } catch (\Throwable $e) {}
+            $idCol = 'id';
+            try {
+                $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn();
+                if (!$hasId) {
+                    $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn();
+                    if ($hasPoId) { $idCol = 'po_id'; }
+                }
+            } catch (\Throwable $e) {}
+            $st = $pdo->prepare("UPDATE purchase_orders SET is_archived = TRUE, updated_at = NOW() WHERE " . $idCol . " = :id");
+            $st->execute(['id' => $id]);
+            header('Location: /admin/pos?archived=1');
+        } catch (\Throwable $e) {
+            header('Location: /admin/pos?error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
+    /** Admin: Restore an archived Purchase Order. */
+    public function restorePO(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        if (($_SESSION['role'] ?? '') !== 'admin') { header('Location: /login'); return; }
+        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        if ($id <= 0) { header('Location: /admin/pos?show=archived&error=Invalid+PO'); return; }
+        try {
+            $pdo = $this->pdo;
+            try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE"); } catch (\Throwable $e) {}
+            $idCol = 'id';
+            try {
+                $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn();
+                if (!$hasId) {
+                    $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn();
+                    if ($hasPoId) { $idCol = 'po_id'; }
+                }
+            } catch (\Throwable $e) {}
+            $st = $pdo->prepare("UPDATE purchase_orders SET is_archived = FALSE, updated_at = NOW() WHERE " . $idCol . " = :id");
+            $st->execute(['id' => $id]);
+            header('Location: /admin/pos?show=archived&restored=1');
+        } catch (\Throwable $e) {
+            header('Location: /admin/pos?show=archived&error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
     /**
      * POST: Approve a submitted Request For Payment (RFP) and notify Procurement.
      */

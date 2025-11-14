@@ -458,6 +458,17 @@ if ($method === 'POST' && $path === '/admin/po/reject') {
 	$admin->rejectPO();
 	exit;
 }
+// Admin: PO archive/restore
+if ($method === 'POST' && $path === '/admin/po/archive') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? '') !== 'admin')) { header('Location: /login'); exit; }
+	$admin->archivePO();
+	exit;
+}
+if ($method === 'POST' && $path === '/admin/po/restore') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? '') !== 'admin')) { header('Location: /login'); exit; }
+	$admin->restorePO();
+	exit;
+}
 
 // Admin: RFP approval/rejection
 if ($method === 'POST' && $path === '/admin/rfp/approve') {

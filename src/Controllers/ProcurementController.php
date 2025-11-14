@@ -152,6 +152,9 @@ class ProcurementController extends BaseController
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS created_by BIGINT REFERENCES users(user_id) ON DELETE RESTRICT"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW()"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()"); } catch (\Throwable $e) {}
+        // Archiving support
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE"); } catch (\Throwable $e) {}
+        try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_is_archived ON purchase_orders (is_archived)"); } catch (\Throwable $e) {}
     }
 
     /** GET: Create PO form for a canvassing-approved PR */
@@ -1007,11 +1010,15 @@ class ProcurementController extends BaseController
         $branchFilter = isset($_GET['branch']) && $_GET['branch'] !== '' ? (int)$_GET['branch'] : null;
         $fromDate = isset($_GET['from']) && $_GET['from'] !== '' ? (string)$_GET['from'] : null;
         $toDate = isset($_GET['to']) && $_GET['to'] !== '' ? (string)$_GET['to'] : null;
+        $show = isset($_GET['show']) ? (string)$_GET['show'] : 'active';
         // Validate dates (YYYY-MM-DD)
         $fromValid = $fromDate && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fromDate) ? $fromDate : null;
         $toValid = $toDate && preg_match('/^\d{4}-\d{2}-\d{2}$/', $toDate) ? ($toDate . ' 23:59:59') : null;
         $where = [];
         $params = [];
+        // Default: show only active (non-archived) unless explicitly showing archives
+        if ($show === 'archived') { $where[] = 'COALESCE(po.is_archived, FALSE) = TRUE'; }
+        else { $where[] = 'COALESCE(po.is_archived, FALSE) = FALSE'; }
         if ($status !== null) { $where[] = 'po.status = :status'; $params['status'] = $status; }
         if ($supplier !== null) { $where[] = 'po.' . $supplierCol . ' = :sid'; $params['sid'] = $supplier; }
         // Branch filter only if column exists
@@ -1071,8 +1078,10 @@ class ProcurementController extends BaseController
         // Apply filters
         $sqlJ = $sqlJoin; $sqlN = $sqlNoJoin;
         if ($where) { $sqlJ .= ' WHERE ' . implode(' AND ', $where); }
-        // For no-join path, only keep status filter (supplier filter requires users join/column)
+        // For no-join path, apply archived and status filters
         $whereNoJoin = [];
+        if ($show === 'archived') { $whereNoJoin[] = 'COALESCE(po.is_archived, FALSE) = TRUE'; }
+        else { $whereNoJoin[] = 'COALESCE(po.is_archived, FALSE) = FALSE'; }
         if ($status !== null) { $whereNoJoin[] = 'po.status = :status'; }
         if ($whereNoJoin) { $sqlN .= ' WHERE ' . implode(' AND ', $whereNoJoin); }
         $sqlJ .= ' ORDER BY po.created_at DESC';
@@ -1092,7 +1101,7 @@ class ProcurementController extends BaseController
         // Load suppliers for filter dropdown
         $suppliers = $pdo->query("SELECT user_id, full_name FROM users WHERE role='supplier' AND is_active=TRUE ORDER BY full_name ASC")->fetchAll();
         $branches = $pdo->query("SELECT branch_id, name FROM branches WHERE is_active=TRUE ORDER BY name ASC")->fetchAll();
-        $this->render('procurement/po_list.php', [ 'pos' => $pos, 'filters' => ['status' => $status, 'supplier' => $supplier, 'branch' => $branchFilter, 'from' => $fromDate, 'to' => $toDate], 'suppliers' => $suppliers, 'branches' => $branches ]);
+        $this->render('procurement/po_list.php', [ 'pos' => $pos, 'filters' => ['status' => $status, 'supplier' => $supplier, 'branch' => $branchFilter, 'from' => $fromDate, 'to' => $toDate, 'show' => $show], 'suppliers' => $suppliers, 'branches' => $branches ]);
     }
 
     /** GET: Single PO detail with lines and meta for Procurement */
