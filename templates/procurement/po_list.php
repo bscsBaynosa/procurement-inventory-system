@@ -18,6 +18,8 @@
         .h1{ font-weight:800; font-size:22px; margin: 6px 0 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
         .filters{ display:grid; grid-template-columns: 200px 280px 100px; gap:8px; align-items:center; margin-bottom:10px; }
         select{ padding:0 10px; height:var(--control-h); border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); }
+        .table-scroll{ width:100%; overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:14px; background:var(--card); border:1px solid var(--border); }
+        .table-scroll table{ width:100%; border-collapse: collapse; background:transparent; min-width:1000px; }
         table{ width:100%; border-collapse: collapse; background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
         th, td{ padding:12px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; vertical-align:middle; }
         th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
@@ -72,6 +74,7 @@
             <button class="btn" type="submit">Apply</button>
         </form>
 
+        <div class="table-scroll">
         <table>
             <thead>
                 <tr>
@@ -87,7 +90,7 @@
             </thead>
             <tbody>
                 <?php if (!empty($pos)): foreach ($pos as $p): ?>
-                    <tr>
+                    <tr class="expandable-row" data-expand-url="/procurement/po/view?id=<?= (int)$p['id'] ?>&partial=1" data-expand-columns="8">
                         <td class="nowrap"><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)$p['created_at'])), ENT_QUOTES, 'UTF-8') ?></td>
                         <td class="mono"><?= htmlspecialchars(\App\Services\IdService::format('PR', (string)$p['pr_number']), ENT_QUOTES, 'UTF-8') ?></td>
                         <td class="mono"><?= htmlspecialchars((string)$p['po_number'], ENT_QUOTES, 'UTF-8') ?></td>
@@ -114,6 +117,7 @@
                 <?php endif; ?>
             </tbody>
         </table>
+        </div>
     </main>
 </div>
 </body>

@@ -130,6 +130,10 @@ class ProcurementController extends BaseController
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS reviewed_by VARCHAR(255)"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS approved_by VARCHAR(255)"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS discount NUMERIC(12,2) DEFAULT 0"); } catch (\Throwable $e) {}
+        // New supplier provided terms + receiving metadata
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS supplier_terms TEXT"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS receiver_name VARCHAR(255)"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS received_date DATE"); } catch (\Throwable $e) {}
         // Legacy installs may predate pdf_path; add if missing (SELECT clauses must not break)
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS pdf_path TEXT"); } catch (\Throwable $e) {}
         // Legacy installs may also predate vendor_name; add silently for fallback supplier naming
@@ -679,8 +683,9 @@ class ProcurementController extends BaseController
         // New personnel fields (required)
         $financeOfficer = trim((string)($_POST['finance_officer'] ?? ''));
         $adminName = trim((string)($_POST['admin_name'] ?? ''));
-        if ($center === '' || $terms === '' || $financeOfficer === '' || $adminName === '') {
-            $_SESSION['flash_error'] = 'Required fields missing (Center, Terms, Finance Officer, Admin Name).';
+        // Terms of Payment no longer required at creation (supplier supplies later)
+        if ($center === '' || $financeOfficer === '' || $adminName === '') {
+            $_SESSION['flash_error'] = 'Required fields missing (Center, Finance Officer, Admin Name).';
             header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Required+fields+missing'); return;
         }
         // Prefer authoritative items from PR-Canvass awards for the selected supplier; fall back to posted arrays if no awards are found
@@ -1145,7 +1150,41 @@ class ProcurementController extends BaseController
         $lt = $pdo->prepare('SELECT description, unit, qty, unit_price, line_total FROM purchase_order_items WHERE po_id = :id ORDER BY id ASC');
         $lt->execute(['id' => $id]);
         $lines = $lt->fetchAll();
-        $this->render('procurement/po_view.php', ['po' => $h, 'items' => $lines]);
+          if (isset($_GET['partial']) && (string)$_GET['partial'] === '1') {
+                header('Content-Type: text/html; charset=utf-8');
+                $total = (float)($h['total'] ?? 0); $discount = (float)($h['discount'] ?? 0); $net = $total; $gross = $discount>0?($total+$discount):$total;
+                echo '<div class="po-expansion" style="padding:10px 4px 6px">';
+                echo '<div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:10px;font-size:12px;">'
+                    . '<div><strong>Status:</strong> <span style="padding:2px 6px;border:1px solid #ccc;border-radius:6px;font-size:11px;">' . htmlspecialchars(ucwords(str_replace('_',' ', (string)$h['status'])), ENT_QUOTES, 'UTF-8') . '</span></div>'
+                    . '<div><strong>Supplier:</strong> ' . htmlspecialchars((string)$h['supplier_name'], ENT_QUOTES, 'UTF-8') . '</div>'
+                    . '<div><strong>Reference:</strong> ' . htmlspecialchars((string)($h['reference'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div>'
+                    . '<div><strong>Center:</strong> ' . htmlspecialchars((string)($h['center'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div>'
+                    . '<div><strong>Look For:</strong> ' . htmlspecialchars((string)($h['look_for'] ?? ''), ENT_QUOTES, 'UTF-8') . '</div>'
+                    . '</div>';
+                echo '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+                    . '<thead><tr style="background:#f1f5f9"><th style="text-align:left;padding:6px 8px;">Description</th><th style="padding:6px 8px;">Unit</th><th style="padding:6px 8px;">Qty</th><th style="padding:6px 8px;">Unit Price</th><th style="padding:6px 8px;">Total</th></tr></thead><tbody>';
+                foreach ($lines as $ln) {
+                     echo '<tr><td style="padding:6px 8px;">' . htmlspecialchars((string)$ln['description'], ENT_QUOTES, 'UTF-8') . '</td>'
+                         . '<td style="padding:6px 8px;text-align:center;">' . htmlspecialchars((string)$ln['unit'], ENT_QUOTES, 'UTF-8') . '</td>'
+                         . '<td style="padding:6px 8px;text-align:center;">' . (int)$ln['qty'] . '</td>'
+                         . '<td style="padding:6px 8px;text-align:right;">₱ ' . number_format((float)$ln['unit_price'],2) . '</td>'
+                         . '<td style="padding:6px 8px;text-align:right;">₱ ' . number_format((float)$ln['line_total'],2) . '</td></tr>';
+                }
+                if (!$lines) { echo '<tr><td colspan="5" style="padding:6px 8px;color:#64748b;font-style:italic;">No items</td></tr>'; }
+                echo '</tbody><tfoot>'
+                    . '<tr><td colspan="4" style="text-align:right;padding:6px 8px;font-weight:600;">' . ($discount>0?'Gross:':'Total:') . '</td><td style="text-align:right;padding:6px 8px;font-weight:600;">₱ ' . number_format($gross,2) . '</td></tr>';
+                if ($discount>0) {
+                     echo '<tr><td colspan="4" style="text-align:right;padding:6px 8px;font-size:11px;color:#64748b;">Discount:</td><td style="text-align:right;padding:6px 8px;font-size:11px;color:#64748b;">₱ ' . number_format($discount,2) . '</td></tr>'
+                         . '<tr><td colspan="4" style="text-align:right;padding:6px 8px;font-weight:700;">Net:</td><td style="text-align:right;padding:6px 8px;font-weight:700;">₱ ' . number_format($net,2) . '</td></tr>';
+                }
+                echo '</tfoot></table>';
+                if (!empty($h['notes'])) { echo '<div style="margin-top:8px;font-size:11px;line-height:1.3;"><strong>Notes:</strong> ' . nl2br(htmlspecialchars((string)$h['notes'], ENT_QUOTES, 'UTF-8')) . '</div>'; }
+                if (!empty($h['supplier_terms'])) { echo '<div style="margin-top:6px;font-size:11px;line-height:1.3;"><strong>Supplier Terms:</strong> ' . nl2br(htmlspecialchars((string)$h['supplier_terms'], ENT_QUOTES, 'UTF-8')) . '</div>'; }
+                if (!empty($h['receiver_name'])) { echo '<div style="margin-top:6px;font-size:11px;line-height:1.3;"><strong>Received By:</strong> ' . htmlspecialchars((string)$h['receiver_name'], ENT_QUOTES, 'UTF-8') . (empty($h['received_date'])?'':' on ' . htmlspecialchars((string)$h['received_date'], ENT_QUOTES, 'UTF-8')) . '</div>'; }
+                echo '</div>';
+                return;
+          }
+          $this->render('procurement/po_view.php', ['po' => $h, 'items' => $lines]);
     }
 
     /** GET: Regenerate PO PDF and stream/download (export) */
@@ -3217,6 +3256,37 @@ class ProcurementController extends BaseController
         $pr = isset($_GET['pr']) ? trim((string)$_GET['pr']) : '';
         if ($pr === '') { header('Location: /manager/requests'); return; }
         $rows = $this->requests()->getGroupDetails($pr);
+        if (isset($_GET['partial']) && (string)$_GET['partial'] === '1') {
+            header('Content-Type: text/html; charset=utf-8');
+            echo '<div class="pr-expansion" style="padding:10px 4px 6px">';
+            // Meta summary (branch, requester, status/date)
+            $branch = $rows ? (string)($rows[0]['branch_name'] ?? 'N/A') : 'N/A';
+            $requester = $rows ? (string)($rows[0]['requested_by_name'] ?? 'N/A') : 'N/A';
+            $status = $rows ? (string)($rows[0]['status'] ?? 'pending') : 'pending';
+            $statusLabelMap = ['pending'=>'For Admin Approval','for_admin_approval'=>'For Admin Approval','approved'=>'Approved','canvassing_submitted'=>'Canvassing Submitted','canvassing_approved'=>'Canvassing Approved','canvassing_rejected'=>'Canvassing Rejected','rejected'=>'Rejected','in_progress'=>'In Progress','completed'=>'Completed','cancelled'=>'Cancelled'];
+            $statusLabel = $statusLabelMap[$status] ?? $status;
+            $dateSub = $rows ? date('Y-m-d', strtotime((string)($rows[0]['created_at'] ?? date('Y-m-d')))) : date('Y-m-d');
+            echo '<div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:10px;font-size:12px;">'
+                . '<div><strong>Branch:</strong> ' . htmlspecialchars($branch, ENT_QUOTES, 'UTF-8') . '</div>'
+                . '<div><strong>Requester:</strong> ' . htmlspecialchars($requester, ENT_QUOTES, 'UTF-8') . '</div>'
+                . '<div><strong>Status:</strong> <span style="padding:2px 6px;border:1px solid #ccc;border-radius:6px;font-size:11px;">' . htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') . '</span></div>'
+                . '<div><strong>Date:</strong> ' . htmlspecialchars($dateSub, ENT_QUOTES, 'UTF-8') . '</div>'
+                . '</div>';
+            echo '<table style="width:100%;border-collapse:collapse;font-size:12px;">'
+               . '<thead><tr style="background:#f1f5f9"><th style="text-align:left;padding:6px 8px;">Description</th><th style="padding:6px 8px;">Unit</th><th style="padding:6px 8px;">Qty</th></tr></thead><tbody>';
+            foreach ($rows as $r) {
+                $desc = (string)($r['item_name'] ?? 'Item');
+                $unit = (string)($r['unit'] ?? '');
+                $qty = (int)($r['quantity'] ?? 0);
+                echo '<tr><td style="padding:6px 8px;">' . htmlspecialchars($desc, ENT_QUOTES, 'UTF-8') . '</td>'
+                   . '<td style="padding:6px 8px;text-align:center;">' . htmlspecialchars($unit, ENT_QUOTES, 'UTF-8') . '</td>'
+                   . '<td style="padding:6px 8px;text-align:center;">' . $qty . '</td></tr>';
+            }
+            if (!$rows) { echo '<tr><td colspan="3" style="padding:6px 8px;color:#64748b;font-style:italic;">No items</td></tr>'; }
+            echo '</tbody></table>';
+            echo '</div>';
+            return;
+        }
         $this->render('procurement/request_view.php', ['pr' => $pr, 'rows' => $rows]);
     }
 

@@ -147,11 +147,16 @@
                             $canProcess = ($status === 'approved' || $status === 'canvassing_rejected');
                             $awaitingCanvass = ($status === 'canvassing_submitted');
                             $canCreatePo = ($status === 'canvassing_approved');
+                            $fullItems = (string)($g['items_summary'] ?? '');
+                            $parts = preg_split('/\r\n|\n|\r|,/', $fullItems) ?: [];
+                            $parts = array_values(array_filter(array_map('trim', $parts), static function($v){ return $v !== ''; }));
+                            $abbr = $parts ? $parts[0] : '';
+                            if (count($parts) > 1) { $abbr .= ' + …'; }
                         ?>
-                        <tr>
+                        <tr class="expandable-row" data-expand-url="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>&partial=1" data-expand-columns="7">
                             <td class="mono"><?= htmlspecialchars(\App\Services\IdService::format('PR', (string)$g['pr_number']), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)($g['branch_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><pre class="items"><?= htmlspecialchars((string)($g['items_summary'] ?? ''), ENT_QUOTES, 'UTF-8') ?></pre></td>
+                            <td><span class="pr-items-abbr" title="Click row to expand" data-full-items="<?= htmlspecialchars($fullItems, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($abbr, ENT_QUOTES, 'UTF-8') ?></span></td>
                             <td class="nowrap"><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)($g['min_created_at'] ?? 'now'))), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)($g['requested_by_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><span class="badge"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></span></td>
@@ -166,7 +171,7 @@
                                         </select>
                                         <button class="btn" type="submit">Update</button>
                                     </form>
-                                    <a class="btn" href="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>">View</a>
+                                    <a class="btn" href="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">Open</a>
                                     <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">Download PDF</a>
                                     <form action="/manager/requests/archive" method="POST" onsubmit="return confirm('Archive this Purchase Request?');" style="display:inline;">
                                         <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
