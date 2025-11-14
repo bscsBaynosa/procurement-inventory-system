@@ -68,6 +68,10 @@ try {
                 <svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 100 18 9 9 0 000-18zm-1 5h2v5h-5V11h3V8z"/></svg>
                 PR History
             </a>
+            <a href="/admin/pos" class="<?= nav_active('/admin/pos', $path) ?>">
+                <svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg>
+                Purchase Orders
+            </a>
         <?php elseif ($role === 'custodian'): ?>
         <?php elseif ($role === 'admin_assistant'): ?>
             <a href="/admin-assistant/inventory" class="<?= nav_active_many(array('/admin-assistant/inventory','/custodian/inventory'), $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 13h2v-2H3v2zm4 0h14v-2H7v2zM3 17h2v-2H3v2zm4 0h14v-2H7v2zM3 9h2V7H3v2zm4 0h14V7H7v2z"/></svg> Inventory</a>

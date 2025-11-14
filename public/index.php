@@ -414,6 +414,13 @@ if ($method === 'GET' && $path === '/procurement/pos') {
 	exit;
 }
 
+// Admin: Purchase Orders list (alias to Procurement list, visible under Admin menu)
+if ($method === 'GET' && $path === '/admin/pos') {
+	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? '') !== 'admin')) { header('Location: /login'); exit; }
+	$safeRun(static function() use ($manager){ $manager->poList(); });
+	exit;
+}
+
 // Procurement: Purchase Order detail view
 if ($method === 'GET' && $path === '/procurement/po/view') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }

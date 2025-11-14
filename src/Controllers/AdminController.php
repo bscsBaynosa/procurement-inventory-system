@@ -1584,6 +1584,15 @@ class AdminController extends BaseController
             $name = (string)($row['attachment_name'] ?? 'attachment');
             $path = (string)($row['attachment_path'] ?? '');
             if (!$row || $path === '' || !is_file($path)) {
+                // Attempt PO PDF regeneration if filename suggests a PO document
+                if ($path === '' || !is_file($path)) {
+                    $regen = $this->tryRegeneratePoByAttachmentName($name);
+                    if ($regen && is_file($regen)) {
+                        $path = $regen;
+                        // Persist regenerated path back to message for durability
+                        try { $up = $this->pdo->prepare('UPDATE messages SET attachment_path = :p WHERE id = :id'); $up->execute(['p' => $path, 'id' => $id]); } catch (\Throwable $ignored) {}
+                    }
+                }
                 // Fallback: messages_attachments table
                 try {
                     $st2 = $this->pdo->prepare('SELECT a.file_name, a.file_path FROM messages_attachments a JOIN messages m ON m.id = a.message_id WHERE a.message_id = :id AND (m.recipient_id = :me OR m.sender_id = :me) ORDER BY a.uploaded_at DESC LIMIT 1');
@@ -1672,6 +1681,15 @@ class AdminController extends BaseController
                 } catch (\Throwable $ignored) {}
             }
 
+            if ($path === '' || !is_file($path)) {
+                // Attempt PO PDF regeneration if filename indicates a PO
+                $regen = $this->tryRegeneratePoByAttachmentName($name);
+                if ($regen && is_file($regen)) {
+                    $path = $regen;
+                    // Persist to message when primary attachment
+                    try { $up = $this->pdo->prepare('UPDATE messages SET attachment_path = :p WHERE id = :id'); $up->execute(['p' => $path, 'id' => $id]); } catch (\Throwable $ignored) {}
+                }
+            }
             if ($path === '' || !is_file($path)) { http_response_code(404); echo 'File not found'; return; }
 
             // Best-effort content type detection (inline). Prefer PDF; allow images to preview inline too.
@@ -1690,6 +1708,81 @@ class AdminController extends BaseController
             header('Content-Type: text/plain');
             echo 'Preview error: ' . $e->getMessage();
         }
+    }
+
+    /**
+     * Best-effort regeneration for a missing official PO PDF based on attachment filename.
+     * Recognizes names like "PO-2025001.pdf" and rebuilds from purchase_orders and lines.
+     * Returns the path to the regenerated file or null on failure.
+     */
+    private function tryRegeneratePoByAttachmentName(string $attachmentName): ?string
+    {
+        $name = trim($attachmentName);
+        if ($name === '') { return null; }
+        if (!preg_match('/^po[-_\s]?([0-9]{7})\.pdf$/i', $name, $m)) { return null; }
+        $poNum = $m[1];
+        try {
+            $pdo = $this->pdo;
+            // Detect legacy primary key name
+            $idCol = 'id';
+            try {
+                $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn();
+                if (!$hasId) {
+                    $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn();
+                    if ($hasPoId) { $idCol = 'po_id'; }
+                }
+            } catch (\Throwable $e) {}
+            // Load PO by po_number
+            $st = $pdo->prepare('SELECT ' . $idCol . ' AS id, po_number, vendor_name, vendor_address, vendor_tin, reference, terms, center, notes, discount, deliver_to, look_for, prepared_by, reviewed_by, approved_by, created_at FROM purchase_orders WHERE po_number = :po LIMIT 1');
+            $st->execute(['po' => $poNum]);
+            $po = $st->fetch();
+            if (!$po) { return null; }
+            $id = (int)$po['id'];
+            $it = $pdo->prepare('SELECT description, unit, qty, unit_price, line_total FROM purchase_order_items WHERE po_id = :id ORDER BY id ASC');
+            $it->execute(['id' => $id]);
+            $items = [];
+            foreach ($it->fetchAll() as $r) {
+                $items[] = [
+                    'description' => (string)$r['description'],
+                    'unit' => (string)$r['unit'],
+                    'qty' => (int)$r['qty'],
+                    'unit_price' => (float)$r['unit_price'],
+                    'total' => (float)$r['line_total'],
+                ];
+            }
+            if (empty($items)) { return null; }
+            $root = @realpath(__DIR__ . '/../../..') ?: null;
+            $dir = $root ? ($root . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf') : (sys_get_temp_dir());
+            if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+            $file = rtrim($dir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'PO-' . preg_replace('/[^A-Za-z0-9_-]/','_', (string)$po['po_number']) . '.pdf';
+            // Generate
+            try {
+                $pdf = new \App\Services\PDFService();
+                $pdf->generatePurchaseOrderPDFToFile([
+                    'po_number' => (string)$po['po_number'],
+                    'date' => date('Y-m-d', strtotime((string)($po['created_at'] ?? date('Y-m-d')))),
+                    'vendor_name' => (string)($po['vendor_name'] ?? ''),
+                    'vendor_address' => (string)($po['vendor_address'] ?? ''),
+                    'vendor_tin' => (string)($po['vendor_tin'] ?? ''),
+                    'reference' => (string)($po['reference'] ?? ''),
+                    'terms' => (string)($po['terms'] ?? ''),
+                    'center' => (string)($po['center'] ?? ''),
+                    'notes' => (string)($po['notes'] ?? ''),
+                    'discount' => isset($po['discount']) ? (float)$po['discount'] : 0.0,
+                    'deliver_to' => (string)($po['deliver_to'] ?? ''),
+                    'look_for' => (string)($po['look_for'] ?? ''),
+                    'prepared_by' => (string)($po['prepared_by'] ?? ''),
+                    'reviewed_by' => (string)($po['reviewed_by'] ?? ''),
+                    'approved_by' => (string)($po['approved_by'] ?? ''),
+                    'items' => $items,
+                ], $file);
+                if (is_file($file)) {
+                    try { $pdo->prepare('UPDATE purchase_orders SET pdf_path = :p, updated_at = NOW() WHERE ' . $idCol . ' = :id')->execute(['p' => $file, 'id' => $id]); } catch (\Throwable $ignored) {}
+                    return $file;
+                }
+            } catch (\Throwable $e) { return null; }
+        } catch (\Throwable $e) { return null; }
+        return null;
     }
 
     public function settings(): void

@@ -1209,6 +1209,19 @@ class ProcurementController extends BaseController
                 if ($hasPoId) { $idCol = 'po_id'; }
             }
         } catch (\Throwable $e) { /* ignore */ }
+        // Prepare joins to also provide pr_number if missing (mirrors poView)
+        $canJoinPR = false;
+        try {
+            $hasPoPrNumber = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='pr_number'")->fetchColumn();
+            if (!$hasPoPrNumber) {
+                $hasPoPrId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='pr_id'")->fetchColumn();
+                $hasReqId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_requests' AND column_name='request_id'")->fetchColumn();
+                $hasReqPrNumber = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_requests' AND column_name='pr_number'")->fetchColumn();
+                if ($hasPoPrId && $hasReqId && $hasReqPrNumber) { $canJoinPR = true; }
+            }
+        } catch (\Throwable $e) { /* ignore */ }
+        $selectPr = $canJoinPR ? "COALESCE(po.pr_number, pr.pr_number) AS pr_number" : "COALESCE(po.pr_number, 'N/A') AS pr_number";
+        $joinPrSql = $canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '';
         try {
             $sqlH = 'SELECT po.*, ' . $selectPr . ', u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.' . $supplierCol . $joinPrSql . ' WHERE po.' . $idCol . ' = :id';
             $st = $pdo->prepare($sqlH);
@@ -1265,6 +1278,7 @@ class ProcurementController extends BaseController
         if ($size !== null) { header('Content-Length: ' . (string)$size); }
         @readfile($file);
     }
+
 
     /** GET: Create RFP form (optionally prefilled from a PO id) */
     public function rfpCreate(): void
