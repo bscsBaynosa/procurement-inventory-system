@@ -61,7 +61,7 @@
                                 <?= htmlspecialchars($name, ENT_QUOTES, 'UTF-8') ?>
                             </span>
                             <?php if ($isPdf): ?>
-                                <a class="btn muted" style="height:30px;" href="/inbox/preview?id=<?= (int)$message['id'] ?><?= ($a['id']>0?'&aid='.(int)$a['id']:'') ?>">Preview</a>
+                                <a class="btn muted" style="height:30px;" href="/inbox/preview?id=<?= (int)$message['id'] ?><?= ($a['id']>0?'&aid='.(int)$a['id']:'') ?>" target="_blank" rel="noopener">Preview</a>
                             <?php endif; ?>
                             <a class="btn" style="height:30px;" href="/inbox/download?id=<?= (int)$message['id'] ?><?= ($a['id']>0?'&aid='.(int)$a['id']:'') ?>">Download</a>
                         </div>
