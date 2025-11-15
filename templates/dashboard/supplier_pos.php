@@ -31,7 +31,7 @@
         <h2 style="margin:0 0 12px 0;">Purchase Orders</h2>
         <div class="card">
             <table>
-                <thead><tr><th>PR</th><th>PO Number</th><th>Status</th><th>PDF</th><th>Respond / Receipt</th><th>Logistics</th></tr></thead>
+                <thead><tr><th>PR</th><th>PO Number</th><th>Status</th><th>PDF</th><th>Terms / Respond</th><th>Logistics / Shipment</th></tr></thead>
                 <tbody>
                     <?php if (!empty($pos)): foreach ($pos as $p): ?>
                         <tr>
@@ -46,64 +46,108 @@
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <form method="POST" action="/supplier/po/respond" style="display:grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap:8px; align-items:end;">
-                                    <input type="hidden" name="po_id" value="<?= (int)$p['id'] ?>" />
-                                    <div>
-                                        <label style="font-size:12px;color:var(--muted)">Supplier Terms</label>
-                                        <input name="supplier_terms" placeholder="e.g., 30 days, COD" />
-                                    </div>
-                                    <div>
-                                        <label style="font-size:12px;color:var(--muted)">Payment Method</label>
-                                        <select name="payment_method" required>
-                                            <option value="Downpayment">Downpayment</option>
-                                            <option value="COD">COD</option>
-                                            <option value="Check">Check</option>
-                                            <option value="After Delivery">After Delivery</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style="font-size:12px;color:var(--muted)">Delivery Option</label>
-                                        <select name="delivery_option" required>
-                                            <option value="Third-party Courier">Third-party Courier</option>
-                                            <option value="Pick-up">Pick-up</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style="font-size:12px;color:var(--muted)">Received By</label>
-                                        <input name="receiver_name" placeholder="Receiver name" />
-                                    </div>
-                                    <div>
-                                        <label style="font-size:12px;color:var(--muted)">Date Received</label>
-                                        <input name="received_date" type="date" />
-                                    </div>
-                                    <div style="grid-column:1/-1;">
-                                        <label style="font-size:12px;color:var(--muted)">Message / Deal Details</label>
-                                        <input name="message" placeholder="e.g., extra 5% discount if 10+ units" />
-                                    </div>
-                                    <div>
-                                        <button class="btn" type="submit">Submit</button>
-                                    </div>
-                                </form>
+                                <?php
+                                    $status = (string)($p['status'] ?? '');
+                                    $termsStatus = (string)($p['terms_status'] ?? '');
+                                    $supplierTerms = (string)($p['supplier_terms'] ?? '');
+                                    $procurementTerms = (string)($p['procurement_terms'] ?? '');
+                                ?>
+                                <div style="font-size:12px; line-height:1.4; margin-bottom:6px;">
+                                    <strong>Supplier Terms:</strong>
+                                    <?php if ($supplierTerms !== ''): ?>
+                                        <span><?= htmlspecialchars($supplierTerms, ENT_QUOTES, 'UTF-8') ?></span>
+                                    <?php else: ?>
+                                        <span style="color:var(--muted)">Not submitted yet</span>
+                                    <?php endif; ?><br>
+                                    <?php if ($procurementTerms !== ''): ?>
+                                        <strong>Procurement Counter:</strong>
+                                        <span><?= nl2br(htmlspecialchars($procurementTerms, ENT_QUOTES, 'UTF-8')) ?></span><br>
+                                    <?php endif; ?>
+                                    <?php if ($termsStatus !== ''): ?>
+                                        <strong>Status:</strong> <span style="padding:2px 6px;border:1px solid var(--border);border-radius:6px;display:inline-block;"><?= htmlspecialchars(str_replace('_',' ', $termsStatus), ENT_QUOTES, 'UTF-8') ?></span>
+                                    <?php endif; ?>
+                                </div>
+                                <?php if ($termsStatus === 'agreed'): ?>
+                                    <div style="font-size:12px;color:var(--accent);font-weight:600;">Accepted by Procurement. No further changes allowed.</div>
+                                <?php else: ?>
+                                    <form method="POST" action="/supplier/po/respond" style="display:grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap:8px; align-items:end;">
+                                        <input type="hidden" name="po_id" value="<?= (int)$p['id'] ?>" />
+                                        <div>
+                                            <label style="font-size:12px;color:var(--muted)">Supplier Terms</label>
+                                            <input name="supplier_terms" placeholder="e.g., 30 days, COD" />
+                                        </div>
+                                        <div>
+                                            <label style="font-size:12px;color:var(--muted)">Payment Method</label>
+                                            <select name="payment_method" required>
+                                                <option value="Downpayment">Downpayment</option>
+                                                <option value="COD">COD</option>
+                                                <option value="Check">Check</option>
+                                                <option value="After Delivery">After Delivery</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label style="font-size:12px;color:var(--muted)">Delivery Option</label>
+                                            <select name="delivery_option" required>
+                                                <option value="Third-party Courier">Third-party Courier</option>
+                                                <option value="Pick-up">Pick-up</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label style="font-size:12px;color:var(--muted)">Received By</label>
+                                            <input name="receiver_name" placeholder="Receiver name" />
+                                        </div>
+                                        <div>
+                                            <label style="font-size:12px;color:var(--muted)">Date Received</label>
+                                            <input name="received_date" type="date" />
+                                        </div>
+                                        <div style="grid-column:1/-1;">
+                                            <label style="font-size:12px;color:var(--muted)">Message / Deal Details</label>
+                                            <input name="message" placeholder="e.g., extra 5% discount if 10+ units" />
+                                        </div>
+                                        <div>
+                                            <button class="btn" type="submit">Submit</button>
+                                        </div>
+                                    </form>
+                                <?php endif; ?>
                             </td>
                             <td>
-                                <form method="POST" action="/supplier/po/logistics" style="display:grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap:8px; align-items:end;">
-                                    <input type="hidden" name="po_id" value="<?= (int)$p['id'] ?>" />
-                                    <div>
-                                        <label style="font-size:12px;color:var(--muted)">Status</label>
-                                        <select name="logistics_status" required>
-                                            <option value="waiting_for_courier">Waiting for Courier</option>
-                                            <option value="in_transit">In Transit</option>
-                                            <option value="delivered">Delivered</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label style="font-size:12px;color:var(--muted)">Notes</label>
-                                        <input name="logistics_notes" placeholder="Optional notes" />
-                                    </div>
-                                    <div>
-                                        <button class="btn" type="submit">Update</button>
-                                    </div>
-                                </form>
+                                <?php
+                                    $logisticsStatus = (string)($p['logistics_status'] ?? '');
+                                    $logisticsNotes = (string)($p['logistics_notes'] ?? '');
+                                ?>
+                                <div style="font-size:12px; line-height:1.4; margin-bottom:6px;">
+                                    <strong>Current Logistics:</strong>
+                                    <?php if ($logisticsStatus !== ''): ?>
+                                        <span><?= htmlspecialchars(str_replace('_',' ', $logisticsStatus), ENT_QUOTES, 'UTF-8') ?></span>
+                                    <?php else: ?>
+                                        <span style="color:var(--muted)">Not started</span>
+                                    <?php endif; ?>
+                                    <?php if ($logisticsNotes !== ''): ?>
+                                        <br><strong>Notes:</strong> <?= nl2br(htmlspecialchars($logisticsNotes, ENT_QUOTES, 'UTF-8')) ?>
+                                    <?php endif; ?>
+                                </div>
+                                <?php if ($termsStatus !== 'agreed'): ?>
+                                    <div style="font-size:12px;color:var(--muted);">Awaiting Procurement acceptance of Terms of Payment before shipment updates.</div>
+                                <?php else: ?>
+                                    <form method="POST" action="/supplier/po/logistics" style="display:grid; grid-template-columns: repeat(auto-fit,minmax(160px,1fr)); gap:8px; align-items:end;">
+                                        <input type="hidden" name="po_id" value="<?= (int)$p['id'] ?>" />
+                                        <div>
+                                            <label style="font-size:12px;color:var(--muted)">Status</label>
+                                            <select name="logistics_status" required>
+                                                <option value="waiting_for_courier">Waiting for Courier</option>
+                                                <option value="in_transit">In Transit</option>
+                                                <option value="delivered">Delivered</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label style="font-size:12px;color:var(--muted)">Notes</label>
+                                            <input name="logistics_notes" placeholder="Optional notes" />
+                                        </div>
+                                        <div>
+                                            <button class="btn" type="submit">Update</button>
+                                        </div>
+                                    </form>
+                                <?php endif; ?>
                             </td>
                         </tr>
                     <?php endforeach; else: ?>

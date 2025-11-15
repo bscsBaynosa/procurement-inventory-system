@@ -309,8 +309,14 @@ class SupplierController extends BaseController
         try {
             $this->pdo->exec("CREATE TABLE IF NOT EXISTS purchase_orders (id BIGSERIAL PRIMARY KEY, pr_number VARCHAR(64) NOT NULL, po_number VARCHAR(64) NOT NULL, supplier_id BIGINT NOT NULL, status VARCHAR(64) NOT NULL DEFAULT 'draft', pdf_path TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());");
         } catch (\Throwable $e) {}
+        // Ensure new negotiation + logistics columns exist so SELECT won't fail on legacy schemas
+        try { $this->pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS supplier_terms TEXT"); } catch (\Throwable $e) {}
+        try { $this->pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS procurement_terms TEXT"); } catch (\Throwable $e) {}
+        try { $this->pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS terms_status VARCHAR(64)"); } catch (\Throwable $e) {}
+        try { $this->pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS logistics_status VARCHAR(64)"); } catch (\Throwable $e) {}
+        try { $this->pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS logistics_notes TEXT"); } catch (\Throwable $e) {}
         $pk = \App\Database\SchemaHelper::getPoPrimaryKey($this->pdo);
-        $st = $this->pdo->prepare('SELECT ' . $pk . ' AS id, pr_number, po_number, status, pdf_path, created_at FROM purchase_orders WHERE supplier_id = :sid ORDER BY created_at DESC');
+        $st = $this->pdo->prepare('SELECT ' . $pk . ' AS id, pr_number, po_number, status, terms_status, supplier_terms, procurement_terms, logistics_status, logistics_notes, pdf_path, created_at FROM purchase_orders WHERE supplier_id = :sid ORDER BY created_at DESC');
         $st->execute(['sid' => $me]);
         $pos = $st->fetchAll();
         $this->render('dashboard/supplier_pos.php', ['pos' => $pos]);
