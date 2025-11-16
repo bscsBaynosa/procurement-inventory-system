@@ -129,6 +129,24 @@
                             <?php else: ?>
                                 <span class="muted">—</span>
                             <?php endif; ?>
+                            <?php
+                                $role = $_SESSION['role'] ?? '';
+                                $stPO = (string)($p['status'] ?? '');
+                                // Negotiation states where procurement can act
+                                $canNegotiate = in_array($stPO, ['supplier_response_submitted','terms_counter_proposed'], true) && in_array($role, ['procurement','procurement_manager'], true);
+                            ?>
+                            <?php if ($canNegotiate): ?>
+                                <a href="/procurement/po/view?id=<?= (int)$p['id'] ?>" class="btn" style="margin-left:6px;" title="Open full PO view to review terms">Review Terms</a>
+                                <form method="POST" action="/procurement/po/terms/agree" style="display:inline;margin-left:6px;">
+                                    <input type="hidden" name="po_id" value="<?= (int)$p['id'] ?>" />
+                                    <button type="submit" class="btn primary" title="Agree to supplier's submitted terms">Agree</button>
+                                </form>
+                                <form method="POST" action="/procurement/po/terms/propose" style="display:inline;margin-left:6px;">
+                                    <input type="hidden" name="po_id" value="<?= (int)$p['id'] ?>" />
+                                    <input type="hidden" name="proposal" value="" />
+                                    <button type="submit" class="btn" title="Send a counter proposal (edit inside PO view for details)">Counter</button>
+                                </form>
+                            <?php endif; ?>
                             <?php if (isset($_SESSION['role']) && (string)$_SESSION['role'] === 'admin'): ?>
                                 <?php $st = (string)($p['status'] ?? ''); $canAdminAct = ($st !== 'po_admin_approved' && $st !== 'po_rejected'); ?>
                                 <?php if ($canAdminAct && (string)($filters['show'] ?? 'active') !== 'archived'): ?>
