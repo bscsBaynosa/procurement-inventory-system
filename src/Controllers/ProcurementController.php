@@ -1144,18 +1144,20 @@ class ProcurementController extends BaseController
             }
         } catch (\Throwable $e) { /* ignore */ }
         $selectPr = "COALESCE(po.pr_number, pr.pr_number) AS pr_number";
+        // Always alias primary key to id for templates, regardless of legacy schemas
+        $selectId = 'po.' . $idCol . ' AS id';
         if (!$canJoinPR) { $selectPr = "COALESCE(po.pr_number, 'N/A') AS pr_number"; }
         $joinPrSql = $canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '';
         // Load header with supplier name
         $h = null;
         try {
-            $sqlH = 'SELECT po.*, ' . $selectPr . ', u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.' . $supplierCol . $joinPrSql . ' WHERE po.' . $idCol . ' = :id';
+            $sqlH = 'SELECT ' . $selectId . ', po.*, ' . $selectPr . ', u.full_name AS supplier_name FROM purchase_orders po JOIN users u ON u.user_id = po.' . $supplierCol . $joinPrSql . ' WHERE po.' . $idCol . ' = :id';
             $st = $pdo->prepare($sqlH);
             $st->execute(['id' => $id]);
             $h = $st->fetch();
         } catch (\Throwable $e) {
             // Fallback for legacy schemas without supplier column: no users join
-                $sqlH = 'SELECT po.*, ' . $selectPr . ', COALESCE(po.vendor_name, \'Unknown Supplier\') AS supplier_name FROM purchase_orders po' . $joinPrSql . ' WHERE po.' . $idCol . ' = :id';
+                $sqlH = 'SELECT ' . $selectId . ', po.*, ' . $selectPr . ', COALESCE(po.vendor_name, \'Unknown Supplier\') AS supplier_name FROM purchase_orders po' . $joinPrSql . ' WHERE po.' . $idCol . ' = :id';
             $st = $pdo->prepare($sqlH);
             $st->execute(['id' => $id]);
             $h = $st->fetch();
