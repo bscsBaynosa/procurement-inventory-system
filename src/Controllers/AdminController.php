@@ -283,8 +283,11 @@ class AdminController extends BaseController
                     if ($hasPoId) { $idCol = 'po_id'; }
                 }
             } catch (\Throwable $e) {}
-            $st = $pdo->prepare("UPDATE purchase_orders SET is_archived = TRUE, updated_at = NOW() WHERE " . $idCol . " = :id");
-            $st->execute(['id' => $id]);
+            // Ensure timestamp columns exist
+            try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ"); } catch (\Throwable $e) {}
+            try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL"); } catch (\Throwable $e) {}
+            $st = $pdo->prepare("UPDATE purchase_orders SET is_archived = TRUE, archived_at = NOW(), archived_by = :by, updated_at = NOW() WHERE " . $idCol . " = :id");
+            $st->execute(['id' => $id, 'by' => (int)($_SESSION['user_id'] ?? 0)]);
             header('Location: /admin/pos?archived=1');
         } catch (\Throwable $e) {
             header('Location: /admin/pos?error=' . rawurlencode($e->getMessage()));
@@ -309,8 +312,10 @@ class AdminController extends BaseController
                     if ($hasPoId) { $idCol = 'po_id'; }
                 }
             } catch (\Throwable $e) {}
-            $st = $pdo->prepare("UPDATE purchase_orders SET is_archived = FALSE, updated_at = NOW() WHERE " . $idCol . " = :id");
-            $st->execute(['id' => $id]);
+            try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS restored_at TIMESTAMPTZ"); } catch (\Throwable $e) {}
+            try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS restored_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL"); } catch (\Throwable $e) {}
+            $st = $pdo->prepare("UPDATE purchase_orders SET is_archived = FALSE, restored_at = NOW(), restored_by = :by, updated_at = NOW() WHERE " . $idCol . " = :id");
+            $st->execute(['id' => $id, 'by' => (int)($_SESSION['user_id'] ?? 0)]);
             header('Location: /admin/pos?show=archived&restored=1');
         } catch (\Throwable $e) {
             header('Location: /admin/pos?show=archived&error=' . rawurlencode($e->getMessage()));
@@ -1079,19 +1084,65 @@ class AdminController extends BaseController
         $me = (int)($_SESSION['user_id'] ?? 0);
         if ($me <= 0) { header('Location: /login'); return; }
         try {
-            // Inbox: show all messages (read and unread), newest first
-            $stmt = $this->pdo->prepare('SELECT m.id, m.subject, m.body, m.created_at, m.sender_id, m.is_read, u.full_name AS from_name
+            // Ensure archive columns exist (idempotent)
+            try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE"); } catch (\Throwable $ignored) {}
+            try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ"); } catch (\Throwable $ignored) {}
+            try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL"); } catch (\Throwable $ignored) {}
+            $show = isset($_GET['show']) ? (string)$_GET['show'] : 'active';
+            $where = 'm.recipient_id = :me';
+            if ($show === 'archived') { $where .= ' AND COALESCE(m.is_archived, FALSE) = TRUE'; }
+            elseif ($show === 'active') { $where .= ' AND COALESCE(m.is_archived, FALSE) = FALSE'; }
+            $sql = 'SELECT m.id, m.subject, m.body, m.created_at, m.archived_at, m.sender_id, m.is_read, COALESCE(m.is_archived, FALSE) AS is_archived, u.full_name AS from_name
                 FROM messages m JOIN users u ON u.user_id = m.sender_id
-                WHERE m.recipient_id = :me
-                ORDER BY m.created_at DESC');
+                WHERE ' . $where . '
+                ORDER BY COALESCE(m.archived_at, m.created_at) DESC';
+            $stmt = $this->pdo->prepare($sql);
             $stmt->execute(['me' => $me]);
             $list = $stmt->fetchAll();
             foreach ($list as &$row) { $row['body'] = \App\Services\CryptoService::maybeDecrypt((string)$row['body']); }
-            $this->render('dashboard/inbox.php', ['inbox' => $list]);
+            $this->render('dashboard/inbox.php', ['inbox' => $list, 'filters' => ['show' => $show]]);
         } catch (\Throwable $e) {
             http_response_code(500);
             header('Content-Type: text/plain');
             echo 'Error loading notifications: ' . $e->getMessage();
+        }
+    }
+
+    /** Archive a message for the current user (soft delete). */
+    public function archiveMessage(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        if ($me <= 0 || $id <= 0) { header('Location: /inbox'); return; }
+        try {
+            try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE"); } catch (\Throwable $ignored) {}
+            try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ"); } catch (\Throwable $ignored) {}
+            try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL"); } catch (\Throwable $ignored) {}
+            $st = $this->pdo->prepare('UPDATE messages SET is_archived = TRUE, archived_at = NOW(), archived_by = :by WHERE id = :id AND recipient_id = :me');
+            $st->execute(['by' => $me, 'id' => $id, 'me' => $me]);
+            $ref = $_SERVER['HTTP_REFERER'] ?? '/inbox?show=active';
+            header('Location: ' . $ref);
+        } catch (\Throwable $e) {
+            header('Location: /inbox?error=' . rawurlencode($e->getMessage()));
+        }
+    }
+
+    /** Restore an archived message for the current user. */
+    public function restoreMessage(): void
+    {
+        if (session_status() !== \PHP_SESSION_ACTIVE) { @session_start(); }
+        $me = (int)($_SESSION['user_id'] ?? 0);
+        $id = isset($_POST['id']) ? (int)$_POST['id'] : 0;
+        if ($me <= 0 || $id <= 0) { header('Location: /inbox?show=archived'); return; }
+        try {
+            try { $this->pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE"); } catch (\Throwable $ignored) {}
+            $st = $this->pdo->prepare('UPDATE messages SET is_archived = FALSE WHERE id = :id AND recipient_id = :me');
+            $st->execute(['id' => $id, 'me' => $me]);
+            $ref = $_SERVER['HTTP_REFERER'] ?? '/inbox?show=archived';
+            header('Location: ' . $ref);
+        } catch (\Throwable $e) {
+            header('Location: /inbox?show=archived&error=' . rawurlencode($e->getMessage()));
         }
     }
 

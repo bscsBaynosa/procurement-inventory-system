@@ -160,6 +160,10 @@ class ProcurementController extends BaseController
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()"); } catch (\Throwable $e) {}
         // Archiving support
         try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS restored_at TIMESTAMPTZ"); } catch (\Throwable $e) {}
+        try { $pdo->exec("ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS restored_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL"); } catch (\Throwable $e) {}
         try { $pdo->exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_is_archived ON purchase_orders (is_archived)"); } catch (\Throwable $e) {}
     }
 
@@ -941,6 +945,12 @@ class ProcurementController extends BaseController
             $stmtUp = $pdo->prepare('UPDATE purchase_orders SET pdf_path=:p, updated_at=NOW() WHERE ' . $poPkCol . ' = :id');
             $stmtUp->execute(['p' => $file, 'id' => $poId]);
         } catch (\Throwable $e) { /* best-effort */ }
+        // Store PO PDF as lifecycle attachment (po_pdf)
+        try {
+            require_once __DIR__ . '/../services/AttachmentService.php';
+            $att = new \App\Services\AttachmentService($pdo);
+            $att->store($pr, 'po_pdf', $file);
+        } catch (\Throwable $ignored) {}
         // Ensure messages has attachment columns
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
@@ -951,11 +961,28 @@ class ProcurementController extends BaseController
         $subject = 'PO Approval • PR ' . $pr;
         // Update PR status before redirecting to compose
         try { $this->requests()->updateGroupStatus($pr, 'po_submitted', (int)($_SESSION['user_id'] ?? 0), 'PO submitted for admin approval'); } catch (\Throwable $ignored) {}
-        $_SESSION['flash_success'] = 'Purchase Order ' . htmlspecialchars($poNumber, ENT_QUOTES, 'UTF-8') . ' created. Please review the prefilled message and send to Admin.';
+        // Build cumulative attachment set for Admin (PR + Consumption + Canvass + PO so far)
+        $attachParams = '';
+        try {
+            $attSet = isset($att) ? $att->buildAdminAttachmentSet($pr) : [];
+            $i = 0;
+            foreach ($attSet as $a) {
+                // Use indexed query params attach_name[i], attach_path[i] (compose page should be extended to handle arrays)
+                $attachParams .= '&attach_name[' . $i . ']=' . rawurlencode(basename($a['name']))
+                              . '&attach_path[' . $i . ']=' . rawurlencode($a['path']);
+                $i++;
+            }
+            // Fallback single attachment if compose page doesn't yet parse arrays
+            if ($attachParams === '' && is_file($file)) {
+                $attachParams = '&attach_name=' . rawurlencode(basename($file)) . '&attach_path=' . rawurlencode($file);
+            }
+        } catch (\Throwable $ignored) {
+            $attachParams = '&attach_name=' . rawurlencode(basename($file)) . '&attach_path=' . rawurlencode($file);
+        }
+        $_SESSION['flash_success'] = 'Purchase Order ' . htmlspecialchars($poNumber, ENT_QUOTES, 'UTF-8') . ' created. Please review and send for admin approval.';
         $qs = '/admin/messages?to=' . rawurlencode($to)
             . '&subject=' . rawurlencode($subject)
-            . '&attach_name=' . rawurlencode(basename($file))
-            . '&attach_path=' . rawurlencode($file);
+            . $attachParams;
         header('Location: ' . $qs);
     }
 
@@ -1070,14 +1097,17 @@ class ProcurementController extends BaseController
         // Build dynamic SELECT mapping legacy column names to expected aliases
         $branchJoin = ($hasBranchCol ? ' LEFT JOIN branches b ON b.branch_id = po.branch_id' : '');
         $branchSelect = ($hasBranchCol ? ', b.name AS branch_name' : ', NULL AS branch_name');
-        $sqlJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, ' . $pdfPathSelect . ', po.created_at, u.full_name AS supplier_name' . $branchSelect
+        // archived_at may not exist on legacy DBs
+        $archivedAtSelect = 'po.archived_at';
+        try { $hasArchCol = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='archived_at'")->fetchColumn(); if (!$hasArchCol) { $archivedAtSelect = 'NULL AS archived_at'; } } catch (\Throwable $e) { $archivedAtSelect = 'NULL AS archived_at'; }
+        $sqlJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, ' . $pdfPathSelect . ', po.created_at, ' . $archivedAtSelect . ', u.full_name AS supplier_name' . $branchSelect
             . ' FROM purchase_orders po'
             . ' JOIN users u ON u.user_id = po.' . $supplierCol
             . ($canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '')
             . $branchJoin;
         // For no-join path, avoid touching vendor_name entirely (legacy DBs may not have it). Use a constant placeholder.
         $vendorNameExpr = "'Unknown Supplier'";
-        $sqlNoJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, ' . $pdfPathSelect . ', po.created_at, ' . $vendorNameExpr . ' AS supplier_name' . $branchSelect
+        $sqlNoJoin = 'SELECT po.' . $idCol . ' AS id, ' . $selectPr . ' AS pr_number, po.po_number, po.status, ' . $totalExpr . ' AS total, ' . $pdfPathSelect . ', po.created_at, ' . $archivedAtSelect . ', ' . $vendorNameExpr . ' AS supplier_name' . $branchSelect
             . ' FROM purchase_orders po'
             . ($canJoinPR ? ' LEFT JOIN purchase_requests pr ON pr.request_id = po.pr_id' : '')
             . $branchJoin;

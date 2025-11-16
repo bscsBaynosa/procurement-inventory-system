@@ -553,6 +553,17 @@ if ($method === 'GET' && $path === '/inbox/preview') {
 	$admin->previewMessageAttachment();
 	exit;
 }
+// Inbox archive/restore
+if ($method === 'POST' && $path === '/inbox/archive') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$admin->archiveMessage();
+	exit;
+}
+if ($method === 'POST' && $path === '/inbox/restore') {
+	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
+	$admin->restoreMessage();
+	exit;
+}
 
 // Secure PO PDF download
 if ($method === 'GET' && $path === '/po/download') {

@@ -44,6 +44,8 @@ h1 {
 /* Ensure form controls inherit Poppins for consistent UI */
 input, select, textarea, button {
     font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    font-size: 13px;
+    line-height: 1.2;
 }
 
 .dashboard {
@@ -102,23 +104,52 @@ input, select, textarea, button {
 
 /* --- Landing page enhancements (kept here so other pages remain unaffected) --- */
 .navbar { font-family: 'Poppins', Arial, sans-serif; }
-.btn { 
+.btn {
     font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-    font-weight: 700;
-    font-size: 14px;
+    font-weight: 600;
+    font-size: 13px;
     line-height: 1;
-    height: 40px;
-    padding: 0 14px;
+    min-height: 42px;
+    padding: 0 18px;
+    min-width: 110px;
     border-radius: 10px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    transition: all .15s ease;
+    transition: background .15s ease, color .15s ease, transform .15s ease;
+    cursor: pointer;
+    box-sizing: border-box;
 }
 .btn:active { transform: translateY(1px); }
 .btn.full { width: 100%; }
+.btn.small { min-width: 90px; min-height: 36px; padding: 0 14px; font-size: 12px; }
+.btn.lg { min-width: 140px; min-height: 48px; font-size: 14px; font-weight: 700; }
+.btn.primary { background: #22c55e; color: #fff; border: 1px solid #22c55e; }
+.btn.primary:hover { background: #16a34a; }
+.btn.outline { background: #ffffff; border: 1px solid #cbd5e1; color:#0f172a; }
+.btn.outline:hover { background:#f1f5f9; }
+.btn.destructive { background:#ef4444; color:#fff; border:1px solid #ef4444; }
+.btn.destructive:hover { background:#dc2626; }
+.btn:disabled, .btn.disabled { opacity:.55; cursor:not-allowed; }
 .modal-backdrop { animation: fadeIn .15s ease; }
 @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+
+/* Standardized text inputs */
+input[type="text"], input[type="number"], input[type="date"], input[type="email"], input[type="search"], textarea, select {
+    padding: 10px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    background:#fff;
+    color:#0f172a;
+    box-sizing: border-box;
+}
+html[data-theme="dark"] input[type="text"], html[data-theme="dark"] input[type="number"], html[data-theme="date"], html[data-theme="dark"] input[type="email"], html[data-theme="dark"] input[type="search"], html[data-theme="dark"] textarea, html[data-theme="dark"] select {
+    background:#0f172a; color:#e2e8f0; border-color:#334155;
+}
+input::placeholder, textarea::placeholder { color:#64748b; opacity:.9; }
+html[data-theme="dark"] input::placeholder, html[data-theme="dark"] textarea::placeholder { color:#94a3b8; }
+input:focus, textarea:focus, select:focus { outline:2px solid #22c55e55; outline-offset:2px; }
+html[data-theme="dark"] input:focus, html[data-theme="dark"] textarea:focus, html[data-theme="dark"] select:focus { outline:2px solid #22c55e99; }
 
 /* Global nav icon sizing for consistent module icons */
 .nav svg {

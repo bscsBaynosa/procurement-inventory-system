@@ -100,7 +100,13 @@ foreach ([
     "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS procurement_terms TEXT" => 'add procurement_terms',
     "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS logistics_status VARCHAR(64)" => 'add logistics_status',
     "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS logistics_notes TEXT" => 'add logistics_notes',
-    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS gate_pass_path TEXT" => 'add gate_pass_path'
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS gate_pass_path TEXT" => 'add gate_pass_path',
+    // Archiving metadata for POs
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE" => 'add is_archived',
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ" => 'add archived_at',
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL" => 'add archived_by',
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS restored_at TIMESTAMPTZ" => 'add restored_at',
+    "ALTER TABLE purchase_orders ADD COLUMN IF NOT EXISTS restored_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL" => 'add restored_by'
 ] as $sql => $label) { $exec($sql, $label); }
 
 // 3. Indexes
@@ -108,6 +114,8 @@ $exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_purchase_orders_po_number_unique ON
 $exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_supplier ON purchase_orders(supplier_id)", 'index supplier_id');
 $exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_status ON purchase_orders(status)", 'index status');
 $exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_branch ON purchase_orders(branch_id)", 'index branch_id');
+// Archive/filter indexes
+$exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_is_archived ON purchase_orders(is_archived)", 'index is_archived');
 // Helpful indexes for new columns
 $exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_terms_status ON purchase_orders(terms_status)", 'index terms_status');
 $exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_logistics_status ON purchase_orders(logistics_status)", 'index logistics_status');
@@ -115,8 +123,20 @@ $exec("CREATE INDEX IF NOT EXISTS idx_purchase_orders_logistics_status ON purcha
 // 4. Messages attachment evolution for PO flow
 foreach ([
     "ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255)" => 'messages.attachment_name',
-    "ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT" => 'messages.attachment_path'
+    "ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT" => 'messages.attachment_path',
+    // Messages archiving for retrieval with timestamps
+    "ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE" => 'messages.is_archived',
+    "ALTER TABLE messages ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ" => 'messages.archived_at',
+    "ALTER TABLE messages ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL" => 'messages.archived_by'
 ] as $sql => $label) { $exec($sql, $label); }
+// Helpful index for messages archive filters
+$exec("CREATE INDEX IF NOT EXISTS idx_messages_is_archived ON messages(is_archived)", 'index messages.is_archived');
+
+// 5. Attachments lifecycle table hardening (timestamps are already present via AttachmentService ensure)
+//    Add archiving columns for future archive/restore controls
+$exec("ALTER TABLE IF EXISTS pr_process_files ADD COLUMN IF NOT EXISTS is_archived BOOLEAN NOT NULL DEFAULT FALSE", 'pr_process_files.is_archived');
+$exec("ALTER TABLE IF EXISTS pr_process_files ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ", 'pr_process_files.archived_at');
+$exec("ALTER TABLE IF EXISTS pr_process_files ADD COLUMN IF NOT EXISTS archived_by BIGINT REFERENCES users(user_id) ON DELETE SET NULL", 'pr_process_files.archived_by');
 
 // 5. Output log
 $exec("UPDATE purchase_orders po

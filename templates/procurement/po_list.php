@@ -110,7 +110,14 @@
             <tbody>
                 <?php if (!empty($pos)): foreach ($pos as $p): ?>
                     <tr class="expandable-row" data-expand-url="/procurement/po/view?id=<?= (int)$p['id'] ?>&partial=1" data-expand-columns="8">
-                        <td class="nowrap"><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)$p['created_at'])), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td class="nowrap">
+                            <?php if (($filters['show'] ?? 'active') === 'archived' && !empty($p['archived_at'])): ?>
+                                <?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)$p['archived_at'])), ENT_QUOTES, 'UTF-8') ?>
+                                <span class="muted" style="font-size:11px;">(Archived)</span>
+                            <?php else: ?>
+                                <?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)$p['created_at'])), ENT_QUOTES, 'UTF-8') ?>
+                            <?php endif; ?>
+                        </td>
                         <td class="mono"><?= htmlspecialchars(\App\Services\IdService::format('PR', (string)$p['pr_number']), ENT_QUOTES, 'UTF-8') ?></td>
                         <td class="mono"><?= htmlspecialchars((string)$p['po_number'], ENT_QUOTES, 'UTF-8') ?></td>
                         <td><?= htmlspecialchars((string)$p['supplier_name'], ENT_QUOTES, 'UTF-8') ?></td>

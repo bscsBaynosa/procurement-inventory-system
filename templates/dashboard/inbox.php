@@ -31,7 +31,25 @@
     <main class="content">
         <div class="card">
             <div style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
-                <h2 style="margin:0;">Inbox</h2>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <h2 style="margin:0;">Inbox</h2>
+                    <?php $show = (string)($filters['show'] ?? 'active'); ?>
+                    <div style="display:flex; gap:6px;">
+                        <?php if ($show === 'archived'): ?>
+                            <a class="btn muted" href="/inbox?show=active">Active</a>
+                            <span class="btn" style="pointer-events:none;opacity:.8;">Archived</span>
+                            <a class="btn muted" href="/inbox?show=all">All</a>
+                        <?php elseif ($show === 'all'): ?>
+                            <a class="btn muted" href="/inbox?show=active">Active</a>
+                            <a class="btn muted" href="/inbox?show=archived">Archived</a>
+                            <span class="btn" style="pointer-events:none;opacity:.8;">All</span>
+                        <?php else: ?>
+                            <span class="btn" style="pointer-events:none;opacity:.8;">Active</span>
+                            <a class="btn muted" href="/inbox?show=archived">Archived</a>
+                            <a class="btn muted" href="/inbox?show=all">All</a>
+                        <?php endif; ?>
+                    </div>
+                </div>
                 <a class="btn primary" href="/admin/messages" style="text-decoration:none;">New Message</a>
             </div>
             <div style="height:8px;"></div>
@@ -42,7 +60,14 @@
                     <tr class="<?= !empty($n['is_read']) ? '' : 'unread' ?>">
                         <td><?= htmlspecialchars((string)$n['from_name'], ENT_QUOTES, 'UTF-8') ?></td>
                         <td><a href="/inbox/view?id=<?= (int)$n['id'] ?>" style="text-decoration:none;color:inherit;"><?= htmlspecialchars((string)$n['subject'], ENT_QUOTES, 'UTF-8') ?></a></td>
-                        <td><?= htmlspecialchars((string)$n['created_at'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td>
+                            <?php if (($filters['show'] ?? 'active') === 'archived' && !empty($n['is_archived'])): ?>
+                                <div><?= htmlspecialchars((string)($n['archived_at'] ?? $n['created_at']), ENT_QUOTES, 'UTF-8') ?></div>
+                                <div style="font-size:11px;color:#64748b;">Archived</div>
+                            <?php else: ?>
+                                <?= htmlspecialchars((string)$n['created_at'], ENT_QUOTES, 'UTF-8') ?>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <div style="display:flex; gap:8px;">
                                 <a class="btn muted" href="/admin/messages?to=<?= (int)$n['sender_id'] ?>&subject=Re:%20<?= rawurlencode((string)$n['subject']) ?>">Reply</a>
@@ -53,6 +78,17 @@
                                     </form>
                                 <?php else: ?>
                                     <span class="btn muted" style="pointer-events:none;opacity:.7;">Read</span>
+                                <?php endif; ?>
+                                <?php if (empty($n['is_archived'])): ?>
+                                    <form method="POST" action="/inbox/archive">
+                                        <input type="hidden" name="id" value="<?= (int)$n['id'] ?>" />
+                                        <button type="submit" class="btn">Archive</button>
+                                    </form>
+                                <?php else: ?>
+                                    <form method="POST" action="/inbox/restore">
+                                        <input type="hidden" name="id" value="<?= (int)$n['id'] ?>" />
+                                        <button type="submit" class="btn">Restore</button>
+                                    </form>
                                 <?php endif; ?>
                             </div>
                         </td>
