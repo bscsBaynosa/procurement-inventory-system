@@ -135,6 +135,26 @@
                 </div>
                 <div>
                     <strong>Procurement Proposal</strong>
+                <?php $termsStatus = (string)($po['terms_status'] ?? ''); ?>
+                <div style="margin-top:10px;font-size:12px;line-height:1.4;">
+                    <?php if (in_array($status, ['po_admin_approved','sent_to_supplier'], true) && $termsStatus === ''): ?>
+                        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:color-mix(in oklab, var(--card) 92%, var(--bg));">
+                            <strong>Awaiting Supplier Terms.</strong> Supplier must submit Terms of Payment before Procurement can accept or counter. Shipment cannot begin yet.
+                        </div>
+                    <?php elseif ($status === 'supplier_response_submitted' && $termsStatus !== 'agreed'): ?>
+                        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:color-mix(in oklab, var(--accent) 6%, var(--card));">
+                            <strong>Supplier Terms Received.</strong> Review and either Agree or send a Counter Proposal. Shipment will be unlocked after acceptance.
+                        </div>
+                    <?php elseif ($status === 'terms_counter_proposed' && $termsStatus === 'counter_proposed'): ?>
+                        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:color-mix(in oklab, var(--card) 92%, var(--bg));">
+                            <strong>Counter Proposal Sent.</strong> Waiting for supplier to respond. Shipment remains locked until agreement.
+                        </div>
+                    <?php elseif ($termsStatus === 'agreed'): ?>
+                        <div style="padding:10px 12px;border:1px solid var(--border);border-radius:10px;background:color-mix(in oklab, var(--accent) 8%, var(--card));">
+                            <strong>Terms Agreed.</strong> Supplier may now proceed with shipment. Logistics updates will appear below as they are posted.
+                        </div>
+                    <?php endif; ?>
+                </div>
                     <div class="muted" style="margin-top:4px; white-space:pre-line;">
                         <?= htmlspecialchars((string)($po['procurement_terms'] ?? ''), ENT_QUOTES, 'UTF-8') !== '' ? nl2br(htmlspecialchars((string)$po['procurement_terms'], ENT_QUOTES, 'UTF-8')) : '<span class="muted">—</span>' ?>
                     </div>
