@@ -8,8 +8,9 @@
     <?php require __DIR__ . '/../layouts/_favicon.php'; ?>
     <?php require __DIR__ . '/../layouts/_theme.php'; ?>
     <style>
-        :root{ --bg:#f8fafc; --card:#ffffff; --text:#0f172a; --muted:#64748b; --border:#e2e8f0; --accent:#0ea5e9; }
-        html[data-theme="dark"]{ --bg:#0b0b0b; --card:#0f172a; --text:#e2e8f0; --muted:#94a3b8; --border:#1f2937; --accent:#0ea5e9; }
+        /* Use global green accent; avoid overriding .btn styles from main.css */
+        :root{ --bg:#f8fafc; --card:#ffffff; --text:#0f172a; --muted:#64748b; --border:#e2e8f0; --accent:#22c55e; }
+        html[data-theme="dark"]{ --bg:#0b0b0b; --card:#0f172a; --text:#e2e8f0; --muted:#94a3b8; --border:#1f2937; --accent:#22c55e; }
         body{ margin:0; background:var(--bg); color:var(--text); font-family:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif; }
         .layout{ display:grid; grid-template-columns:240px 1fr; min-height:100vh; }
         .content{ padding:18px 20px; }
@@ -17,8 +18,7 @@
         table{ width:100%; border-collapse:collapse; }
         th,td{ padding:10px 12px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
         th{ color:var(--muted); background:color-mix(in oklab,var(--card) 92%, var(--bg)); }
-        .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:0 12px; height:42px; min-width:110px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); text-decoration:none; font-size:12px; }
-        .btn.primary{ border-color:color-mix(in oklab,var(--accent) 35%, var(--border)); background:color-mix(in oklab,var(--accent) 10%, transparent); }
+        /* Rely on global .btn and .btn.primary definitions from main.css for consistent green buttons */
         .muted{ color:var(--muted); }
         .badge{ background:color-mix(in oklab,var(--accent) 12%, transparent); border:1px solid color-mix(in oklab,var(--accent) 35%, var(--border)); padding:2px 6px; border-radius:999px; font-size:11px; }
     </style>
