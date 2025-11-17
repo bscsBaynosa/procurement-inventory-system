@@ -465,6 +465,18 @@ if ($method === 'POST' && $path === '/procurement/rfp/create') {
 	$manager->rfpSubmit();
 	exit;
 }
+// Procurement: RFP eligible listing (terms agreed POs)
+if ($method === 'GET' && $path === '/procurement/rfps') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$safeRun(static function() use ($manager){ $manager->rfpEligible(); });
+	exit;
+}
+// Procurement: Gate Pass eligible listing (delivered POs without gate pass)
+if ($method === 'GET' && $path === '/procurement/gatepasses') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$safeRun(static function() use ($manager){ $manager->gatePassEligible(); });
+	exit;
+}
 
 // Admin: PO approval/rejection
 if ($method === 'POST' && $path === '/admin/po/approve') {
