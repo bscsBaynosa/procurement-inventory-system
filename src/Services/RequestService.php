@@ -96,7 +96,7 @@ class RequestService
 		return $request;
 	}
 
-	// ===== Purchase Order Numbering (YYYY + 3-digit sequence like PR) =====
+	// ===== Purchase Order Numbering (YYYY-### sequence; legacy YYYY### still accepted) =====
 
 	/** Ensure the purchase_order_sequences table exists (idempotent). */
 	private function ensurePoSequenceTable(): void
@@ -137,7 +137,8 @@ class RequestService
 			$this->pdo->rollBack();
 			$next = 1; // fallback
 		}
-		return sprintf('%04d%03d', $year, $next);
+		// New format with hyphen for readability: YYYY-### (e.g., 2025-001)
+		return sprintf('%04d-%03d', $year, $next);
 	}
 
 	/** Preview the next PO number without incrementing. */
@@ -152,9 +153,9 @@ class RequestService
 			$st->execute(['y' => $year]);
 			$current = (int)$st->fetchColumn();
 			$next = $current + 1;
-			return sprintf('%04d%03d', $year, $next);
+			return sprintf('%04d-%03d', $year, $next);
 		} catch (\Throwable $e) {
-			return sprintf('%04d%03d', $year, 1);
+			return sprintf('%04d-%03d', $year, 1);
 		}
 	}
 

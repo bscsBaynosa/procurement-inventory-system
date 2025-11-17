@@ -678,9 +678,10 @@ class ProcurementController extends BaseController
         if ($poNumber === '') {
             try { $poNumber = $this->requests()->generateNewPoNumber(); } catch (\Throwable $e) { $poNumber = ''; }
         } else {
-            if (!preg_match('/^\d{7}$/', $poNumber)) { // Expect YYYY + 3-digit sequence e.g., 2025001
-                $_SESSION['flash_error'] = 'Invalid PO number format. Expected YYYYNNN.';
-                header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Invalid+PO+number+format+(expected+YYYYNNN)'); return;
+            // Accept new hyphenated format YYYY-### or legacy contiguous YYYY###
+            if (!preg_match('/^(?:\d{4}-\d{3}|\d{7})$/', $poNumber)) {
+                $_SESSION['flash_error'] = 'Invalid PO number format. Expected YYYY-### (e.g., 2025-001).';
+                header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Invalid+PO+number+format+(expected+YYYY-###)'); return;
             }
         }
         $vendorName = trim((string)($_POST['vendor_name'] ?? ''));
@@ -698,6 +699,14 @@ class ProcurementController extends BaseController
         $financeOfficer = trim((string)($_POST['finance_officer'] ?? ''));
         $adminName = trim((string)($_POST['admin_name'] ?? ''));
         // Terms of Payment no longer required at creation (supplier supplies later)
+        // Auto-fill Center from PR branch if blank
+        if ($center === '') {
+            try {
+                $rowsTmp = $this->requests()->getGroupDetails($pr) ?: [];
+                $centerCandidate = (string)($rowsTmp[0]['branch_name'] ?? '');
+                if ($centerCandidate !== '') { $center = $centerCandidate; }
+            } catch (\Throwable $ignored) {}
+        }
         if ($center === '' || $financeOfficer === '' || $adminName === '') {
             $_SESSION['flash_error'] = 'Required fields missing (Center, Finance Officer, Admin Name).';
             header('Location: /procurement/po/create?pr=' . urlencode($pr) . '&error=Required+fields+missing'); return;
@@ -900,9 +909,9 @@ class ProcurementController extends BaseController
                     // Try to compute a fresh PO number: prefer service, else year+random
                     $prev = $poNumber;
                     try { $poNumber = $this->requests()->generateNewPoNumber(); } catch (\Throwable $ignored) {}
-                    if ($poNumber === '' || $poNumber === $prev || !preg_match('/^\d{7}$/', $poNumber)) {
+                    if ($poNumber === '' || $poNumber === $prev || !preg_match('/^(?:\d{4}-\d{3}|\d{7})$/', $poNumber)) {
                         $year = (int)date('Y');
-                        $poNumber = (string)$year . str_pad((string)rand(100, 999), 3, '0', STR_PAD_LEFT);
+                        $poNumber = (string)$year . '-' . str_pad((string)rand(100, 999), 3, '0', STR_PAD_LEFT);
                     }
                     continue; // retry
                 }
