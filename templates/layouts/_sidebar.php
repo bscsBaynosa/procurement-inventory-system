@@ -95,6 +95,8 @@ try {
                 Purchase Requests
             </a>
             <a href="/procurement/pos" class="<?= nav_active('/procurement/pos', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Purchase Orders</a>
+            <a href="/procurement/rfps" class="<?= nav_active('/procurement/rfps', $path) ?>"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H5.17L4 17.17V4zm2 2v8h12V6H6z"/></svg> RFPs</a>
+            <a href="/procurement/gatepasses" class="<?= nav_active('/procurement/gatepasses', $path) ?>"><svg viewBox="0 0 24 24"><path d="M12 3l9 8-9 8-9-8 9-8zm0 3.3L6.6 12 12 16.7 17.4 12 12 6.3z"/></svg> Gate Passes</a>
         <?php elseif ($role === 'supplier'): ?>
             <a href="/supplier/items" class="<?= nav_active('/supplier/items', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM5 7v10h14V7H5z"/></svg> Items & Pricing</a>
             <a href="/supplier/packages" class="<?= nav_active('/supplier/packages', $path) ?>"><svg viewBox="0 0 24 24"><path d="M3 6l9-4 9 4-9 4-9-4zm0 6l9 4 9-4M3 18l9 4 9-4"/></svg> Package Deals</a>

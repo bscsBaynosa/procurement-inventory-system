@@ -6,6 +6,7 @@ use App\Services\AuthService;
 use App\Services\RequestService;
 use App\Services\InventoryService;
 use App\Services\PDFService;
+use App\Services\AttachmentService;
 
 class ProcurementController extends BaseController
 {
@@ -1017,6 +1018,7 @@ class ProcurementController extends BaseController
      */
     public function poList(): void
     {
+        
         if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
         $this->ensurePoTables();
         $pdo = \App\Database\Connection::resolve();
@@ -1138,6 +1140,36 @@ class ProcurementController extends BaseController
         $suppliers = $pdo->query("SELECT user_id, full_name FROM users WHERE role='supplier' AND is_active=TRUE ORDER BY full_name ASC")->fetchAll();
         $branches = $pdo->query("SELECT branch_id, name FROM branches WHERE is_active=TRUE ORDER BY name ASC")->fetchAll();
         $this->render('procurement/po_list.php', [ 'pos' => $pos, 'filters' => ['status' => $status, 'supplier' => $supplier, 'branch' => $branchFilter, 'from' => $fromDate, 'to' => $toDate, 'show' => $show], 'suppliers' => $suppliers, 'branches' => $branches ]);
+    }
+
+    /** GET: Eligible POs for RFP creation (terms agreed, not archived). */
+    public function rfpEligible(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
+        $this->ensurePoTables();
+        $pdo = \App\Database\Connection::resolve();
+        $idCol = 'id';
+        try { $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn(); if (!$hasId) { $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn(); if ($hasPoId) { $idCol = 'po_id'; } } } catch (\Throwable $e) {}
+        $sql = "SELECT $idCol AS id, pr_number, po_number, terms_status, status, created_at FROM purchase_orders
+                WHERE COALESCE(terms_status,'') = 'agreed' AND COALESCE(is_archived,FALSE)=FALSE
+                ORDER BY created_at DESC LIMIT 200";
+        try { $rows = $pdo->query($sql)->fetchAll() ?: []; } catch (\Throwable $e) { $rows = []; }
+        $this->render('procurement/rfp_list.php', ['rows' => $rows]);
+    }
+
+    /** GET: Eligible POs for Gate Pass generation (delivered, no gate_pass_path, not archived). */
+    public function gatePassEligible(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
+        $this->ensurePoTables();
+        $pdo = \App\Database\Connection::resolve();
+        $idCol = 'id';
+        try { $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn(); if (!$hasId) { $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn(); if ($hasPoId) { $idCol = 'po_id'; } } } catch (\Throwable $e) {}
+        $sql = "SELECT $idCol AS id, pr_number, po_number, logistics_status, gate_pass_path, created_at FROM purchase_orders
+                WHERE LOWER(COALESCE(logistics_status,'')) = 'delivered' AND (gate_pass_path IS NULL OR gate_pass_path='') AND COALESCE(is_archived,FALSE)=FALSE
+                ORDER BY created_at DESC LIMIT 200";
+        try { $rows = $pdo->query($sql)->fetchAll() ?: []; } catch (\Throwable $e) { $rows = []; }
+        $this->render('procurement/gate_pass_list.php', ['rows' => $rows]);
     }
 
     /** GET: Single PO detail with lines and meta for Procurement */
@@ -1424,6 +1456,12 @@ class ProcurementController extends BaseController
             ], $file);
             $pdo->prepare('UPDATE purchase_orders SET gate_pass_path = :p, updated_at = NOW() WHERE ' . $idCol . ' = :id')
                 ->execute(['p' => $file, 'id' => $id]);
+            // Store Gate Pass PDF in lifecycle attachments
+            try {
+                if (!empty($po['pr_number'])) {
+                    (new AttachmentService($pdo))->store((string)$po['pr_number'], 'gate_pass_pdf', $file);
+                }
+            } catch (\Throwable $e) {}
             $_SESSION['flash_success'] = 'Gate Pass generated.';
         } catch (\Throwable $e) {
             $_SESSION['flash_error'] = 'Failed to generate Gate Pass.';
@@ -1452,11 +1490,25 @@ class ProcurementController extends BaseController
         ];
         if ($poId > 0) {
             $pdo = \App\Database\Connection::resolve();
-            $st = $pdo->prepare('SELECT po_number, pr_number, vendor_name, total, supplier_id FROM purchase_orders WHERE id = :id');
+            // Detect primary key column (id vs po_id)
+            $pk = 'id';
+            try {
+                $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn();
+                if (!$hasId) {
+                    $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn();
+                    if ($hasPoId) { $pk = 'po_id'; }
+                }
+            } catch (\Throwable $e) {}
+            $st = $pdo->prepare('SELECT po_number, pr_number, vendor_name, total, supplier_id, terms_status, status FROM purchase_orders WHERE ' . $pk . ' = :id');
             $st->execute(['id' => $poId]);
             if ($row = $st->fetch()) {
+                $termsOk = strtolower((string)($row['terms_status'] ?? '')) === 'agreed' || strtolower((string)($row['status'] ?? '')) === 'terms_agreed';
+                if (!$termsOk) {
+                    $_SESSION['flash_error'] = 'RFP allowed only after terms are agreed.';
+                    header('Location: /procurement/pos');
+                    return;
+                }
                 $prefill['po_number'] = (string)$row['po_number'];
-                
                 $prefill['pr_number'] = $prefill['pr_number'] ?: (string)($row['pr_number'] ?? '');
                 $prefill['pay_to'] = (string)($row['vendor_name'] ?? '');
                 $prefill['total'] = (float)($row['total'] ?? 0);
@@ -1573,6 +1625,24 @@ class ProcurementController extends BaseController
             $total += $a;
         }
         if ($payTo === '' || empty($rows)) { header('Location: /procurement/rfp/create?error=Missing+fields'); return; }
+        $pdo = \App\Database\Connection::resolve();
+        // Enforce server-side gating: if PO referenced, its terms must be agreed
+        if ($poId > 0) {
+            $pk = 'id';
+            try {
+                $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn();
+                if (!$hasId) {
+                    $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn();
+                    if ($hasPoId) { $pk = 'po_id'; }
+                }
+            } catch (\Throwable $e) {}
+            $chk = $pdo->prepare('SELECT terms_status, status, po_number, pr_number, vendor_name FROM purchase_orders WHERE ' . $pk . ' = :id');
+            $chk->execute(['id' => $poId]);
+            $poRow = $chk->fetch();
+            if (!$poRow) { $_SESSION['flash_error'] = 'PO not found for RFP'; header('Location: /procurement/pos'); return; }
+            $termsOk = strtolower((string)($poRow['terms_status'] ?? '')) === 'agreed' || strtolower((string)($poRow['status'] ?? '')) === 'terms_agreed';
+            if (!$termsOk) { $_SESSION['flash_error'] = 'RFP allowed only after terms are agreed.'; header('Location: /procurement/pos'); return; }
+        }
         // Generate PDF to storage
         $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
         if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
@@ -1590,8 +1660,11 @@ class ProcurementController extends BaseController
             'total' => $total,
             'requested_by' => (string)($_SESSION['full_name'] ?? ''),
         ], $file);
+        // Store RFP PDF in lifecycle attachments if PR known
+        try {
+            if ($pr !== '') { (new AttachmentService($pdo))->store($pr, 'rfp_pdf', $file); }
+        } catch (\Throwable $e) {}
         // Send to Admin for approval
-        $pdo = \App\Database\Connection::resolve();
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
         $subject = 'RFP For Approval' . ($pr !== '' ? (' • PR ' . $pr) : '') . ($poNumber !== '' ? (' • PO ' . $poNumber) : '');

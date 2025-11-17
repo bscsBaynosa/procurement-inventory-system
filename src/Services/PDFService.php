@@ -744,7 +744,10 @@ class PDFService
 	 */
 	public function generateRFPToFile(array $rfp, string $filePath): void
 	{
-		$mpdf = new Mpdf(['format' => 'A4', 'orientation' => 'P', 'margin_left' => 10, 'margin_right' => 10, 'margin_top' => 10, 'margin_bottom' => 10]);
+		$mpdf = new Mpdf([
+			'format' => 'A4', 'orientation' => 'P',
+			'margin_left' => 8, 'margin_right' => 8, 'margin_top' => 38, 'margin_bottom' => 12
+		]);
 		$payTo = htmlspecialchars((string)($rfp['pay_to'] ?? ''), ENT_QUOTES, 'UTF-8');
 		$center = htmlspecialchars((string)($rfp['center'] ?? ''), ENT_QUOTES, 'UTF-8');
 		$dateReq = htmlspecialchars((string)($rfp['date_requested'] ?? date('Y-m-d')), ENT_QUOTES, 'UTF-8');
@@ -757,10 +760,9 @@ class PDFService
 		$total = (float)($rfp['total'] ?? 0);
 		$totFmt = number_format($total, 2);
 		$amountWords = $this->numberToWordsPhp((int)round($total)) . ' PESOS';
-
+		// Derived RFP number: RFP + PR number if available, else timestamp stub
+		$rfpNumber = 'RFP' . ($pr !== '' ? $pr : date('YmdHis'));
 		$check = function(string $key) use ($nature): string { return $nature === $key ? 'X' : '&nbsp;'; };
-
-		// PR-like header: logo, corp title + divider, revision row, and form title
 		$root = @realpath(__DIR__ . '/../../');
 		$public = $root ? ($root . DIRECTORY_SEPARATOR . 'public') : null;
 		$cand = [];
@@ -777,70 +779,75 @@ class PDFService
 				if ($data !== false) {
 					$mime = (strtolower(substr($p, -4)) === '.svg') ? 'image/svg+xml' : 'image/png';
 					$src = 'data:' . $mime . ';base64,' . base64_encode($data);
-					$logoHtml = '<div style="text-align:center;margin-bottom:6px;"><img src="' . $src . '" width="56" height="56" /></div>';
+					$logoHtml = '<div style="text-align:center;margin:4px 0 2px 0;"><img src="' . $src . '" width="52" height="52" /></div>';
 					break;
 				}
 			}
 		}
-		$topTitle = '<div style="text-align:center;font-size:14px;font-weight:700;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
-			. '<div style="height:1px;background:#000;margin:6px 0 8px 0;"></div>';
-		$revRow = '<table width="100%" border="0" cellspacing="0" cellpadding="2" style="font-size:9px;margin-bottom:6px;">'
-			. '<tr>'
-			. '<td style="width:15%;">Rev. No.</td>'
-			. '<td style="width:25%;border-bottom:1px solid #444;">&nbsp;</td>'
-			. '<td style="width:10%"></td>'
-			. '<td style="width:15%">Effective Date:</td>'
-			. '<td style="width:25%;border-bottom:1px solid #444;">' . $dateReq . '</td>'
-			. '</tr>'
+		// Header layout: left small form box, centered corp title, right RFP meta box
+		$formBox = '<table border="1" cellspacing="0" cellpadding="3" style="font-size:8.5px;width:150px;">'
+			. '<tr><td style="line-height:14px;">Form No.:&nbsp; F-001<br>Effective Date: <u>06.20.22</u><br>Revision No.: <u>2</u><br>Revision Date: <u>06.10.22</u></td></tr>'
 			. '</table>';
-		$titleRow = '<div style="text-align:center;font-size:11px;font-weight:700;">REQUEST FOR PAYMENT</div>'
-			. ($center !== '' ? '<div style="text-align:center;font-size:10px;margin-top:2px;">ACCOUNT (' . $center . ')</div>' : '');
-		$meta = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
-			. '<tr>'
-			. '<td style="width:65%;vertical-align:top;">'
-			. '<div><strong>Pay to:</strong> ' . $payTo . '</div>'
-			. '<div style="margin-top:6px;"><strong>Nature of Request:</strong> '
-			. ' ( ) Cash Advance &nbsp; (' . $check('payment_to_supplier') . ') Payment to Supplier &nbsp; (' . $check('pcf_replenishment') . ') PCF Replenishment'
-			. '</div>'
-			. '<div style="margin-top:4px;"> ( ) JEHCP Reimbursement &nbsp; ( ) Others, please specify: _____________________________</div>'
-			. '<div style="margin-top:6px;font-size:10px;"><em>NOTE: Please attach all documents to support the request.</em></div>'
-			. '</td>'
-			. '<td style="vertical-align:top;">'
-			. '<table width="100%" border="0" cellspacing="0" cellpadding="4" style="font-size:11px;">'
-			. '<tr><td style="width:55%;">No:</td><td style="text-align:right;">&nbsp;</td></tr>'
-			. '<tr><td>Date Requested:</td><td style="text-align:right;">' . $dateReq . '</td></tr>'
-			. '<tr><td>Date Needed:</td><td style="text-align:right;">' . $dateNeed . '</td></tr>'
-			. '</table>'
-			. '</td>'
-			. '</tr>'
+		$titleMid = '<div style="text-align:center;font-size:13px;font-weight:800;letter-spacing:.5px;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
+			. '<div style="text-align:center;font-size:9px;margin-top:2px;">' . ($center!==''?('ACCOUNT ( ' . $center . ' )'):'ACCOUNT ( CENTER )') . '</div>'
+			. '<div style="height:1px;background:#000;margin:3px auto 4px;width:65%;"></div>'
+			. '<div style="text-align:center;font-size:11px;font-weight:700;">REQUEST FOR PAYMENT</div>';
+		$metaBox = '<table border="1" cellspacing="0" cellpadding="4" style="font-size:8.5px;width:180px;">'
+			. '<tr><td>No:&nbsp; ' . htmlspecialchars($rfpNumber, ENT_QUOTES, 'UTF-8') . '<br>Date Requested:&nbsp; ' . $dateReq . '<br>Date Needed:&nbsp; ' . ($dateNeed!==''?$dateNeed:'__________') . '</td></tr>'
 			. '</table>';
-
-		$rows = '';
+		$header = '<table width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:4px;"><tr>'
+			. '<td style="width:160px;vertical-align:top;">' . $formBox . '</td>'
+			. '<td style="vertical-align:top;">' . $titleMid . '</td>'
+			. '<td style="width:190px;vertical-align:top;text-align:right;">' . $metaBox . '</td>'
+			. '</tr></table>';
+		// Pay To + Nature
+		$payToLine = '<table width="100%" border="0" cellspacing="0" cellpadding="0" style="font-size:9px;margin-top:6px;">'
+			. '<tr><td style="width:9%;">Pay to:</td><td style="border-bottom:1px solid #000;">' . ($payTo!==''?$payTo:'') . '</td></tr>'
+			. '</table>';
+		$natureLine = '<div style="font-size:9px;margin-top:6px;">Nature of Request:&nbsp; ( ) Cash Advance &nbsp; (' . $check('payment_to_supplier') . ')Payment to Supplier &nbsp; (' . $check('pcf_replenishment') . ')PCF Replenishment</div>'
+			. '<div style="font-size:9px;margin-top:4px;"> ( ) JEHCP Reimbursement &nbsp; ( ) Others, please specify: __________________________________________</div>'
+			. '<div style="font-size:8px;margin-top:4px;font-style:italic;">NOTE: Please attach all documents to support the request.</div>';
+		// Particulars table (multi-page friendly)
+		$rowsHtml = '';
 		foreach ($parts as $p) {
 			$desc = htmlspecialchars((string)($p['desc'] ?? ''), ENT_QUOTES, 'UTF-8');
 			$amt = number_format((float)($p['amount'] ?? 0), 2);
-			$rows .= '<tr><td>' . $desc . '</td><td style="text-align:right;">' . $amt . '</td></tr>';
+			$rowsHtml .= '<tr><td style="vertical-align:top;">' . $desc . '</td><td style="text-align:right;vertical-align:top;">Php ' . $amt . '</td></tr>';
 		}
-		$table = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
-			. '<thead><tr><th>PARTICULARS</th><th style="width:30%;">AMOUNT</th></tr></thead>'
-			. '<tbody>' . $rows . '</tbody>'
+		if ($rowsHtml === '') { // provide blank area for manual fill
+			$rowsHtml = '<tr><td style="height:160px;"></td><td style="height:160px;text-align:right;vertical-align:top;padding-top:4px;">Php </td></tr>';
+		}
+		$particularsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="5" style="font-size:9px;margin-top:6px;">'
+			. '<thead><tr style="background:#f8f8f8;font-weight:700;"><th>PARTICULARS</th><th style="width:28%;">AMOUNT</th></tr></thead>'
+			. '<tbody>' . $rowsHtml . '</tbody>'
 			. '<tfoot><tr><td style="text-align:right;font-weight:700;">TOTAL</td><td style="text-align:right;font-weight:700;">Php ' . $totFmt . '</td></tr></tfoot>'
 			. '</table>';
-
-		$amounts = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="margin-top:6px;">'
-			. '<tr><td><strong>Amount in words:</strong><br>' . htmlspecialchars($amountWords, ENT_QUOTES, 'UTF-8') . '</td>'
-			. '<td style="width:40%;"><strong>Amount in figures:</strong><br>Php ' . $totFmt . '</td></tr>'
-			. '</table>';
-
-		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="10" style="margin-top:6px;">'
+		$amountBlocks = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="font-size:9px;margin-top:6px;">'
 			. '<tr>'
-			. '<td style="width:33%;vertical-align:bottom;"><div style="height:38px;"></div><div style="border-top:1px solid #999;text-align:center;padding-top:6px;">Requested by:<br>' . $requestedBy . '</div></td>'
-			. '<td style="width:33%;vertical-align:bottom;"><div style="height:38px;"></div><div style="border-top:1px solid #999;text-align:center;padding-top:6px;">Checked by:</div></td>'
-			. '<td style="width:34%;vertical-align:bottom;"><div style="height:38px;"></div><div style="border-top:1px solid #999;text-align:center;padding-top:6px;">Approved by:</div></td>'
+			. '<td><strong>Amount in words:</strong><br>' . htmlspecialchars($amountWords, ENT_QUOTES, 'UTF-8') . '</td>'
+			. '<td style="width:35%;"><strong>Amount in figures:</strong><br>Php ' . $totFmt . '</td>'
 			. '</tr>'
 			. '</table>';
-
-		$html = $logoHtml . $topTitle . $revRow . $titleRow . $meta . $table . $amounts . $sign;
+		// Signatories with extra vertical space (physical signing)
+		$signatories = '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="font-size:9px;margin-top:6px;">'
+			. '<tr>'
+			. '<td style="width:33%;vertical-align:bottom;">'
+			. '<div style="height:70px;"></div>'
+			. '<div style="border-top:1px solid #000;text-align:center;padding-top:4px;">Requested by:<br>' . ($requestedBy!==''?$requestedBy:'') . '</div>'
+			. '</td>'
+			. '<td style="width:33%;vertical-align:bottom;">'
+			. '<div style="height:70px;"></div>'
+			. '<div style="border-top:1px solid #000;text-align:center;padding-top:4px;">Checked by:</div>'
+			. '</td>'
+			. '<td style="width:34%;vertical-align:bottom;">'
+			. '<div style="height:70px;"></div>'
+			. '<div style="border-top:1px solid #000;text-align:center;padding-top:4px;">Approved by:</div>'
+			. '</td>'
+			. '</tr>'
+			. '</table>';
+		// Assign repeating header (logo + composite header blocks)
+		$mpdf->SetHTMLHeader($logoHtml . $header);
+		$html = $payToLine . $natureLine . $particularsTable . $amountBlocks . $signatories;
 		$mpdf->WriteHTML($html);
 		$mpdf->Output($filePath, 'F');
 	}
@@ -853,12 +860,8 @@ class PDFService
 	public function generateGatePassToFile(array $meta, string $filePath): void
 	{
 		$mpdf = new Mpdf([
-			'format' => 'A4',
-			'orientation' => 'P',
-			'margin_left' => 10,
-			'margin_right' => 10,
-			'margin_top' => 10,
-			'margin_bottom' => 10,
+			'format' => 'A4', 'orientation' => 'P',
+			'margin_left' => 8, 'margin_right' => 8, 'margin_top' => 42, 'margin_bottom' => 12
 		]);
 		$po = htmlspecialchars((string)($meta['po_number'] ?? ''), ENT_QUOTES, 'UTF-8');
 		$pr = htmlspecialchars((string)($meta['pr_number'] ?? ''), ENT_QUOTES, 'UTF-8');
@@ -868,8 +871,7 @@ class PDFService
 		$lookFor = htmlspecialchars((string)($meta['look_for'] ?? ''), ENT_QUOTES, 'UTF-8');
 		$prepBy = htmlspecialchars((string)($meta['prepared_by'] ?? ''), ENT_QUOTES, 'UTF-8');
 		$prepAt = htmlspecialchars((string)($meta['prepared_at'] ?? date('Y-m-d')), ENT_QUOTES, 'UTF-8');
-
-		// Try to embed the same logo used elsewhere
+		$gpNumber = 'GP' . ($pr !== '' ? $pr : date('YmdHis'));
 		$root = @realpath(__DIR__ . '/../../');
 		$public = $root ? ($root . DIRECTORY_SEPARATOR . 'public') : null;
 		$cand = [];
@@ -886,69 +888,61 @@ class PDFService
 				if ($data !== false) {
 					$mime = (strtolower(substr($p, -4)) === '.svg') ? 'image/svg+xml' : 'image/png';
 					$src = 'data:' . $mime . ';base64,' . base64_encode($data);
-					$logoHtml = '<div style="text-align:center;margin-bottom:6px;"><img src="' . $src . '" width="56" height="56" /></div>';
+					$logoHtml = '<div style="text-align:center;margin:2px 0 2px 0;"><img src="' . $src . '" width="50" height="50" /></div>';
 					break;
 				}
 			}
 		}
-
-		// PR-like header for Gate Pass
-		$topTitle = '<div style="text-align:center;font-size:14px;font-weight:700;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
-			. '<div style="height:1px;background:#000;margin:6px 0 8px 0;"></div>';
-		$revRow = '<table width="100%" border="0" cellspacing="0" cellpadding="2" style="font-size:9px;margin-bottom:6px;">'
-			. '<tr>'
-			. '<td style="width:15%;">Rev. No.</td>'
-			. '<td style="width:25%;border-bottom:1px solid #444;">&nbsp;</td>'
-			. '<td style="width:10%"></td>'
-			. '<td style="width:15%">Effective Date:</td>'
-			. '<td style="width:25%;border-bottom:1px solid #444;">' . $prepAt . '</td>'
-			. '</tr>'
+		$formBox = '<table border="1" cellspacing="0" cellpadding="3" style="font-size:8px;width:140px;">'
+			. '<tr><td>Form No.: Fo-07<br>Rev No.: 0<br>Eff. Date : 04-22-09</td></tr></table>';
+		$titleMid = '<div style="text-align:center;font-size:13px;font-weight:700;">Philippine Oncology Center Corporation</div>'
+			. '<div style="text-align:center;font-size:11px;font-weight:700;margin-top:2px;">GATE PASS</div>';
+		$gpBox = '<table border="1" cellspacing="0" cellpadding="4" style="font-size:8px;width:160px;">'
+			. '<tr><td>GP No. ' . htmlspecialchars($gpNumber, ENT_QUOTES, 'UTF-8') . '<br>DATE : ___________<br>RETURN SLIP NO.: ___________</td></tr></table>';
+		$header = '<table width="100%" cellspacing="0" cellpadding="0"><tr>'
+			. '<td style="width:150px;vertical-align:top;">' . $formBox . '</td>'
+			. '<td style="vertical-align:top;">' . $titleMid . '</td>'
+			. '<td style="width:170px;vertical-align:top;text-align:right;">' . $gpBox . '</td>'
+			. '</tr></table>'
+			. '<div style="height:4px;"></div>';
+		$authLine = '<div style="font-size:9px;margin-top:4px;">This is to authorize _ ____________ of ________ ________ ____________ to take the following item/s from the center:</div>';
+		// Items blank grid (always blank for physical use; allow multi-row)
+		$blankRows = '';
+		for ($i=0; $i<6; $i++) {
+			$blankRows .= '<tr><td style="height:24px;">&nbsp;</td><td>&nbsp;</td><td>&nbsp;</td></tr>';
+		}
+		$itemsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="4" style="font-size:9px;margin-top:4px;">'
+			. '<thead><tr><th style="width:40%;">ITEM / DESCRIPTION</th><th style="width:30%;">QTY</th><th>REMARKS</th></tr></thead>'
+			. '<tbody>' . $blankRows . '</tbody>'
 			. '</table>';
-		$titleRow = '<div style="text-align:center;font-size:11px;font-weight:700;">GATE PASS</div>'
-			. '<div style="text-align:center;font-size:10px;margin-top:2px;color:#475569;">For Delivery Receipt / Warehouse Gate</div>';
-
-		$metaBox = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="font-size:10px;margin-top:8px;">'
-			. '<tr>'
-			. '<td style="width:55%;vertical-align:top;">'
-			. '<div><strong>Vendor:</strong> ' . $vendor . '</div>'
-			. '<div style="margin-top:3px;"><strong>Deliver To:</strong><br>' . $deliverTo . '</div>'
-			. '<div style="margin-top:3px;"><strong>Look For:</strong> ' . $lookFor . '</div>'
-			. '</td>'
-			. '<td style="vertical-align:top;">'
-			. '<div><strong>PO Number:</strong> ' . $po . '</div>'
-			. '<div style="margin-top:3px;"><strong>PR Number:</strong> ' . $pr . '</div>'
-			. '<div style="margin-top:3px;"><strong>Center:</strong> ' . $center . '</div>'
-			. '<div style="margin-top:3px;"><strong>Date Prepared:</strong> ' . $prepAt . '</div>'
-			. '</td>'
-			. '</tr>'
-			. '</table>';
-
-		$instructions = '<div style="border:1px solid #000;margin-top:8px;padding:6px;font-size:10px;background:#f8fafc;">'
-			. '<div style="text-align:center;font-weight:700;">INSTRUCTIONS</div>'
-			. '<div style="margin-top:4px;">Please allow the bearer to deliver the goods for the above-mentioned PO. Verify items against delivery receipt and ensure proper logging at the gate.</div>'
-			. '</div>';
-
-		$sign = '<table width="100%" border="1" cellspacing="0" cellpadding="10" style="margin-top:8px;font-size:10px;">'
+		$purposeBlock = '<div style="font-size:9px;margin-top:8px;">To be taken out from :  POCC BCC_ TO -CSO( MINDANAO WAREHOUSE ) ____________________________</div>'
+			. '<div style="font-size:9px;margin-top:4px;">Purpose : ____________________________________ Payment ( ) &nbsp; Official Receipt No. __________ Amount __________</div>';
+		$signMain = '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="font-size:9px;margin-top:8px;">'
 			. '<tr>'
 			. '<td style="width:33%;vertical-align:bottom;">'
-			. '<div style="font-weight:700;">Prepared By</div>'
-			. '<div style="height:46px;">&nbsp;</div>'
-			. '<div style="border-top:1px solid #000;text-align:center;padding-top:6px;">' . $prepBy . '</div>'
+			. '<div style="font-weight:700;">Prepared by:</div><div style="height:60px;"></div><div style="border-top:1px solid #000;text-align:center;padding-top:4px;">' . $prepBy . '</div>'
 			. '</td>'
 			. '<td style="width:33%;vertical-align:bottom;">'
-			. '<div style="font-weight:700;">Guard on Duty</div>'
-			. '<div style="height:46px;">&nbsp;</div>'
-			. '<div style="border-top:1px solid #000;text-align:center;padding-top:6px;">SIGNATURE OVER PRINTED NAME</div>'
+			. '<div style="font-weight:700;">Checked by:</div><div style="height:60px;"></div><div style="border-top:1px solid #000;text-align:center;padding-top:4px;">&nbsp;</div>'
 			. '</td>'
 			. '<td style="width:34%;vertical-align:bottom;">'
-			. '<div style="font-weight:700;">Received By</div>'
-			. '<div style="height:46px;">&nbsp;</div>'
-			. '<div style="border-top:1px solid #000;text-align:center;padding-top:6px;">SUPPLIER / REPRESENTATIVE</div>'
+			. '<div style="font-weight:700;">Approved by:</div><div style="height:60px;"></div><div style="border-top:1px solid #000;text-align:center;padding-top:4px;">&nbsp;</div>'
 			. '</td>'
 			. '</tr>'
 			. '</table>';
-
-		$html = $logoHtml . $topTitle . $revRow . $titleRow . $metaBox . $instructions . $sign;
+		$signSecondary = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="font-size:8px;margin-top:6px;">'
+			. '<tr>'
+			. '<td style="width:33%;vertical-align:bottom;">Signature over Printed Name<br><strong>Taken out by:</strong><div style="height:40px;"></div></td>'
+			. '<td style="width:33%;vertical-align:bottom;">Signature over Printed Name<br><strong>Checked out of gate:</strong><div style="height:40px;"></div></td>'
+			. '<td style="width:34%;vertical-align:bottom;">Administrator<br><span style="font-size:7px;">Signature over Printed Name</span><div style="height:40px;"></div></td>'
+			. '</tr>'
+			. '<tr>'
+			. '<td colspan="3" style="text-align:center;">Guard on Duty/ Time __________________________________________ Signature over Printed Name __________________________________________</td>'
+			. '</tr>'
+			. '</table>';
+		// Repeating header for multi-page gate pass
+		$mpdf->SetHTMLHeader($logoHtml . $header);
+		$html = $authLine . $itemsTable . $purposeBlock . $signMain . $signSecondary;
 		$mpdf->WriteHTML($html);
 		$mpdf->Output($filePath, 'F');
 	}
