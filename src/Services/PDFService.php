@@ -746,7 +746,7 @@ class PDFService
 	{
 		$mpdf = new Mpdf([
 			'format' => 'A4', 'orientation' => 'P',
-			'margin_left' => 8, 'margin_right' => 8, 'margin_top' => 38, 'margin_bottom' => 12
+			'margin_left' => 8, 'margin_right' => 8, 'margin_top' => 55, 'margin_bottom' => 14
 		]);
 		$payTo = htmlspecialchars((string)($rfp['pay_to'] ?? ''), ENT_QUOTES, 'UTF-8');
 		$center = htmlspecialchars((string)($rfp['center'] ?? ''), ENT_QUOTES, 'UTF-8');
@@ -789,24 +789,25 @@ class PDFService
 			. '<tr><td style="line-height:14px;">Form No.:&nbsp; F-001<br>Effective Date: <u>06.20.22</u><br>Revision No.: <u>2</u><br>Revision Date: <u>06.10.22</u></td></tr>'
 			. '</table>';
 		$titleMid = '<div style="text-align:center;font-size:13px;font-weight:800;letter-spacing:.5px;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
-			. '<div style="text-align:center;font-size:9px;margin-top:2px;">' . ($center!==''?('ACCOUNT ( ' . $center . ' )'):'ACCOUNT ( CENTER )') . '</div>'
-			. '<div style="height:1px;background:#000;margin:3px auto 4px;width:65%;"></div>'
-			. '<div style="text-align:center;font-size:11px;font-weight:700;">REQUEST FOR PAYMENT</div>';
+			. '<div style="text-align:center;font-size:9px;margin-top:3px;">' . ($center!==''?('ACCOUNT ( ' . $center . ' )'):'ACCOUNT ( CENTER )') . '</div>'
+			. '<div style="height:1px;background:#000;margin:5px auto 6px;width:65%;"></div>'
+			. '<div style="text-align:center;font-size:11px;font-weight:700;letter-spacing:.4px;">REQUEST FOR PAYMENT</div>';
 		$metaBox = '<table border="1" cellspacing="0" cellpadding="4" style="font-size:8.5px;width:180px;">'
 			. '<tr><td>No:&nbsp; ' . htmlspecialchars($rfpNumber, ENT_QUOTES, 'UTF-8') . '<br>Date Requested:&nbsp; ' . $dateReq . '<br>Date Needed:&nbsp; ' . ($dateNeed!==''?$dateNeed:'__________') . '</td></tr>'
 			. '</table>';
-		$header = '<table width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:4px;"><tr>'
+		$header = '<table width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:6px;"><tr>'
 			. '<td style="width:160px;vertical-align:top;">' . $formBox . '</td>'
 			. '<td style="vertical-align:top;">' . $titleMid . '</td>'
 			. '<td style="width:190px;vertical-align:top;text-align:right;">' . $metaBox . '</td>'
-			. '</tr></table>';
+			. '</tr></table>'
+			. '<div style="height:12px;"></div>';
 		// Pay To + Nature
-		$payToLine = '<table width="100%" border="0" cellspacing="0" cellpadding="0" style="font-size:9px;margin-top:6px;">'
+		$payToLine = '<table width="100%" border="0" cellspacing="0" cellpadding="0" style="font-size:9px;margin-top:10px;">'
 			. '<tr><td style="width:9%;">Pay to:</td><td style="border-bottom:1px solid #000;">' . ($payTo!==''?$payTo:'') . '</td></tr>'
 			. '</table>';
-		$natureLine = '<div style="font-size:9px;margin-top:6px;">Nature of Request:&nbsp; ( ) Cash Advance &nbsp; (' . $check('payment_to_supplier') . ')Payment to Supplier &nbsp; (' . $check('pcf_replenishment') . ')PCF Replenishment</div>'
-			. '<div style="font-size:9px;margin-top:4px;"> ( ) JEHCP Reimbursement &nbsp; ( ) Others, please specify: __________________________________________</div>'
-			. '<div style="font-size:8px;margin-top:4px;font-style:italic;">NOTE: Please attach all documents to support the request.</div>';
+		$natureLine = '<div style="font-size:9px;margin-top:10px;">Nature of Request:&nbsp; ( ) Cash Advance &nbsp; (' . $check('payment_to_supplier') . ')Payment to Supplier &nbsp; (' . $check('pcf_replenishment') . ')PCF Replenishment</div>'
+			. '<div style="font-size:9px;margin-top:5px;"> ( ) JEHCP Reimbursement &nbsp; ( ) Others, please specify: __________________________________________</div>'
+			. '<div style="font-size:8px;margin-top:6px;font-style:italic;">NOTE: Please attach all documents to support the request.</div>';
 		// Particulars table (multi-page friendly)
 		$rowsHtml = '';
 		foreach ($parts as $p) {
@@ -817,19 +818,19 @@ class PDFService
 		if ($rowsHtml === '') { // provide blank area for manual fill
 			$rowsHtml = '<tr><td style="height:160px;"></td><td style="height:160px;text-align:right;vertical-align:top;padding-top:4px;">Php </td></tr>';
 		}
-		$particularsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="5" style="font-size:9px;margin-top:6px;">'
+		$particularsTable = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="font-size:9px;margin-top:10px;">'
 			. '<thead><tr style="background:#f8f8f8;font-weight:700;"><th>PARTICULARS</th><th style="width:28%;">AMOUNT</th></tr></thead>'
 			. '<tbody>' . $rowsHtml . '</tbody>'
 			. '<tfoot><tr><td style="text-align:right;font-weight:700;">TOTAL</td><td style="text-align:right;font-weight:700;">Php ' . $totFmt . '</td></tr></tfoot>'
 			. '</table>';
-		$amountBlocks = '<table width="100%" border="1" cellspacing="0" cellpadding="6" style="font-size:9px;margin-top:6px;">'
+		$amountBlocks = '<table width="100%" border="1" cellspacing="0" cellpadding="7" style="font-size:9px;margin-top:10px;">'
 			. '<tr>'
 			. '<td><strong>Amount in words:</strong><br>' . htmlspecialchars($amountWords, ENT_QUOTES, 'UTF-8') . '</td>'
 			. '<td style="width:35%;"><strong>Amount in figures:</strong><br>Php ' . $totFmt . '</td>'
 			. '</tr>'
 			. '</table>';
 		// Signatories with extra vertical space (physical signing)
-		$signatories = '<table width="100%" border="1" cellspacing="0" cellpadding="8" style="font-size:9px;margin-top:6px;">'
+		$signatories = '<table width="100%" border="1" cellspacing="0" cellpadding="10" style="font-size:9px;margin-top:10px;">'
 			. '<tr>'
 			. '<td style="width:33%;vertical-align:bottom;">'
 			. '<div style="height:70px;"></div>'
