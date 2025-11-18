@@ -1,22 +1,4 @@
-<?php
-/* Favicon include centralized */
-$brandLogoSrc = '/img/pocc-logo.svg';
-$rootPath = realpath(__DIR__ . '/../../');
-$logoCandidates = [
-    $rootPath . DIRECTORY_SEPARATOR . 'logo.png',
-    $rootPath . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'logo.png',
-    $rootPath . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'logo.png',
-];
-foreach ($logoCandidates as $logoFile) {
-    if (is_file($logoFile)) {
-        $data = @file_get_contents($logoFile);
-        if ($data !== false) {
-            $brandLogoSrc = 'data:image/png;base64,' . base64_encode($data);
-            break;
-        }
-    }
-}
-?>
+<?php /* Favicon include centralized */ ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -48,10 +30,8 @@ foreach ($logoCandidates as $logoFile) {
     *, *::before, *::after { box-sizing: border-box; }
     body { font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg-gradient); color: var(--text); min-height:100vh; }
         .navbar { display:flex; align-items:center; justify-content:space-between; padding: 12px 22px; background: rgba(15, 23, 42, .15); backdrop-filter: blur(6px); position:sticky; top:0; z-index:10; border-bottom: 1px solid rgba(255,255,255,.06); }
-        .brand { display:flex; align-items:center; gap:14px; font-weight:800; color:#e2e8f0; }
-        .brand img { width:64px; height:64px; object-fit:contain; display:block; filter: drop-shadow(0 6px 18px rgba(0,0,0,.45)); }
-        .brand-text { line-height:1.1; display:flex; flex-direction:column; justify-content:center; }
-        .brand strong { font-size:18px; letter-spacing:.02em; }
+        .brand { display:flex; flex-direction:column; gap:4px; font-weight:800; color:#e2e8f0; }
+        .brand strong { font-size:20px; letter-spacing:.02em; }
         .brand small { display:block; font-weight:600; color:#a7f3d0; font-size:13px; }
         .nav-links { display:flex; align-items:center; gap: 12px; }
         .nav-links a { color:#e5e7eb; text-decoration:none; margin-left:0; padding:8px 12px; font-weight:600; opacity:.9; transition:opacity .2s ease; border-radius:10px; }
@@ -181,11 +161,8 @@ foreach ($logoCandidates as $logoFile) {
     ?>
     <nav class="navbar">
         <div class="brand">
-            <img src="<?= htmlspecialchars($brandLogoSrc, ENT_QUOTES, 'UTF-8') ?>" alt="POCC Logo" loading="lazy" />
-            <div class="brand-text">
-                <strong>Philippine Oncology Center Corporation</strong>
-                <small>Procurement & Inventory System</small>
-            </div>
+            <strong>Philippine Oncology Center Corporation</strong>
+            <small>Procurement & Inventory System</small>
         </div>
         <div style="display:flex; align-items:center; gap:10px;">
             <button class="menu-toggle" type="button" onclick="toggleMenu()">Menu</button>
