@@ -26,7 +26,7 @@ h1 {
 }
 
 .button {
-    background-color: #4CAF50;
+    background-color: #16a34a;
     color: white;
     padding: 10px 15px;
     border: none;
@@ -38,7 +38,7 @@ h1 {
 }
 
 .button:hover {
-    background-color: #45a049;
+    background-color: #16a34a;
 }
 
 /* Ensure form controls inherit Poppins for consistent UI */
@@ -124,8 +124,8 @@ input, select, textarea, button {
 .btn.full { width: 100%; }
 .btn.small { min-width: 90px; min-height: 36px; padding: 0 14px; font-size: 12px; }
 .btn.lg { min-width: 140px; min-height: 48px; font-size: 14px; font-weight: 700; }
-.btn.primary { background: #22c55e; color: #fff; border: 1px solid #22c55e; }
-.btn.primary:hover { background: #16a34a; }
+.btn.primary { background: #16a34a; color: #fff; border: 1px solid #15803d; }
+.btn.primary:hover { background: #16a34a; border-color: #15803d; }
 .btn.outline { background: #ffffff; border: 1px solid #cbd5e1; color:#0f172a; }
 .btn.outline:hover { background:#f1f5f9; }
 .btn.destructive { background:#ef4444; color:#fff; border:1px solid #ef4444; }

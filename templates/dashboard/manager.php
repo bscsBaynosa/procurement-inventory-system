@@ -27,7 +27,8 @@
         .card h3{ margin:0 0 6px; font-size:14px; color:var(--muted); font-weight:600; }
         .stats{ display:flex; gap:8px; flex-wrap:wrap; font-size:12px; color:var(--muted); }
         .badge{ background:color-mix(in oklab, var(--accent) 12%, transparent); color:var(--text); border:1px solid color-mix(in oklab, var(--accent) 35%, var(--border)); padding:4px 8px; border-radius:999px; }
-        table{ width:100%; border-collapse: collapse; background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+        .table-wrap{ width:100%; overflow-x:auto; border-radius:14px; }
+        table{ width:100%; min-width:720px; border-collapse: collapse; background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
         th, td{ padding:12px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
         th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
         .muted{ color:var(--muted); }
@@ -37,6 +38,25 @@
         .btn.primary{ background:var(--accent); border-color:color-mix(in oklab, var(--accent) 80%, #166534); color:#fff; box-shadow:0 2px 6px color-mix(in oklab, var(--accent) 18%, transparent); }
         .btn.primary:hover{ background:color-mix(in oklab, var(--accent) 90%, #166534); }
         select.inline{ padding:6px 8px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); }
+        .items-cell{ max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-family:inherit; font-size:13px; color:var(--text); }
+        .status-pill{ display:inline-flex; align-items:center; padding:4px 10px; border-radius:999px; background:color-mix(in oklab, var(--accent) 12%, transparent); border:1px solid color-mix(in oklab, var(--accent) 35%, var(--border)); font-size:13px; line-height:1.2; text-transform:none; white-space:nowrap; }
+        .actions{ flex-wrap:wrap; }
+        @media (max-width: 1024px){
+            .layout{ grid-template-columns: 1fr; }
+            .sidebar{ position:static; height:auto; }
+            .content{ padding:18px 14px 40px; }
+        }
+        @media (max-width: 720px){
+            .grid{ grid-template-columns: repeat(auto-fill,minmax(200px,1fr)); }
+            table{ min-width:580px; }
+            th, td{ padding:10px; font-size:13px; }
+            .items-cell{ max-width:180px; }
+            .status-pill{ white-space:normal; text-align:left; }
+        }
+        @media (max-width: 520px){
+            .actions .btn{ flex:1 1 140px; justify-content:center; }
+            .items-cell{ max-width:150px; }
+        }
     </style>
 </head>
 <body>
@@ -80,6 +100,7 @@
                 <a class="btn" href="/manager/requests/history">History</a>
             </span>
         </div>
+        <div class="table-wrap">
         <table>
             <thead>
                 <tr>
@@ -114,10 +135,16 @@
                         <tr>
                             <td class="mono"><?= htmlspecialchars(\App\Services\IdService::format('PR', (string)$g['pr_number']), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)(isset($g['branch_name']) ? $g['branch_name'] : 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><pre style="margin:0;white-space:pre-wrap;line-height:1.3;max-height:3.2em;overflow:hidden;"><?= htmlspecialchars((string)(isset($g['items_summary']) ? $g['items_summary'] : ''), ENT_QUOTES, 'UTF-8') ?></pre></td>
+                            <?php
+                                $itemsSummary = (string)($g['items_summary'] ?? '');
+                                $itemsLines = array_values(array_filter(preg_split('/\r\n|\r|\n/', $itemsSummary)));
+                                $itemsPreview = $itemsLines ? $itemsLines[0] : $itemsSummary;
+                                if (count($itemsLines) > 1) { $itemsPreview .= ' …'; }
+                            ?>
+                            <td><div class="items-cell" title="<?= htmlspecialchars($itemsSummary, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($itemsPreview, ENT_QUOTES, 'UTF-8') ?></div></td>
                             <td class="nowrap"><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)(isset($g['min_created_at']) ? $g['min_created_at'] : 'now'))), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)(isset($g['requested_by_name']) ? $g['requested_by_name'] : 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
-                            <td><span class="badge"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></span></td>
+                            <td><span class="status-pill"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></span></td>
                             <td>
                                 <div class="actions">
                                     <a class="btn" href="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>">View</a>
@@ -137,6 +164,7 @@
                 <?php endif; ?>
             </tbody>
         </table>
+        </div>
     </main>
 </div>
 </body>

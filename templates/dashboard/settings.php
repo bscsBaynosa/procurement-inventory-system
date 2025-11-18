@@ -20,14 +20,19 @@
         .nav a:hover{ background:var(--bg); }
         .nav a.active{ background: color-mix(in oklab, var(--accent) 10%, transparent); border:1px solid color-mix(in oklab, var(--accent) 35%, var(--border)); }
         .nav svg{ width:18px; height:18px; fill: var(--accent); }
-        .content{ padding:18px 20px; }
-    .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; max-width:920px; }
+        .content{ padding:18px 20px 40px; display:flex; flex-direction:column; align-items:center; gap:18px; }
+        .content > h2{ width:100%; text-align:center; }
+        .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:20px; width:100%; max-width:920px; margin:0 auto; }
         label{ display:block; font-weight:600; margin-bottom:6px; }
         input{ width:100%; padding:12px 12px; border:1px solid var(--border); border-radius:10px; background:#fff; color:#111; font:inherit; }
         .btn{ background:var(--accent); color:#fff; border:0; padding:10px 12px; border-radius:10px; font-weight:700; text-decoration:none; display:inline-block; }
         .row{ display:grid; grid-template-columns: 1fr 1fr; gap:14px; }
         .toggle{ display:inline-flex; align-items:center; gap:8px; color:#64748b; }
+        .settings-actions{ margin-top:16px; display:flex; flex-direction:column; align-items:center; gap:18px; }
+        .settings-toggle{ display:flex; align-items:center; justify-content:center; gap:12px; flex-wrap:wrap; }
+        .settings-buttons{ display:flex; gap:10px; flex-wrap:wrap; justify-content:center; }
     @media (max-width: 1024px){ .layout{ grid-template-columns:1fr; } .sidebar{ position:relative; height:auto; } .row{ grid-template-columns: 1fr; } }
+    @media (max-width: 640px){ .content{ padding:16px 14px 32px; } }
     </style>
 </head>
 <body>
@@ -76,12 +81,12 @@
                     </div>
                     <div style="color:#64748b; font-size:12px; margin-top:6px;">To change your password, fill in all three fields.</div>
                 </div>
-                <div style="margin-top:16px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
-                    <div style="display:flex; align-items:center; gap:12px;">
+                <div class="settings-actions">
+                    <div class="settings-toggle">
                         <span class="toggle" style="color:var(--text); font-weight:700;">Dark Mode</span>
                         <label class="switch"><input type="checkbox" class="theme-toggle" id="modeToggle"><span class="slider"></span></label>
                     </div>
-                    <div style="display:flex; gap:10px;">
+                    <div class="settings-buttons">
                         <a class="btn" href="/logout" style="background:#0ea5e9;">Log out</a>
                         <button class="btn" type="submit">Save</button>
                     </div>
