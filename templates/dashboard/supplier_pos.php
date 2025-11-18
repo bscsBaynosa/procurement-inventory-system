@@ -29,6 +29,11 @@
     <?php require __DIR__ . '/../layouts/_sidebar.php'; ?>
     <main class="content">
         <h2 style="margin:0 0 12px 0;">Purchase Orders</h2>
+        <?php if (isset($_GET['logistics'])): ?>
+            <div class="card" style="border-color:#86efac;background:color-mix(in oklab, var(--card) 90%, #86efac);color:#14532d;font-weight:600;">
+                Logistics status updated successfully.
+            </div>
+        <?php endif; ?>
         <div class="card">
             <table>
                 <thead><tr><th>PR</th><th>PO Number</th><th>Status</th><th>PDF</th><th>Terms / Respond</th><th>Logistics / Shipment</th></tr></thead>
@@ -134,14 +139,14 @@
                                         <div>
                                             <label style="font-size:12px;color:var(--muted)">Status</label>
                                             <select name="logistics_status" required>
-                                                <option value="waiting_for_courier">Waiting for Courier</option>
-                                                <option value="in_transit">In Transit</option>
-                                                <option value="delivered">Delivered</option>
+                                                <option value="waiting_for_courier" <?= $logisticsStatus === 'waiting_for_courier' ? 'selected' : '' ?>>Waiting for Courier</option>
+                                                <option value="in_transit" <?= $logisticsStatus === 'in_transit' ? 'selected' : '' ?>>In Transit</option>
+                                                <option value="delivered" <?= $logisticsStatus === 'delivered' ? 'selected' : '' ?>>Delivered</option>
                                             </select>
                                         </div>
                                         <div>
                                             <label style="font-size:12px;color:var(--muted)">Notes</label>
-                                            <input name="logistics_notes" placeholder="Optional notes" />
+                                            <input name="logistics_notes" placeholder="Optional notes" value="<?= htmlspecialchars($logisticsNotes, ENT_QUOTES, 'UTF-8') ?>" />
                                         </div>
                                         <div>
                                             <button class="btn" type="submit">Update</button>
