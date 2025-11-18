@@ -40,7 +40,7 @@
                             <td><?= htmlspecialchars((string)$p['status'], ENT_QUOTES, 'UTF-8') ?></td>
                             <td>
                                 <?php if (!empty($p['pdf_path'])): ?>
-                                    <a class="btn muted" href="/po/download?id=<?= (int)$p['id'] ?>">Download</a>
+                                    <a class="btn muted" href="/po/download?id=<?= (int)$p['id'] ?>" target="_blank" rel="noopener">Download</a>
                                 <?php else: ?>
                                     <span class="muted">—</span>
                                 <?php endif; ?>

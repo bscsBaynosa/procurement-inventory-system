@@ -187,7 +187,7 @@
                             <button class="btn muted" type="submit">Filter</button>
                         </form>
                         <?php if ($sel!==''): ?>
-                        <a class="btn muted" href="/admin-assistant/reports/inventory?category=<?= rawurlencode($sel) ?>&download=1">Inventory Report</a>
+                        <a class="btn muted" href="/admin-assistant/reports/inventory?category=<?= rawurlencode($sel) ?>&download=1" target="_blank" rel="noopener">Inventory Report</a>
                         <?php endif; ?>
                         <a id="proceedPRBtnTop" class="btn primary" href="/admin-assistant/requests/review">Proceed to Purchase Requisition (<span id="prCartCountTop"><?= (int)($cart_count ?? 0) ?></span>)</a>
                     </div>
@@ -229,7 +229,7 @@
                                             <input type="hidden" name="category" value="<?= htmlspecialchars((string)$selected_category, ENT_QUOTES, 'UTF-8') ?>" />
                                             <input name="new_count" type="number" min="0" value="<?= $qty ?>" />
                                             <button class="btn muted" type="submit">Save Count</button>
-                                            <a class="btn muted" href="/admin-assistant/reports/consumption?item_id=<?= (int)$it['item_id'] ?>&month=<?= date('Y-m') ?>&download=1">Consumption Report</a>
+                                            <a class="btn muted" href="/admin-assistant/reports/consumption?item_id=<?= (int)$it['item_id'] ?>&month=<?= date('Y-m') ?>&download=1" target="_blank" rel="noopener">Consumption Report</a>
                                         </form>
                                         <form class="line" method="POST" action="/admin-assistant/inventory/update-meta">
                                             <input type="hidden" name="item_id" value="<?= (int)$it['item_id'] ?>" />

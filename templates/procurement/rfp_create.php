@@ -20,7 +20,7 @@
         table{ width:100%; border-collapse:collapse; }
         th, td{ padding:10px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
         th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
-        .btn{ background:var(--accent); color:#fff; border:0; padding:10px 12px; border-radius:10px; font-weight:700; text-decoration:none; display:inline-block; cursor:pointer; }
+        .btn{ background:var(--accent); color:#fff; border:0; padding:10px 14px; border-radius:10px; font-weight:700; text-decoration:none; display:inline-flex; align-items:center; justify-content:center; gap:6px; cursor:pointer; text-align:center; min-height:42px; }
         .btn.muted{ background:transparent; color:var(--muted); border:1px solid var(--border); }
         .muted{ color:var(--muted); }
     </style>
@@ -113,8 +113,9 @@
                 <div style="margin-top:10px;"><button class="btn muted" type="button" onclick="addParticular()">Add Particular</button></div>
             </div>
 
-            <div style="margin-top:12px; display:flex; gap:8px;">
-                <button class="btn" type="submit">Generate RFP PDF and Send to Admin</button>
+            <div style="margin-top:12px; display:flex; flex-wrap:wrap; gap:10px;">
+                <button class="btn muted" type="submit" name="action" value="generate" formtarget="_blank" title="Generate the PDF in a new tab without sending to Admin yet">Generate PDF</button>
+                <button class="btn" type="submit" name="action" value="send_admin" title="Generate PDF and send it to Admin for approval">Send for Admin Approval</button>
                 <?php if (!empty($rfp['po_id'])): ?>
                     <a class="btn muted" href="/procurement/po/view?id=<?= (int)$rfp['po_id'] ?>">Back to PO</a>
                 <?php else: ?>

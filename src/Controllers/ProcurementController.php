@@ -1617,6 +1617,8 @@ class ProcurementController extends BaseController
         $pr = trim((string)($_POST['pr_number'] ?? ''));
         $poId = (int)($_POST['po_id'] ?? 0);
         $poNumber = trim((string)($_POST['po_number'] ?? ''));
+        $action = strtolower((string)($_POST['action'] ?? 'send_admin'));
+        $isGenerateOnly = ($action === 'generate');
         $payTo = trim((string)($_POST['pay_to'] ?? ''));
         $center = trim((string)($_POST['center'] ?? ''));
         $dateRequested = trim((string)($_POST['date_requested'] ?? date('Y-m-d')));
@@ -1652,11 +1654,12 @@ class ProcurementController extends BaseController
             $termsOk = strtolower((string)($poRow['terms_status'] ?? '')) === 'agreed' || strtolower((string)($poRow['status'] ?? '')) === 'terms_agreed';
             if (!$termsOk) { $_SESSION['flash_error'] = 'RFP allowed only after terms are agreed.'; header('Location: /procurement/pos'); return; }
         }
-        // Generate PDF to storage
-        $dir = realpath(__DIR__ . '/../../..') . DIRECTORY_SEPARATOR . 'storage' . DIRECTORY_SEPARATOR . 'pdf';
-        if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
+        // Generate PDF to storage (consistent helper to avoid invalid paths)
         $slug = $poNumber !== '' ? ('PO-' . preg_replace('/[^A-Za-z0-9_-]/','_', $poNumber)) : ($pr !== '' ? ('PR-' . preg_replace('/[^A-Za-z0-9_-]/','_', $pr)) : date('Ymd-His'));
-        $file = $dir . DIRECTORY_SEPARATOR . 'RFP-' . $slug . '.pdf';
+        $fileName = 'RFP-' . $slug . '.pdf';
+        $file = \App\Database\SchemaHelper::resolvePdfStoragePath($fileName);
+        $dir = dirname($file);
+        if (!is_dir($dir)) { @mkdir($dir, 0777, true); }
         $this->pdf()->generateRFPToFile([
             'pr_number' => $pr,
             'po_number' => $poNumber,
@@ -1673,6 +1676,21 @@ class ProcurementController extends BaseController
         try {
             if ($pr !== '') { (new AttachmentService($pdo))->store($pr, 'rfp_pdf', $file); }
         } catch (\Throwable $e) {}
+        if ($isGenerateOnly) {
+            if (@is_file($file)) {
+                $size = @filesize($file);
+                header('Content-Type: application/pdf');
+                header('Content-Disposition: inline; filename="' . basename($file) . '"');
+                if ($size !== false) { header('Content-Length: ' . (string)$size); }
+                header('X-RFP-Generated: 1');
+                readfile($file);
+            } else {
+                $_SESSION['flash_error'] = 'Unable to generate RFP PDF. Please try again.';
+                header('Location: /procurement/rfp/create?error=Unable+to+generate+PDF');
+            }
+            return;
+        }
+
         // Send to Admin for approval
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
         try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
@@ -1683,6 +1701,7 @@ class ProcurementController extends BaseController
             $ins = $pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)');
             foreach ($recipients as $row) { $ins->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$row['user_id'], 'j' => $subject, 'b' => $body, 'an' => basename($file), 'ap' => $file]); }
         }
+        $_SESSION['flash_success'] = 'RFP sent to Admin for approval.';
         header('Location: /procurement/pos?rfp=1');
     }
 

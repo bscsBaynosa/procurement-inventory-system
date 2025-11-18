@@ -162,15 +162,7 @@
                             <td><span class="badge"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></span></td>
                             <td>
                                 <div class="actions">
-                                    <form action="/manager/requests/update-group-status" method="POST" style="display:inline-flex; gap:6px; align-items:center;">
-                                        <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
-                                        <select name="status">
-                                            <?php foreach ($labelMap as $val=>$lab): ?>
-                                                <option value="<?= $val ?>" <?= ($status===$val?'selected':'') ?>><?= $lab ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                        <button class="btn" type="submit">Update</button>
-                                    </form>
+                                    <span class="muted" style="font-size:12px;">Status auto-managed</span>
                                     <a class="btn" href="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">Open</a>
                                     <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">PR PDF</a>
                                     <a class="btn" href="/manager/requests/download-stored?pr=<?= urlencode((string)$g['pr_number']) ?>&kind=canvass" target="_blank" rel="noopener">Canvass PDF</a>

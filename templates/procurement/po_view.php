@@ -37,7 +37,7 @@
             <div style="display:flex; gap:8px;">
                 <a class="btn" href="/procurement/pos">Back to list</a>
                 <?php if (!empty($po['pdf_path'])): ?>
-                    <a class="btn primary" href="/procurement/po/download?id=<?= (int)$po['id'] ?>">Download PDF</a>
+                    <a class="btn primary" href="/procurement/po/download?id=<?= (int)$po['id'] ?>" target="_blank" rel="noopener">Download PDF</a>
                 <?php endif; ?>
                 <a class="btn" href="/procurement/po/export?id=<?= (int)$po['id'] ?>" title="Regenerate & Export fresh PDF" target="_blank" rel="noopener">Export PDF</a>
                 <?php $termsStatus = (string)($po['terms_status'] ?? ''); ?>
@@ -192,7 +192,7 @@
                     <?php if (!empty($po['gate_pass_path']) && is_file((string)$po['gate_pass_path'])): ?>
                         <span class="badge">Gate Pass generated</span>
                     <?php else: ?>
-                        <form method="POST" action="/procurement/po/gatepass" onsubmit="return confirm('Generate Gate Pass now?');" style="display:inline;">
+                        <form method="POST" action="/procurement/po/gatepass" onsubmit="return confirm('Generate Gate Pass now?');" style="display:inline;" target="_blank">
                             <input type="hidden" name="po_id" value="<?= (int)$po['id'] ?>" />
                             <button class="btn primary" type="submit">Generate Gate Pass</button>
                         </form>

@@ -300,11 +300,6 @@ if ($method === 'POST' && $path === '/manager/requests/update-status') {
 	$safeRun(static function() use ($manager){ $manager->updateRequestStatus(); });
 	exit;
 }
-if ($method === 'POST' && $path === '/manager/requests/update-group-status') {
-	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
-	$safeRun(static function() use ($manager){ $manager->updateGroupStatus(); });
-	exit;
-}
 if ($method === 'POST' && $path === '/manager/requests/archive') {
 	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
 	$safeRun(static function() use ($manager){ $manager->archiveGroup(); });
@@ -851,11 +846,6 @@ if ($method === 'POST' && $path === '/admin/pr/recheck') {
 if ($method === 'GET' && $path === '/admin/requests') {
 	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
 	$admin->viewRequestsAdmin();
-	exit;
-}
-if ($method === 'POST' && $path === '/admin/requests/update-group-status') {
-	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
-	$admin->adminUpdateGroupStatus();
 	exit;
 }
 if ($method === 'GET' && $path === '/admin/requests/history') {

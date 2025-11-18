@@ -32,7 +32,7 @@
         th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
         .muted{ color:var(--muted); }
         .actions{ display:flex; gap:8px; align-items:center; }
-        .btn{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); text-decoration:none; font-size:12px; cursor:pointer; }
+        .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); text-decoration:none; font-size:12px; cursor:pointer; }
         .btn:hover{ background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
         .btn.primary{ border-color: color-mix(in oklab, var(--accent) 35%, var(--border)); background: color-mix(in oklab, var(--accent) 10%, transparent); }
         select.inline{ padding:6px 8px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); }
@@ -119,15 +119,7 @@
                             <td><span class="badge"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></span></td>
                             <td>
                                 <div class="actions">
-                                    <form action="/manager/requests/update-group-status" method="POST" style="display:inline-flex; gap:6px; align-items:center;">
-                                        <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
-                                        <select class="inline" name="status">
-                                            <?php foreach ($labelMap as $val => $lab): ?>
-                                                <option value="<?= $val ?>" <?= ($status===$val?'selected':'') ?>><?= $lab ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                        <button class="btn primary" type="submit">Update</button>
-                                    </form>
+                                    <span class="muted" style="font-size:12px;">Status auto-managed</span>
                                     <a class="btn" href="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>">View</a>
                                     <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">Download PDF</a>
                                     <?php if (!empty($g['requested_by_id'])): ?>

@@ -67,7 +67,7 @@ $recentInventory = $recent_inventory ?? [];
           <input name="month" type="month" value="<?= htmlspecialchars($month, ENT_QUOTES, 'UTF-8') ?>" />
         </div>
         <div style="align-self:flex-end">
-          <button class="btn primary" type="submit" name="download" value="1">Download</button>
+          <button class="btn primary" type="submit" name="download" value="1" formtarget="_blank">Download</button>
         </div>
       </form>
       <p style="color:var(--muted);font-size:13px;margin-top:8px">Tip: Leave Item ID empty to include all items in the selected category; set it to generate a single-item consumption report.</p>
@@ -91,7 +91,7 @@ $recentInventory = $recent_inventory ?? [];
                 <td style="padding:8px;border-bottom:1px solid var(--border)"><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)$r['prepared_at'])), ENT_QUOTES, 'UTF-8') ?></td>
                 <td style="padding:8px;border-bottom:1px solid var(--border)"><?= htmlspecialchars((string)$r['file_name'], ENT_QUOTES, 'UTF-8') ?></td>
                 <td style="padding:8px;border-bottom:1px solid var(--border)">
-                  <a class="btn muted" href="/admin-assistant/reports/download?id=<?= (int)$r['id'] ?>">Download</a>
+                  <a class="btn muted" href="/admin-assistant/reports/download?id=<?= (int)$r['id'] ?>" target="_blank" rel="noopener">Download</a>
                   <form method="POST" action="/admin-assistant/reports/archive" style="display:inline">
                     <input type="hidden" name="id" value="<?= (int)$r['id'] ?>" />
                     <button class="btn muted" type="submit">Archive</button>
@@ -122,7 +122,7 @@ $recentInventory = $recent_inventory ?? [];
           <input name="month" type="month" value="<?= htmlspecialchars($month, ENT_QUOTES, 'UTF-8') ?>" />
         </div>
         <div style="align-self:flex-end">
-          <button class="btn primary" type="submit" name="download" value="1">Download</button>
+          <button class="btn primary" type="submit" name="download" value="1" formtarget="_blank">Download</button>
         </div>
       </form>
       <p style="color:var(--muted);font-size:13px;margin-top:8px">Inventory Report summarizes the entire category; the Snapshot shows current stocks.</p>
@@ -146,7 +146,7 @@ $recentInventory = $recent_inventory ?? [];
                 <td style="padding:8px;border-bottom:1px solid var(--border)"><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)$r['prepared_at'])), ENT_QUOTES, 'UTF-8') ?></td>
                 <td style="padding:8px;border-bottom:1px solid var(--border)"><?= htmlspecialchars((string)$r['file_name'], ENT_QUOTES, 'UTF-8') ?></td>
                 <td style="padding:8px;border-bottom:1px solid var(--border)">
-                  <a class="btn muted" href="/admin-assistant/reports/download?id=<?= (int)$r['id'] ?>">Download</a>
+                  <a class="btn muted" href="/admin-assistant/reports/download?id=<?= (int)$r['id'] ?>" target="_blank" rel="noopener">Download</a>
                   <form method="POST" action="/admin-assistant/reports/archive" style="display:inline">
                     <input type="hidden" name="id" value="<?= (int)$r['id'] ?>" />
                     <button class="btn muted" type="submit">Archive</button>

@@ -67,7 +67,7 @@
                             <td><?= htmlspecialchars((string)$r['file_name'], ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= !empty($r['is_archived']) ? ('Archived ' . htmlspecialchars(date('Y-m-d H:i', strtotime((string)($r['archived_at'] ?? $r['prepared_at']))), ENT_QUOTES, 'UTF-8')) : 'Active' ?></td>
                             <td>
-                                <a class="btn muted" href="/admin-assistant/reports/download?id=<?= (int)$r['id'] ?>">Download</a>
+                                <a class="btn muted" href="/admin-assistant/reports/download?id=<?= (int)$r['id'] ?>" target="_blank" rel="noopener">Download</a>
                                 <?php if (empty($r['is_archived'])): ?>
                                 <form method="POST" action="/admin-assistant/reports/archive" style="display:inline">
                                     <input type="hidden" name="id" value="<?= (int)$r['id'] ?>" />

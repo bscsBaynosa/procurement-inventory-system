@@ -17,7 +17,7 @@
         .content{ padding:18px 20px; }
         .h1{ font-weight:800; font-size:22px; margin: 6px 0 12px; }
         .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:12px; }
-        .btn{ display:inline-flex; align-items:center; gap:6px; padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); text-decoration:none; font-size:12px; cursor:pointer; }
+        .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); text-decoration:none; font-size:12px; cursor:pointer; }
         .btn.primary{ border-color: color-mix(in oklab, var(--accent) 35%, var(--border)); background: color-mix(in oklab, var(--accent) 10%, transparent); }
         table{ width:100%; border-collapse: collapse; background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
         th, td{ padding:12px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
@@ -91,16 +91,8 @@
                                 </div>
                             </td>
                             <td>
-                                <div class="actions" style="display:flex; gap:8px; align-items:center;">
-                                    <form action="/admin/requests/update-group-status" method="POST" style="display:inline-flex; gap:6px; align-items:center;">
-                                        <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
-                                        <select class="inline" name="status">
-                                            <?php foreach ($labelMap as $val => $lab): ?>
-                                                <option value="<?= $val ?>" <?= ($status===$val?'selected':'') ?>><?= $lab ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
-                                        <button class="btn primary" type="submit">Update</button>
-                                    </form>
+                                <div class="actions" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                    <span class="muted" style="font-size:12px;">Status auto-managed</span>
                                     <a class="btn" href="/admin/requests/review?pr=<?= urlencode((string)$g['pr_number']) ?>">View</a>
                                     <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">Download PDF</a>
                                 </div>

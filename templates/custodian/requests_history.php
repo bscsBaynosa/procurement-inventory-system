@@ -53,7 +53,7 @@
                         <td>
                             <?php if (!empty($r['message_id'])): ?>
                                 <a class="btn" href="/inbox/preview?id=<?= (int)$r['message_id'] ?>" style="background:#0ea5e9" target="_blank" rel="noopener">Preview</a>
-                                <a class="btn" href="/inbox/download?id=<?= (int)$r['message_id'] ?>">Download</a>
+                                <a class="btn" href="/inbox/download?id=<?= (int)$r['message_id'] ?>" target="_blank" rel="noopener">Download</a>
                             <?php else: ?>
                                 <a class="btn" href="/admin-assistant/requests/history/generate?pr=<?= urlencode((string)$r['pr_number']) ?>" target="_blank" rel="noopener">Generate PDF</a>
                             <?php endif; ?>
