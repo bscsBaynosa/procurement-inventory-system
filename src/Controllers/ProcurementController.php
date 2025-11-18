@@ -1174,12 +1174,34 @@ class ProcurementController extends BaseController
         $this->ensurePoTables();
         $pdo = \App\Database\Connection::resolve();
         $idCol = 'id';
-        try { $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn(); if (!$hasId) { $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn(); if ($hasPoId) { $idCol = 'po_id'; } } } catch (\Throwable $e) {}
-        $sql = "SELECT $idCol AS id, pr_number, po_number, logistics_status, gate_pass_path, created_at FROM purchase_orders
+        try {
+            $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn();
+            if (!$hasId) {
+                $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn();
+                if ($hasPoId) { $idCol = 'po_id'; }
+            }
+        } catch (\Throwable $e) {}
+        $baseCols = "$idCol AS id, pr_number, po_number, logistics_status, status, gate_pass_path, created_at, updated_at";
+        $deliveredCol = '';
+        $hasLogisticsDeliveredAt = false;
+        $hasDeliveredAt = false;
+        try { $hasLogisticsDeliveredAt = (bool)$pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='logistics_delivered_at'")->fetchColumn(); } catch (\Throwable $e) {}
+        try { $hasDeliveredAt = (bool)$pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='delivered_at'")->fetchColumn(); } catch (\Throwable $e) {}
+        if ($hasLogisticsDeliveredAt) {
+            $deliveredCol = ', logistics_delivered_at';
+        } elseif ($hasDeliveredAt) {
+            $deliveredCol = ', delivered_at AS logistics_delivered_at';
+        }
+        $selectClause = $baseCols . $deliveredCol;
+        $eligibleSql = "SELECT $selectClause FROM purchase_orders
                 WHERE LOWER(COALESCE(logistics_status,'')) = 'delivered' AND (gate_pass_path IS NULL OR gate_pass_path='') AND COALESCE(is_archived,FALSE)=FALSE
                 ORDER BY created_at DESC LIMIT 200";
-        try { $rows = $pdo->query($sql)->fetchAll() ?: []; } catch (\Throwable $e) { $rows = []; }
-        $this->render('procurement/gate_pass_list.php', ['rows' => $rows]);
+        $historySql = "SELECT $selectClause FROM purchase_orders
+                WHERE COALESCE(gate_pass_path,'') <> '' AND COALESCE(is_archived,FALSE)=FALSE
+                ORDER BY updated_at DESC LIMIT 200";
+        try { $rows = $pdo->query($eligibleSql)->fetchAll() ?: []; } catch (\Throwable $e) { $rows = []; }
+        try { $history = $pdo->query($historySql)->fetchAll() ?: []; } catch (\Throwable $e) { $history = []; }
+        $this->render('procurement/gate_pass_list.php', ['rows' => $rows, 'history' => $history]);
     }
 
     /** GET: Single PO detail with lines and meta for Procurement */

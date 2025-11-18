@@ -57,6 +57,41 @@
                 </tbody>
             </table>
         </div>
+
+        <div class="card" style="margin-top:24px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                <h2 style="margin:0;">Gate Pass History</h2>
+                <span class="muted" style="font-size:13px;">Recently generated Gate Passes (latest 200)</span>
+            </div>
+            <p class="muted" style="margin:10px 0 16px; font-size:13px;">Download or regenerate an existing Gate Pass if the original file was misplaced.</p>
+            <table>
+                <thead><tr><th>Generated</th><th>PR</th><th>PO Number</th><th>Status</th><th>Logistics</th><th>Action</th></tr></thead>
+                <tbody>
+                <?php $historyRows = $history ?? []; ?>
+                <?php if (!empty($historyRows)): foreach ($historyRows as $r): ?>
+                    <tr>
+                        <td><?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)($r['updated_at'] ?? $r['created_at'] ?? 'now'))), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td class="mono"><?= htmlspecialchars(\App\Services\IdService::format('PR', (string)$r['pr_number']), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td class="mono"><?= htmlspecialchars((string)$r['po_number'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td><span class="badge"><?= htmlspecialchars(ucwords(str_replace('_',' ', (string)($r['status'] ?? ''))), ENT_QUOTES, 'UTF-8') ?></span></td>
+                        <td><?= htmlspecialchars((string)($r['logistics_status'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                        <td>
+                            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                                <a class="btn" href="/procurement/po/gatepass/download?id=<?= (int)$r['id'] ?>" target="_blank" rel="noopener">Download</a>
+                                <form method="POST" action="/procurement/po/gatepass" onsubmit="return confirm('Regenerate Gate Pass PDF?');" style="margin:0;">
+                                    <input type="hidden" name="po_id" value="<?= (int)$r['id'] ?>" />
+                                    <input type="hidden" name="return_to" value="/procurement/gatepasses" />
+                                    <button class="btn primary" type="submit">Regenerate</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                <?php endforeach; else: ?>
+                    <tr><td colspan="6" class="muted" style="text-align:center;padding:18px;">No Gate Passes generated yet.</td></tr>
+                <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
     </main>
 </div>
 </body>
