@@ -30,11 +30,11 @@
     *, *::before, *::after { box-sizing: border-box; }
     body { font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg-gradient); color: var(--text); min-height:100vh; }
         .navbar { display:flex; align-items:center; justify-content:space-between; padding: 12px 22px; background: rgba(15, 23, 42, .15); backdrop-filter: blur(6px); position:sticky; top:0; z-index:10; border-bottom: 1px solid rgba(255,255,255,.06); }
-        .brand { display:flex; align-items:center; gap:12px; font-weight:800; color:#e2e8f0; }
-        .brand-logo { width:56px; height:56px; flex:0 0 56px; border-radius:14px; background:rgba(255,255,255,.08); display:flex; align-items:center; justify-content:center; padding:6px; box-shadow:0 10px 24px rgba(0,0,0,.35); }
-        .brand-logo img { width:100%; height:100%; object-fit:contain; display:block; }
+        .brand { display:flex; align-items:center; gap:14px; font-weight:800; color:#e2e8f0; }
+        .brand img { width:64px; height:64px; object-fit:contain; display:block; filter: drop-shadow(0 6px 18px rgba(0,0,0,.45)); }
         .brand-text { line-height:1.1; display:flex; flex-direction:column; justify-content:center; }
-        .brand small { display:block; font-weight:600; color:#a7f3d0; }
+        .brand strong { font-size:18px; letter-spacing:.02em; }
+        .brand small { display:block; font-weight:600; color:#a7f3d0; font-size:13px; }
         .nav-links { display:flex; align-items:center; gap: 12px; }
         .nav-links a { color:#e5e7eb; text-decoration:none; margin-left:0; padding:8px 12px; font-weight:600; opacity:.9; transition:opacity .2s ease; border-radius:10px; }
         .nav-links a:hover { opacity:1; background: rgba(255,255,255,.06); }
@@ -163,11 +163,9 @@
     ?>
     <nav class="navbar">
         <div class="brand">
-            <span class="brand-logo">
-                <img src="/img/pocc-logo.svg" alt="POCC logo" loading="lazy" />
-            </span>
+            <img src="/img/pocc-logo.svg" alt="POCC Logo" loading="lazy" />
             <div class="brand-text">
-                Philippine Oncology Center Corporation<br>
+                <strong>Philippine Oncology Center Corporation</strong>
                 <small>Procurement & Inventory System</small>
             </div>
         </div>
