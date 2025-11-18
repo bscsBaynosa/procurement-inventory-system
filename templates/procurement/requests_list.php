@@ -17,8 +17,11 @@
         .content{ padding:18px 20px; }
         .h1{ font-weight:800; font-size:22px; margin: 6px 0 12px; display:flex; align-items:center; justify-content:space-between; gap:10px; }
         .toolbar{ display:flex; gap:8px; align-items:center; }
-        .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:0 12px; height:var(--control-h); min-width:90px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); text-decoration:none; font-size:12px; cursor:pointer; }
-        .btn.primary{ border-color: color-mix(in oklab, var(--accent) 35%, var(--border)); background: color-mix(in oklab, var(--accent) 10%, transparent); }
+        .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:0 12px; height:var(--control-h); min-width:90px; border-radius:8px; text-decoration:none; font-size:12px; cursor:pointer; border:1px solid transparent; transition:background .15s ease,border .15s ease,color .15s ease; }
+        .btn.primary{ background:var(--accent); border-color:color-mix(in oklab, var(--accent) 80%, #166534); color:#fff; box-shadow:0 2px 6px color-mix(in oklab, var(--accent) 18%, transparent); }
+        .btn.primary:hover{ background:color-mix(in oklab, var(--accent) 90%, #166534); }
+        .btn.secondary{ background:var(--card); color:var(--accent); border-color:color-mix(in oklab, var(--accent) 40%, var(--border)); }
+        .btn.secondary:hover{ background:color-mix(in oklab, var(--accent) 8%, var(--card)); }
         .filters{ display:grid; grid-template-columns: repeat(4, minmax(180px, 1fr)) 100px; gap:8px; align-items:center; margin-bottom:10px; }
         select, input[type="date"]{ padding:0 10px; height:var(--control-h); border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); }
         /* Scroll container ensures horizontal scroll on small screens while keeping uniform look */
@@ -82,8 +85,8 @@
         <div class="h1">
             <span>Purchase Requests</span>
             <div class="toolbar">
-                <a class="btn" href="/manager/requests/completed">Completed Requisitions</a>
-                <a class="btn" href="/manager/requests/history">History</a>
+                <a class="btn secondary" href="/manager/requests/completed">Completed Requisitions</a>
+                <a class="btn secondary" href="/manager/requests/history">History</a>
             </div>
         </div>
 
@@ -121,7 +124,7 @@
                     <?php endforeach; ?>
                 </select>
             </label>
-            <button class="btn" type="submit">Apply</button>
+            <button class="btn secondary" type="submit">Apply</button>
         </form>
 
         <div class="table-scroll">
@@ -152,8 +155,11 @@
                             $parts = array_values(array_filter(array_map('trim', $parts), static function($v){ return $v !== ''; }));
                             $abbr = $parts ? $parts[0] : '';
                             if (count($parts) > 1) { $abbr .= ' + …'; }
+                            $rowKey = preg_replace('/[^A-Za-z0-9_-]/', '', (string)($g['pr_number'] ?? '')) ?: '';
+                            if ($rowKey === '') { $rowKey = uniqid(); }
+                            $rowId = 'pr-row-' . $rowKey;
                         ?>
-                        <tr class="expandable-row" data-expand-url="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>&partial=1" data-expand-columns="7">
+                        <tr id="<?= htmlspecialchars($rowId, ENT_QUOTES, 'UTF-8') ?>" class="expandable-row" data-expand-url="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>&partial=1" data-expand-columns="7">
                             <td class="mono"><?= htmlspecialchars(\App\Services\IdService::format('PR', (string)$g['pr_number']), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><?= htmlspecialchars((string)($g['branch_name'] ?? 'N/A'), ENT_QUOTES, 'UTF-8') ?></td>
                             <td><span class="pr-items-abbr" title="Click row to expand" data-full-items="<?= htmlspecialchars($fullItems, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($abbr, ENT_QUOTES, 'UTF-8') ?></span></td>
@@ -162,13 +168,12 @@
                             <td><span class="badge"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></span></td>
                             <td>
                                 <div class="actions">
-                                    <span class="muted" style="font-size:12px;">Status auto-managed</span>
-                                    <a class="btn" href="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">Open</a>
-                                    <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">PR PDF</a>
-                                    <a class="btn" href="/manager/requests/download-stored?pr=<?= urlencode((string)$g['pr_number']) ?>&kind=canvass" target="_blank" rel="noopener">Canvass PDF</a>
+                                    <button type="button" class="btn secondary" data-expand-control="<?= htmlspecialchars($rowId, ENT_QUOTES, 'UTF-8') ?>" data-label-show="View" data-label-hide="Minimize" aria-expanded="false">View</button>
+                                    <a class="btn secondary" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">PR PDF</a>
+                                    <a class="btn secondary" href="/manager/requests/download-stored?pr=<?= urlencode((string)$g['pr_number']) ?>&kind=canvass" target="_blank" rel="noopener">Canvass PDF</a>
                                     <form action="/manager/requests/archive" method="POST" onsubmit="return confirm('Archive this Purchase Request?');" style="display:inline;">
                                         <input type="hidden" name="pr_number" value="<?= htmlspecialchars((string)$g['pr_number'], ENT_QUOTES, 'UTF-8') ?>" />
-                                        <button class="btn" type="submit">Archive</button>
+                                        <button class="btn secondary" type="submit">Archive</button>
                                     </form>
                                     <?php if ($canCreatePo): ?>
                                         <a class="btn primary" href="/procurement/po/create?pr=<?= urlencode((string)$g['pr_number']) ?>" title="Proceed to PO creation for items under this PR">Proceed to PO</a>

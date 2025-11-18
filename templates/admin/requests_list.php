@@ -17,8 +17,9 @@
         .content{ padding:18px 20px; }
         .h1{ font-weight:800; font-size:22px; margin: 6px 0 12px; }
         .card{ background:var(--card); border:1px solid var(--border); border-radius:14px; padding:12px; }
-        .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); text-decoration:none; font-size:12px; cursor:pointer; }
-        .btn.primary{ border-color: color-mix(in oklab, var(--accent) 35%, var(--border)); background: color-mix(in oklab, var(--accent) 10%, transparent); }
+        .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); text-decoration:none; font-size:12px; cursor:pointer; transition:background .15s ease, color .15s ease; }
+        .btn.primary{ background:var(--accent); border-color:color-mix(in oklab, var(--accent) 80%, #166534); color:#fff; box-shadow:0 2px 6px color-mix(in oklab, var(--accent) 18%, transparent); }
+        .btn.primary:hover{ background:color-mix(in oklab, var(--accent) 90%, #166534); }
         table{ width:100%; border-collapse: collapse; background:var(--card); border:1px solid var(--border); border-radius:14px; overflow:hidden; }
         th, td{ padding:12px; border-bottom:1px solid var(--border); text-align:left; font-size:14px; }
         th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
@@ -92,7 +93,6 @@
                             </td>
                             <td>
                                 <div class="actions" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                                    <span class="muted" style="font-size:12px;">Status auto-managed</span>
                                     <a class="btn" href="/admin/requests/review?pr=<?= urlencode((string)$g['pr_number']) ?>">View</a>
                                     <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">Download PDF</a>
                                 </div>

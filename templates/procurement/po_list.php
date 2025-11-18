@@ -109,7 +109,8 @@
             </thead>
             <tbody>
                 <?php if (!empty($pos)): foreach ($pos as $p): ?>
-                    <tr class="expandable-row" data-expand-url="/procurement/po/view?id=<?= (int)$p['id'] ?>&partial=1" data-expand-columns="8">
+                    <?php $rowId = 'po-row-' . (int)($p['id'] ?? 0); ?>
+                    <tr id="<?= htmlspecialchars($rowId, ENT_QUOTES, 'UTF-8') ?>" class="expandable-row" data-expand-url="/procurement/po/view?id=<?= (int)$p['id'] ?>&partial=1" data-expand-columns="8">
                         <td class="nowrap">
                             <?php if (($filters['show'] ?? 'active') === 'archived' && !empty($p['archived_at'])): ?>
                                 <?= htmlspecialchars(date('Y-m-d H:i', strtotime((string)$p['archived_at'])), ENT_QUOTES, 'UTF-8') ?>

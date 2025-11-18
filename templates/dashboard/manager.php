@@ -32,9 +32,10 @@
         th{ color:var(--muted); background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
         .muted{ color:var(--muted); }
         .actions{ display:flex; gap:8px; align-items:center; }
-        .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); text-decoration:none; font-size:12px; cursor:pointer; }
+        .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px; padding:6px 10px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); text-decoration:none; font-size:12px; cursor:pointer; transition:background .15s ease, color .15s ease; }
         .btn:hover{ background:color-mix(in oklab, var(--card) 92%, var(--bg)); }
-        .btn.primary{ border-color: color-mix(in oklab, var(--accent) 35%, var(--border)); background: color-mix(in oklab, var(--accent) 10%, transparent); }
+        .btn.primary{ background:var(--accent); border-color:color-mix(in oklab, var(--accent) 80%, #166534); color:#fff; box-shadow:0 2px 6px color-mix(in oklab, var(--accent) 18%, transparent); }
+        .btn.primary:hover{ background:color-mix(in oklab, var(--accent) 90%, #166534); }
         select.inline{ padding:6px 8px; border-radius:8px; border:1px solid var(--border); background:var(--card); color:var(--text); }
     </style>
 </head>
@@ -119,7 +120,6 @@
                             <td><span class="badge"><?= htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') ?></span></td>
                             <td>
                                 <div class="actions">
-                                    <span class="muted" style="font-size:12px;">Status auto-managed</span>
                                     <a class="btn" href="/manager/requests/view?pr=<?= urlencode((string)$g['pr_number']) ?>">View</a>
                                     <a class="btn" href="/manager/requests/download?pr=<?= urlencode((string)$g['pr_number']) ?>" target="_blank" rel="noopener">Download PDF</a>
                                     <?php if (!empty($g['requested_by_id'])): ?>
