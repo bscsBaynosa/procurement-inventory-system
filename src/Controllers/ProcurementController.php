@@ -597,7 +597,7 @@ class ProcurementController extends BaseController
         // Prefill logic from PR + any previous PO attempt for this PR
         $poNext = '';
         try { $poNext = $this->requests()->getNextPoNumberPreview(); } catch (\Throwable $ignored) { $poNext = ''; }
-        $prefillSupplierId = null; $prefillVendorName = ''; $prefillCenter = ''; $prefillTerms = '30 days'; $prefillAdminName='';
+        $prefillSupplierId = null; $prefillVendorName = ''; $prefillCenter = ''; $prefillTerms = ''; $prefillAdminName='';
         // Center inferred from branch name if present
         $prefillCenter = (string)($rows[0]['branch_name'] ?? '');
         // Auto-pick lone active admin for admin_name prefill
@@ -689,7 +689,7 @@ class ProcurementController extends BaseController
         $vendorTin = trim((string)($_POST['vendor_tin'] ?? ''));
         $center = trim((string)($_POST['center'] ?? ''));
         $reference = trim((string)($_POST['reference'] ?? ''));
-        $terms = trim((string)($_POST['terms'] ?? ''));
+        $terms = ''; // Terms are deferred to supplier response
         $notes = trim((string)($_POST['notes'] ?? ''));
         $discount = isset($_POST['discount']) ? (float)$_POST['discount'] : 0.0;
         $deliverTo = trim((string)($_POST['deliver_to'] ?? 'MHI Bldg., New York St., Brgy. Immaculate Concepcion, Cubao, Quezon City'));
@@ -940,6 +940,7 @@ class ProcurementController extends BaseController
             'vendor_tin' => $vendorTin,
             'reference' => $reference,
             'terms' => $terms,
+            'supplier_terms' => '',
             'center' => $center,
             'notes' => $notes,
             'discount' => $discount,
@@ -1344,6 +1345,7 @@ class ProcurementController extends BaseController
             'vendor_tin' => (string)($po['vendor_tin'] ?? ''),
             'reference' => (string)($po['reference'] ?? ''),
             'terms' => (string)($po['terms'] ?? ''),
+            'supplier_terms' => (string)($po['supplier_terms'] ?? ''),
             'center' => (string)($po['center'] ?? ''),
             'notes' => (string)($po['notes'] ?? ''),
             'discount' => (float)($po['discount'] ?? 0),
@@ -1372,6 +1374,7 @@ class ProcurementController extends BaseController
     {
         if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement'], true)) { header('Location: /login'); return; }
         $id = isset($_POST['po_id']) ? (int)$_POST['po_id'] : 0;
+        $returnTo = isset($_POST['return_to']) ? trim((string)$_POST['return_to']) : '';
         if ($id <= 0) { $_SESSION['flash_error'] = 'Invalid PO id'; header('Location: /procurement/pos'); return; }
         $this->ensurePoTables();
         $pdo = \App\Database\Connection::resolve();
@@ -1439,6 +1442,7 @@ class ProcurementController extends BaseController
     {
         if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement'], true)) { header('Location: /login'); return; }
         $id = isset($_POST['po_id']) ? (int)$_POST['po_id'] : 0;
+        $returnTo = isset($_POST['return_to']) ? trim((string)$_POST['return_to']) : '';
         if ($id <= 0) { $_SESSION['flash_error'] = 'Invalid PO id'; header('Location: /procurement/pos'); return; }
         $this->ensurePoTables();
         $pdo = \App\Database\Connection::resolve();
@@ -1475,7 +1479,69 @@ class ProcurementController extends BaseController
         } catch (\Throwable $e) {
             $_SESSION['flash_error'] = 'Failed to generate Gate Pass.';
         }
-        header('Location: /procurement/po/view?id=' . $id);
+        $redirect = '/procurement/po/view?id=' . $id;
+        if ($returnTo !== '' && preg_match('#^/[A-Za-z0-9/_\-\?=&%\.]+$#', $returnTo)) {
+            $redirect = $returnTo;
+        }
+        header('Location: ' . $redirect);
+    }
+
+    /** GET: Download (or regenerate) the Gate Pass PDF for a delivered PO */
+    public function poDownloadGatePass(): void
+    {
+        if (!$this->auth()->isAuthenticated() || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); return; }
+        $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+        if ($id <= 0) { $_SESSION['flash_error'] = 'Invalid PO id'; header('Location: /procurement/pos'); return; }
+        $this->ensurePoTables();
+        $pdo = \App\Database\Connection::resolve();
+        $idCol = 'id';
+        try {
+            $hasId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='id'")->fetchColumn();
+            if (!$hasId) {
+                $hasPoId = $pdo->query("SELECT 1 FROM information_schema.columns WHERE table_name='purchase_orders' AND column_name='po_id'")->fetchColumn();
+                if ($hasPoId) { $idCol = 'po_id'; }
+            }
+        } catch (\Throwable $e) { /* keep default */ }
+        $st = $pdo->prepare('SELECT po_number, pr_number, vendor_name, center, deliver_to, look_for, gate_pass_path, logistics_status FROM purchase_orders WHERE ' . $idCol . ' = :id');
+        $st->execute(['id' => $id]);
+        $po = $st->fetch();
+        if (!$po) { $_SESSION['flash_error'] = 'PO not found'; header('Location: /procurement/pos'); return; }
+        $path = (string)($po['gate_pass_path'] ?? '');
+        $delivered = strtolower((string)($po['logistics_status'] ?? '')) === 'delivered';
+        if ($path === '' || !is_file($path)) {
+            if (!$delivered) { $_SESSION['flash_error'] = 'Gate Pass available after delivery only.'; header('Location: /procurement/po/view?id=' . $id); return; }
+            $dir = $this->resolveWritablePdfDir();
+            $path = $dir . DIRECTORY_SEPARATOR . 'GatePass-PO-' . preg_replace('/[^A-Za-z0-9_-]/','_', (string)$po['po_number']) . '.pdf';
+            try {
+                $this->pdf()->generateGatePassToFile([
+                    'po_number' => (string)($po['po_number'] ?? ''),
+                    'pr_number' => (string)($po['pr_number'] ?? ''),
+                    'vendor_name' => (string)($po['vendor_name'] ?? ''),
+                    'center' => (string)($po['center'] ?? ''),
+                    'deliver_to' => (string)($po['deliver_to'] ?? ''),
+                    'look_for' => (string)($po['look_for'] ?? ''),
+                    'prepared_by' => (string)($_SESSION['full_name'] ?? ''),
+                    'prepared_at' => date('Y-m-d'),
+                ], $path);
+                $pdo->prepare('UPDATE purchase_orders SET gate_pass_path = :p, updated_at = NOW() WHERE ' . $idCol . ' = :id')
+                    ->execute(['p' => $path, 'id' => $id]);
+                try {
+                    if (!empty($po['pr_number'])) {
+                        (new AttachmentService($pdo))->store((string)$po['pr_number'], 'gate_pass_pdf', $path);
+                    }
+                } catch (\Throwable $e) { /* best effort */ }
+            } catch (\Throwable $e) {
+                $_SESSION['flash_error'] = 'Failed to generate Gate Pass.';
+                header('Location: /procurement/po/view?id=' . $id);
+                return;
+            }
+        }
+        if ($path === '' || !is_file($path)) { $_SESSION['flash_error'] = 'Gate Pass file missing.'; header('Location: /procurement/po/view?id=' . $id); return; }
+        $size = @filesize($path) ?: null;
+        header('Content-Type: application/pdf');
+        header('Content-Disposition: inline; filename="' . rawurlencode('GatePass-PO-' . (string)$po['po_number'] . '.pdf') . '"');
+        if ($size !== null) { header('Content-Length: ' . (string)$size); }
+        @readfile($path);
     }
 
 
@@ -1576,6 +1642,7 @@ class ProcurementController extends BaseController
                         'vendor_tin' => (string)($row['vendor_tin'] ?? ''),
                         'reference' => (string)($row['reference'] ?? ''),
                         'terms' => (string)($row['terms'] ?? ''),
+                        'supplier_terms' => (string)($row['supplier_terms'] ?? ''),
                         'center' => (string)($row['center'] ?? ''),
                         'notes' => (string)($row['notes'] ?? ''),
                         'discount' => isset($row['discount']) ? (float)$row['discount'] : 0.0,
@@ -4214,6 +4281,7 @@ class ProcurementController extends BaseController
                     'vendor_tin' => $vendorTin,
                     'reference' => (string)($row['reference'] ?? ''),
                     'terms' => (string)($row['terms'] ?? ''),
+                    'supplier_terms' => (string)($row['supplier_terms'] ?? ''),
                     'center' => (string)($row['center'] ?? ''),
                     'notes' => (string)($row['notes'] ?? ''),
                     'discount' => isset($row['discount']) ? (float)$row['discount'] : 0.0,
@@ -4276,6 +4344,7 @@ class ProcurementController extends BaseController
             'vendor_tin' => $vendorTin,
             'reference' => $reference,
             'terms' => $terms,
+            'supplier_terms' => '',
             'center' => $center,
             'notes' => $notes,
             'discount' => $discount,
@@ -4353,6 +4422,7 @@ class ProcurementController extends BaseController
             'vendor_tin' => $vendorTin,
             'reference' => (string)($row['reference'] ?? ''),
             'terms' => (string)($row['terms'] ?? ''),
+            'supplier_terms' => (string)($row['supplier_terms'] ?? ''),
             'center' => (string)($row['center'] ?? ''),
             'notes' => (string)($row['notes'] ?? ''),
             'discount' => isset($row['discount']) ? (float)$row['discount'] : 0.0,

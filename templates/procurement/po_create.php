@@ -123,7 +123,9 @@
                     <label>Reference</label>
                     <input name="reference" />
                 </div>
-                <!-- Terms removed: will be supplied by Vendor after PO receipt -->
+                <div class="no-print" style="grid-column:1/-1;font-size:12px;color:var(--muted);">
+                    Terms of Payment will be provided by the supplier after they respond to this PO.
+                </div>
                 <input type="hidden" name="terms" value="" />
                 <div>
                     <label>Deliver To</label>
@@ -240,7 +242,7 @@ function recalcAll(){
 }
 function validateItems(){
     const rows = document.querySelectorAll('#poItems tr');
-    const required = ['center','terms','finance_officer','admin_name'];
+    const required = ['center','finance_officer','admin_name'];
     for (const id of required){
         const el = document.querySelector('[name="'+id+'"]');
         if (!el || !el.value.trim()){ alert('Missing required field: '+id.replace('_',' ')); return false; }

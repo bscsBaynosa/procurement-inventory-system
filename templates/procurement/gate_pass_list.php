@@ -43,7 +43,13 @@
                         <td class="mono"><?= htmlspecialchars((string)$r['po_number'], ENT_QUOTES, 'UTF-8') ?></td>
                         <td><span class="badge"><?= htmlspecialchars(ucwords(str_replace('_',' ', (string)($r['status'] ?? ''))), ENT_QUOTES, 'UTF-8') ?></span></td>
                         <td><?= htmlspecialchars((string)($r['logistics_status'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                        <td><a class="btn primary" href="/procurement/gatepass/create?po=<?= (int)$r['id'] ?>">Generate</a></td>
+                        <td>
+                            <form method="POST" action="/procurement/po/gatepass" onsubmit="return confirm('Generate Gate Pass now?');" style="margin:0;">
+                                <input type="hidden" name="po_id" value="<?= (int)$r['id'] ?>" />
+                                <input type="hidden" name="return_to" value="/procurement/gatepasses" />
+                                <button class="btn primary" type="submit">Generate</button>
+                            </form>
+                        </td>
                     </tr>
                 <?php endforeach; else: ?>
                     <tr><td colspan="6" class="muted" style="text-align:center;padding:18px;">No delivered POs pending Gate Pass.</td></tr>

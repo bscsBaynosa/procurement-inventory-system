@@ -420,6 +420,11 @@ if ($method === 'POST' && $path === '/procurement/po/gatepass') {
 	$safeRun(static function() use ($manager){ $manager->poGenerateGatePass(); });
 	exit;
 }
+if ($method === 'GET' && $path === '/procurement/po/gatepass/download') {
+	if (!isset($_SESSION['user_id']) || !in_array($_SESSION['role'] ?? '', ['procurement_manager','procurement','admin'], true)) { header('Location: /login'); exit; }
+	$safeRun(static function() use ($manager){ $manager->poDownloadGatePass(); });
+	exit;
+}
 
 // Procurement: Purchase Orders list (new consolidated view)
 if ($method === 'GET' && $path === '/procurement/pos') {

@@ -1836,7 +1836,7 @@ class AdminController extends BaseController
                 }
             } catch (\Throwable $e) {}
             // Load PO by po_number
-            $st = $pdo->prepare('SELECT ' . $idCol . ' AS id, po_number, vendor_name, vendor_address, vendor_tin, reference, terms, center, notes, discount, deliver_to, look_for, prepared_by, reviewed_by, approved_by, created_at FROM purchase_orders WHERE po_number = :po LIMIT 1');
+            $st = $pdo->prepare('SELECT ' . $idCol . ' AS id, po_number, vendor_name, vendor_address, vendor_tin, reference, terms, supplier_terms, center, notes, discount, deliver_to, look_for, prepared_by, reviewed_by, approved_by, created_at FROM purchase_orders WHERE po_number = :po LIMIT 1');
             $st->execute(['po' => $poNum]);
             $po = $st->fetch();
             if (!$po) { return null; }
@@ -1869,6 +1869,7 @@ class AdminController extends BaseController
                     'vendor_tin' => (string)($po['vendor_tin'] ?? ''),
                     'reference' => (string)($po['reference'] ?? ''),
                     'terms' => (string)($po['terms'] ?? ''),
+                    'supplier_terms' => (string)($po['supplier_terms'] ?? ''),
                     'center' => (string)($po['center'] ?? ''),
                     'notes' => (string)($po['notes'] ?? ''),
                     'discount' => isset($po['discount']) ? (float)$po['discount'] : 0.0,

@@ -119,7 +119,11 @@
                 <div><strong>Reference:</strong> <?= htmlspecialchars((string)($po['reference'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
                 <div><strong>Look For:</strong> <?= htmlspecialchars((string)($po['look_for'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
                 <div style="grid-column: 1 / -1;"><strong>Deliver To:</strong> <?= htmlspecialchars((string)($po['deliver_to'] ?? ''), ENT_QUOTES, 'UTF-8') ?></div>
-                <div style="grid-column: 1 / -1;"><strong>Terms:</strong> <?= nl2br(htmlspecialchars((string)($po['terms'] ?? ''), ENT_QUOTES, 'UTF-8')) ?></div>
+                <?php
+                    $metaTerms = (string)($po['supplier_terms'] ?? '');
+                    if ($metaTerms === '') { $metaTerms = (string)($po['terms'] ?? ''); }
+                ?>
+                <div style="grid-column: 1 / -1;"><strong>Terms:</strong> <?= $metaTerms !== '' ? nl2br(htmlspecialchars($metaTerms, ENT_QUOTES, 'UTF-8')) : '<span class="muted">—</span>' ?></div>
                 <div style="grid-column: 1 / -1;"><strong>Notes:</strong> <?= nl2br(htmlspecialchars((string)($po['notes'] ?? ''), ENT_QUOTES, 'UTF-8')) ?></div>
             </div>
         </div>
@@ -190,10 +194,11 @@
             <?php if (in_array($role, ['procurement','procurement_manager'], true) && strtolower((string)($po['logistics_status'] ?? '')) === 'delivered'): ?>
                 <div style="margin-top:10px;">
                     <?php if (!empty($po['gate_pass_path']) && is_file((string)$po['gate_pass_path'])): ?>
-                        <span class="badge">Gate Pass generated</span>
+                        <a class="btn primary" href="/procurement/po/gatepass/download?id=<?= (int)$po['id'] ?>" target="_blank" rel="noopener">Download Gate Pass</a>
                     <?php else: ?>
-                        <form method="POST" action="/procurement/po/gatepass" onsubmit="return confirm('Generate Gate Pass now?');" style="display:inline;" target="_blank">
+                        <form method="POST" action="/procurement/po/gatepass" onsubmit="return confirm('Generate Gate Pass now?');" style="display:inline;">
                             <input type="hidden" name="po_id" value="<?= (int)$po['id'] ?>" />
+                            <input type="hidden" name="return_to" value="/procurement/po/view?id=<?= (int)$po['id'] ?>" />
                             <button class="btn primary" type="submit">Generate Gate Pass</button>
                         </form>
                     <?php endif; ?>
