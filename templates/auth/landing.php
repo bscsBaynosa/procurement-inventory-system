@@ -1,4 +1,22 @@
-<?php /* Favicon include centralized */ ?>
+<?php
+/* Favicon include centralized */
+$brandLogoSrc = '/img/pocc-logo.svg';
+$rootPath = realpath(__DIR__ . '/../../');
+$logoCandidates = [
+    $rootPath . DIRECTORY_SEPARATOR . 'logo.png',
+    $rootPath . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'logo.png',
+    $rootPath . DIRECTORY_SEPARATOR . 'public' . DIRECTORY_SEPARATOR . 'img' . DIRECTORY_SEPARATOR . 'logo.png',
+];
+foreach ($logoCandidates as $logoFile) {
+    if (is_file($logoFile)) {
+        $data = @file_get_contents($logoFile);
+        if ($data !== false) {
+            $brandLogoSrc = 'data:image/png;base64,' . base64_encode($data);
+            break;
+        }
+    }
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -163,7 +181,7 @@
     ?>
     <nav class="navbar">
         <div class="brand">
-            <img src="/img/pocc-logo.svg" alt="POCC Logo" loading="lazy" />
+            <img src="<?= htmlspecialchars($brandLogoSrc, ENT_QUOTES, 'UTF-8') ?>" alt="POCC Logo" loading="lazy" />
             <div class="brand-text">
                 <strong>Philippine Oncology Center Corporation</strong>
                 <small>Procurement & Inventory System</small>
