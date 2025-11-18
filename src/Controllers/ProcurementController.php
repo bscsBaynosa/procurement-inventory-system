@@ -1679,8 +1679,10 @@ class ProcurementController extends BaseController
         if ($isGenerateOnly) {
             if (@is_file($file)) {
                 $size = @filesize($file);
+                $downloadName = basename($file);
                 header('Content-Type: application/pdf');
-                header('Content-Disposition: inline; filename="' . basename($file) . '"');
+                header('Content-Disposition: inline; filename="' . $downloadName . '"; filename*=UTF-8\'\'' . rawurlencode($downloadName));
+                header('Content-Description: Request For Payment PDF');
                 if ($size !== false) { header('Content-Length: ' . (string)$size); }
                 header('X-RFP-Generated: 1');
                 readfile($file);
@@ -1691,18 +1693,25 @@ class ProcurementController extends BaseController
             return;
         }
 
-        // Send to Admin for approval
-        try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_name VARCHAR(255);"); } catch (\Throwable $e) {}
-        try { $pdo->exec("ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachment_path TEXT;"); } catch (\Throwable $e) {}
-        $subject = 'RFP For Approval' . ($pr !== '' ? (' • PR ' . $pr) : '') . ($poNumber !== '' ? (' • PO ' . $poNumber) : '');
-        $body = 'Please review and approve the attached Request For Payment.';
+        // Redirect user to compose page with Admin recipients and auto-attached RFP so they can add context before sending
         $recipients = $pdo->query("SELECT user_id FROM users WHERE is_active = TRUE AND role IN ('admin')")->fetchAll();
-        if ($recipients) {
-            $ins = $pdo->prepare('INSERT INTO messages (sender_id, recipient_id, subject, body, attachment_name, attachment_path) VALUES (:s,:r,:j,:b,:an,:ap)');
-            foreach ($recipients as $row) { $ins->execute(['s' => (int)($_SESSION['user_id'] ?? 0), 'r' => (int)$row['user_id'], 'j' => $subject, 'b' => $body, 'an' => basename($file), 'ap' => $file]); }
+        $adminIds = [];
+        foreach ((array)$recipients as $row) {
+            $id = (int)($row['user_id'] ?? 0);
+            if ($id > 0) { $adminIds[] = $id; }
         }
-        $_SESSION['flash_success'] = 'RFP sent to Admin for approval.';
-        header('Location: /procurement/pos?rfp=1');
+        if (!$adminIds) {
+            $_SESSION['flash_error'] = 'RFP PDF generated, but no active Admin recipients were found. Please contact an administrator.';
+            header('Location: /admin/messages');
+            return;
+        }
+        $subject = 'RFP For Approval' . ($pr !== '' ? (' • PR ' . $pr) : '') . ($poNumber !== '' ? (' • PO ' . $poNumber) : '');
+        $qs = '/admin/messages?to=' . rawurlencode(implode(',', $adminIds))
+            . '&subject=' . rawurlencode($subject)
+            . '&attach_name=' . rawurlencode(basename($file))
+            . '&attach_path=' . rawurlencode($file);
+        $_SESSION['flash_success'] = 'RFP PDF generated. Please review and send your message to Admin.';
+        header('Location: ' . $qs);
     }
 
     /**
