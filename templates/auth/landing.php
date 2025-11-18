@@ -30,7 +30,7 @@
     *, *::before, *::after { box-sizing: border-box; }
     body { font-family: 'Poppins', system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; background: var(--bg-gradient); color: var(--text); min-height:100vh; }
         .navbar { display:flex; align-items:center; justify-content:space-between; padding: 12px 22px; background: rgba(15, 23, 42, .15); backdrop-filter: blur(6px); position:sticky; top:0; z-index:10; border-bottom: 1px solid rgba(255,255,255,.06); }
-        .brand { display:flex; flex-direction:column; gap:4px; font-weight:800; color:#e2e8f0; }
+        .brand { display:flex; flex-direction:column; align-items:flex-start; text-align:left; gap:4px; font-weight:800; color:#e2e8f0; }
         .brand strong { font-size:20px; letter-spacing:.02em; }
         .brand small { display:block; font-weight:600; color:#a7f3d0; font-size:13px; }
         .nav-links { display:flex; align-items:center; gap: 12px; }
@@ -162,7 +162,7 @@
     <nav class="navbar">
         <div class="brand">
             <strong>Philippine Oncology Center Corporation</strong>
-            <small>Procurement & Inventory System</small>
+            <small>Procurement & Inventory Management System</small>
         </div>
         <div style="display:flex; align-items:center; gap:10px;">
             <button class="menu-toggle" type="button" onclick="toggleMenu()">Menu</button>
