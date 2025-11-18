@@ -785,20 +785,20 @@ class PDFService
 			}
 		}
 		// Header layout: left small form box, centered corp title, right RFP meta box
-		$formBox = '<table border="1" cellspacing="0" cellpadding="3" style="font-size:8.5px;width:150px;">'
+		$formBox = '<table border="1" cellspacing="0" cellpadding="3" style="font-size:8.5px;width:170px;">'
 			. '<tr><td style="line-height:14px;">Form No.:&nbsp; F-001<br>Effective Date: <u>06.20.22</u><br>Revision No.: <u>2</u><br>Revision Date: <u>06.10.22</u></td></tr>'
 			. '</table>';
 		$titleMid = '<div style="text-align:center;font-size:13px;font-weight:800;letter-spacing:.5px;">PHILIPPINE ONCOLOGY CENTER CORPORATION</div>'
 			. '<div style="text-align:center;font-size:9px;margin-top:3px;">' . ($center!==''?('ACCOUNT ( ' . $center . ' )'):'ACCOUNT ( CENTER )') . '</div>'
 			. '<div style="height:1px;background:#000;margin:5px auto 6px;width:65%;"></div>'
 			. '<div style="text-align:center;font-size:11px;font-weight:700;letter-spacing:.4px;">REQUEST FOR PAYMENT</div>';
-		$metaBox = '<table border="1" cellspacing="0" cellpadding="4" style="font-size:8.5px;width:180px;">'
+		$metaBox = '<table border="1" cellspacing="0" cellpadding="4" style="font-size:8.5px;width:170px;">'
 			. '<tr><td>No:&nbsp; ' . htmlspecialchars($rfpNumber, ENT_QUOTES, 'UTF-8') . '<br>Date Requested:&nbsp; ' . $dateReq . '<br>Date Needed:&nbsp; ' . ($dateNeed!==''?$dateNeed:'__________') . '</td></tr>'
 			. '</table>';
 		$header = '<table width="100%" cellspacing="0" cellpadding="0" style="margin-bottom:6px;"><tr>'
-			. '<td style="width:160px;vertical-align:top;">' . $formBox . '</td>'
-			. '<td style="vertical-align:top;">' . $titleMid . '</td>'
-			. '<td style="width:190px;vertical-align:top;text-align:right;">' . $metaBox . '</td>'
+			. '<td style="width:180px;vertical-align:top;">' . $formBox . '</td>'
+			. '<td style="vertical-align:top;text-align:center;">' . $titleMid . '</td>'
+			. '<td style="width:180px;vertical-align:top;text-align:right;">' . $metaBox . '</td>'
 			. '</tr></table>'
 			. '<div style="height:12px;"></div>';
 		// Pay To + Nature
