@@ -891,13 +891,6 @@ if ($method === 'POST' && $path === '/settings') {
 	$admin->saveSettings();
 	exit;
 }
-// Settings: send test email (SMTP test)
-if ($method === 'POST' && $path === '/settings/test-email') {
-	if (!isset($_SESSION['user_id'])) { header('Location: /login'); exit; }
-	$admin->sendTestEmail();
-	exit;
-}
-
 // Admin: Announcements
 if ($method === 'GET' && $path === '/admin/announcements') {
 	if (!isset($_SESSION['user_id']) || (($_SESSION['role'] ?? null) !== 'admin')) { header('Location: /login'); exit; }
